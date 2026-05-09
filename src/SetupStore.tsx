@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 function SetupStore() {
   const [businessName, setBusinessName] = useState('')
   const [bio, setBio] = useState('')
+  const [whatsapp, setWhatsapp] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
 
@@ -14,6 +15,7 @@ function SetupStore() {
 
   const handleSubmit = async () => {
     if (!businessName.trim()) return alert('Enter your business name')
+    if (!whatsapp.trim()) return alert('Enter your WhatsApp number')
     const user = auth.currentUser
     if (!user) return alert('Not signed in')
     setLoading(true)
@@ -21,11 +23,12 @@ function SetupStore() {
     await setDoc(doc(db, 'sellers', user.uid), {
       businessName,
       bio,
+      whatsapp,
       logoUrl: user.photoURL || '',
       slug,
       email: user.email,
     })
-    navigate(`/dashboard`)
+    navigate('/dashboard')
   }
 
   return (
@@ -35,27 +38,24 @@ function SetupStore() {
 
       <div style={{ background: '#fff', borderRadius: '12px', padding: '32px', width: '100%', maxWidth: '480px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Business Name</label>
-        <input
-          value={businessName}
-          onChange={e => setBusinessName(e.target.value)}
+        <input value={businessName} onChange={e => setBusinessName(e.target.value)}
           placeholder="e.g. Zara Cosmetics"
-          style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', marginTop: '8px', marginBottom: '20px', fontSize: '15px', boxSizing: 'border-box' }}
-        />
+          style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', marginTop: '8px', marginBottom: '20px', fontSize: '15px', boxSizing: 'border-box' }} />
 
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Bio</label>
-        <textarea
-          value={bio}
-          onChange={e => setBio(e.target.value)}
+        <textarea value={bio} onChange={e => setBio(e.target.value)}
           placeholder="Tell customers what you sell..."
           rows={3}
-          style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', marginTop: '8px', marginBottom: '28px', fontSize: '15px', boxSizing: 'border-box', resize: 'none' }}
-        />
+          style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', marginTop: '8px', marginBottom: '20px', fontSize: '15px', boxSizing: 'border-box', resize: 'none' }} />
 
-        <button
-          onClick={handleSubmit}
-          disabled={loading}
-          style={{ width: '100%', padding: '14px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}
-        >
+        <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>WhatsApp Number</label>
+        <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>Include country code e.g. 256771234567</p>
+        <input value={whatsapp} onChange={e => setWhatsapp(e.target.value)}
+          placeholder="256771234567"
+          style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', marginBottom: '28px', fontSize: '15px', boxSizing: 'border-box' }} />
+
+        <button onClick={handleSubmit} disabled={loading}
+          style={{ width: '100%', padding: '14px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}>
           {loading ? 'Creating...' : 'Create My Store'}
         </button>
       </div>
