@@ -9,6 +9,7 @@ interface Seller {
   bio: string
   logoUrl: string
   slug: string
+  whatsapp?: string
 }
 
 interface Product {
@@ -32,6 +33,10 @@ function StorePage() {
   const [price, setPrice] = useState('')
   const [description, setDescription] = useState('')
   const [imageUrl, setImageUrl] = useState('')
+
+  const [orderProduct, setOrderProduct] = useState<Product | null>(null)
+  const [buyerName, setBuyerName] = useState('')
+  const [quantity, setQuantity] = useState('1')
 
   useEffect(() => {
     const fetchSeller = async () => {
@@ -68,6 +73,26 @@ function StorePage() {
     fetchProducts(sellerId)
   }
 
+  const handleOrder = async () => {
+    if (!buyerName) return alert('Please enter your name')
+    if (!orderProduct || !seller) return
+
+    await addDoc(collection(db, 'sellers', sellerId, 'orders'), {
+      buyerName,
+      productName: orderProduct.name,
+      productPrice: orderProduct.price,
+      quantity,
+      createdAt: new Date()
+    })
+
+    const message = `Hi! I'm *${buyerName}* and I want to order *${orderProduct.name}* x${quantity} at UGX ${orderProduct.price} each.`
+    const whatsappNumber = seller.whatsapp || ''
+    window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`, '_blank')
+
+    setBuyerName(''); setQuantity('1')
+    setOrderProduct(null)
+  }
+
   if (loading) return <p style={{ textAlign: 'center', marginTop: '40px' }}>Loading...</p>
   if (!seller) return <p style={{ textAlign: 'center', marginTop: '40px' }}>Store not found.</p>
 
@@ -81,10 +106,8 @@ function StorePage() {
         <h1 style={{ margin: '0 0 8px', fontSize: '24px', fontWeight: '700', color: '#1a1a1a' }}>{seller.businessName}</h1>
         <p style={{ margin: 0, color: '#666', fontSize: '15px' }}>{seller.bio}</p>
         {isOwner && (
-          <button
-            onClick={() => { auth.signOut(); window.location.href = '/' }}
-            style={{ marginTop: '12px', background: 'transparent', border: '1px solid #ddd', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', color: '#888', cursor: 'pointer' }}
-          >
+          <button onClick={() => { auth.signOut(); window.location.href = '/' }}
+            style={{ marginTop: '12px', background: 'transparent', border: '1px solid #ddd', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', color: '#888', cursor: 'pointer' }}>
             Log out
           </button>
         )}
@@ -102,7 +125,6 @@ function StorePage() {
           )}
         </div>
 
-        {/* Add Product Form */}
         {showForm && (
           <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', marginBottom: '24px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
             <input placeholder="Product name" value={name} onChange={e => setName(e.target.value)}
@@ -120,7 +142,6 @@ function StorePage() {
           </div>
         )}
 
-        {/* Product Grid */}
         {products.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px', background: '#fff', borderRadius: '12px', border: '1px dashed #ddd' }}>
             <p style={{ color: '#aaa' }}>{isOwner ? 'Add your first product above' : 'No products yet'}</p>
@@ -134,13 +155,43 @@ function StorePage() {
                 <div style={{ padding: '12px' }}>
                   <p style={{ margin: '0 0 4px', fontWeight: '600', fontSize: '14px' }}>{p.name}</p>
                   <p style={{ margin: '0 0 4px', color: '#666', fontSize: '13px' }}>{p.description}</p>
-                  <p style={{ margin: 0, fontWeight: '700', color: '#1a1a1a', fontSize: '15px' }}>UGX {p.price}</p>
+                  <p style={{ margin: '0 0 10px', fontWeight: '700', color: '#1a1a1a', fontSize: '15px' }}>UGX {p.price}</p>
+                  {!isOwner && (
+                    <button onClick={() => setOrderProduct(p)}
+                      style={{ width: '100%', padding: '10px', background: '#25D366', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}>
+                      Order Now
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Order Form Modal */}
+      {orderProduct && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div style={{ background: '#fff', borderRadius: '16px', padding: '24px', width: '100%', maxWidth: '400px' }}>
+            <h3 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: '700' }}>Order {orderProduct.name}</h3>
+            <p style={{ margin: '0 0 20px', color: '#666', fontSize: '14px' }}>UGX {orderProduct.price} each</p>
+
+            <input placeholder="Your name" value={buyerName} onChange={e => setBuyerName(e.target.value)}
+              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px' }} />
+            <input placeholder="Quantity" value={quantity} onChange={e => setQuantity(e.target.value)} type="number" min="1"
+              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', marginBottom: '20px', boxSizing: 'border-box', fontSize: '14px' }} />
+
+            <button onClick={handleOrder}
+              style={{ width: '100%', padding: '14px', background: '#25D366', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
+              Order on WhatsApp
+            </button>
+            <button onClick={() => setOrderProduct(null)}
+              style={{ width: '100%', padding: '12px', background: 'transparent', color: '#888', border: '1px solid #ddd', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
