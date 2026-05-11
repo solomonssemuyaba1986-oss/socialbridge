@@ -29,6 +29,7 @@ function StorePage() {
   const [loading, setLoading] = useState(true)
   const [sellerId, setSellerId] = useState<string>('')
   const [orderSuccess, setOrderSuccess] = useState(false)
+  const [uploading, setUploading] = useState(false)
 
   const [name, setName] = useState('')
   const [price, setPrice] = useState('')
@@ -40,6 +41,8 @@ function StorePage() {
   const [quantity, setQuantity] = useState('1')
 
   const green = '#adff2f'
+  const CLOUD_NAME = 'dzudmmuxg'
+  const UPLOAD_PRESET = 'p2z65zrv'
 
   useEffect(() => {
     const fetchSeller = async () => {
@@ -66,8 +69,23 @@ function StorePage() {
     setProducts(list)
   }
 
+  const handleImageUpload = async (file: File) => {
+    setUploading(true)
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('upload_preset', UPLOAD_PRESET)
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
+      method: 'POST',
+      body: formData
+    })
+    const data = await res.json()
+    setImageUrl(data.secure_url)
+    setUploading(false)
+  }
+
   const handleAddProduct = async () => {
     if (!name || !price) return alert('Name and price are required')
+    if (!imageUrl) return alert('Please upload a product image')
     await addDoc(collection(db, 'sellers', sellerId, 'products'), {
       name, price, description, imageUrl
     })
@@ -79,7 +97,6 @@ function StorePage() {
   const handleOrder = async () => {
     if (!buyerName) return alert('Please enter your name')
     if (!orderProduct || !seller) return
-
     await addDoc(collection(db, 'sellers', sellerId, 'orders'), {
       buyerName,
       productName: orderProduct.name,
@@ -87,12 +104,9 @@ function StorePage() {
       quantity,
       createdAt: new Date()
     })
-
     const message = `Hi! I'm *${buyerName}* and I want to order *${orderProduct.name}* x${quantity} at UGX ${orderProduct.price} each.`
     const whatsappNumber = seller.whatsapp || ''
-
     setOrderSuccess(true)
-
     setTimeout(() => {
       window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`, '_blank')
       setBuyerName(''); setQuantity('1')
@@ -153,13 +167,31 @@ function StorePage() {
               style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
             <input placeholder="Price (UGX)" value={price} onChange={e => setPrice(e.target.value)}
               style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
-            <input placeholder="Image URL" value={imageUrl} onChange={e => setImageUrl(e.target.value)}
-              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
             <textarea placeholder="Description" value={description} onChange={e => setDescription(e.target.value)}
-              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '16px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'none' }} rows={3} />
-            <button onClick={handleAddProduct}
-              style={{ width: '100%', padding: '12px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px' }}>
-              Save Product
+              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'none' }} rows={3} />
+
+            {/* Image Upload */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ fontSize: '13px', color: '#888', marginBottom: '8px', display: 'block' }}>Product Image</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={e => {
+                  const file = e.target.files?.[0]
+                  if (file) handleImageUpload(file)
+                }}
+                style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }}
+              />
+              {uploading && <p style={{ color: '#888', fontSize: '13px', marginTop: '8px' }}>Uploading image...</p>}
+              {imageUrl && !uploading && (
+                <img src={imageUrl} alt="preview"
+                  style={{ width: '100%', height: '140px', objectFit: 'cover', borderRadius: '8px', marginTop: '8px', border: `1px solid ${green}` }} />
+              )}
+            </div>
+
+            <button onClick={handleAddProduct} disabled={uploading}
+              style={{ width: '100%', padding: '12px', background: uploading ? '#333' : green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px' }}>
+              {uploading ? 'Uploading...' : 'Save Product'}
             </button>
           </div>
         )}
@@ -203,10 +235,9 @@ function StorePage() {
       {orderProduct && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
           <div style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222', textAlign: 'center' }}>
-
             {orderSuccess ? (
               <div>
-                <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '28px' }}>
+                <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '28px', color: '#000', fontWeight: '800' }}>
                   ✓
                 </div>
                 <h3 style={{ color: '#fff', fontWeight: '800', fontSize: '18px', margin: '0 0 8px' }}>Order Sent!</h3>
@@ -220,12 +251,10 @@ function StorePage() {
                 <p style={{ margin: '0 0 24px', color: green, fontSize: '14px', fontWeight: '700', textAlign: 'left' }}>
                   UGX {orderProduct.price} each
                 </p>
-
                 <input placeholder="Your name" value={buyerName} onChange={e => setBuyerName(e.target.value)}
-                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', textAlign: 'left' }} />
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
                 <input placeholder="Quantity" value={quantity} onChange={e => setQuantity(e.target.value)} type="number" min="1"
                   style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '24px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
-
                 <button onClick={handleOrder}
                   style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
                   Send Order
