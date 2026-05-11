@@ -28,6 +28,7 @@ function StorePage() {
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
   const [sellerId, setSellerId] = useState<string>('')
+  const [orderSuccess, setOrderSuccess] = useState(false)
 
   const [name, setName] = useState('')
   const [price, setPrice] = useState('')
@@ -37,6 +38,8 @@ function StorePage() {
   const [orderProduct, setOrderProduct] = useState<Product | null>(null)
   const [buyerName, setBuyerName] = useState('')
   const [quantity, setQuantity] = useState('1')
+
+  const green = '#adff2f'
 
   useEffect(() => {
     const fetchSeller = async () => {
@@ -87,78 +90,98 @@ function StorePage() {
 
     const message = `Hi! I'm *${buyerName}* and I want to order *${orderProduct.name}* x${quantity} at UGX ${orderProduct.price} each.`
     const whatsappNumber = seller.whatsapp || ''
-    window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`, '_blank')
 
-    setBuyerName(''); setQuantity('1')
-    setOrderProduct(null)
+    setOrderSuccess(true)
+
+    setTimeout(() => {
+      window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`, '_blank')
+      setBuyerName(''); setQuantity('1')
+      setOrderProduct(null)
+      setOrderSuccess(false)
+    }, 1500)
   }
 
-  if (loading) return <p style={{ textAlign: 'center', marginTop: '40px' }}>Loading...</p>
-  if (!seller) return <p style={{ textAlign: 'center', marginTop: '40px' }}>Store not found.</p>
+  if (loading) return (
+    <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <p style={{ color: '#555', fontFamily: 'sans-serif' }}>Loading store...</p>
+    </div>
+  )
+
+  if (!seller) return (
+    <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <p style={{ color: '#555', fontFamily: 'sans-serif' }}>Store not found.</p>
+    </div>
+  )
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f9f9f9', fontFamily: 'sans-serif' }}>
+    <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
 
       {/* Header */}
-      <div style={{ background: '#fff', padding: '40px 20px', textAlign: 'center', borderBottom: '1px solid #eee' }}>
+      <div style={{ padding: '48px 20px 32px', textAlign: 'center', borderBottom: '1px solid #1a1a1a' }}>
         <img src={seller.logoUrl || 'https://placehold.co/100'} alt="logo"
-          style={{ width: '90px', height: '90px', borderRadius: '50%', objectFit: 'cover', marginBottom: '16px' }} />
-        <h1 style={{ margin: '0 0 8px', fontSize: '24px', fontWeight: '700', color: '#1a1a1a' }}>{seller.businessName}</h1>
-        <p style={{ margin: 0, color: '#666', fontSize: '15px' }}>{seller.bio}</p>
+          style={{ width: '90px', height: '90px', borderRadius: '50%', objectFit: 'cover', marginBottom: '16px', border: `3px solid ${green}` }} />
+        <h1 style={{ margin: '0 0 8px', fontSize: '26px', fontWeight: '800', color: '#fff', letterSpacing: '-0.5px' }}>
+          {seller.businessName}
+        </h1>
+        <p style={{ margin: '0 0 16px', color: '#888', fontSize: '15px', maxWidth: '360px', marginInline: 'auto' }}>
+          {seller.bio}
+        </p>
         {isOwner && (
           <button onClick={() => { auth.signOut(); window.location.href = '/' }}
-            style={{ marginTop: '12px', background: 'transparent', border: '1px solid #ddd', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', color: '#888', cursor: 'pointer' }}>
+            style={{ background: 'transparent', border: '1px solid #333', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', color: '#555', cursor: 'pointer' }}>
             Log out
           </button>
         )}
       </div>
 
       {/* Products */}
-      <div style={{ maxWidth: '600px', margin: '0 auto', padding: '30px 20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: '600', margin: 0 }}>Products</h2>
+      <div style={{ maxWidth: '640px', margin: '0 auto', padding: '32px 16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h2 style={{ fontSize: '16px', fontWeight: '700', margin: 0, color: '#aaa', textTransform: 'uppercase', letterSpacing: '1px' }}>Products</h2>
           {isOwner && (
             <button onClick={() => setShowForm(!showForm)}
-              style={{ background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 18px', cursor: 'pointer', fontWeight: '600' }}>
+              style={{ background: green, color: '#000', border: 'none', borderRadius: '8px', padding: '10px 18px', cursor: 'pointer', fontWeight: '700', fontSize: '13px' }}>
               + Add Product
             </button>
           )}
         </div>
 
+        {/* Add Product Form */}
         {showForm && (
-          <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', marginBottom: '24px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+          <div style={{ background: '#1a1a1a', borderRadius: '12px', padding: '24px', marginBottom: '24px', border: '1px solid #222' }}>
             <input placeholder="Product name" value={name} onChange={e => setName(e.target.value)}
-              style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px' }} />
+              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
             <input placeholder="Price (UGX)" value={price} onChange={e => setPrice(e.target.value)}
-              style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px' }} />
+              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
             <input placeholder="Image URL" value={imageUrl} onChange={e => setImageUrl(e.target.value)}
-              style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px' }} />
+              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
             <textarea placeholder="Description" value={description} onChange={e => setDescription(e.target.value)}
-              style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', marginBottom: '16px', boxSizing: 'border-box', fontSize: '14px', resize: 'none' }} rows={3} />
+              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '16px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'none' }} rows={3} />
             <button onClick={handleAddProduct}
-              style={{ width: '100%', padding: '12px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '15px' }}>
+              style={{ width: '100%', padding: '12px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px' }}>
               Save Product
             </button>
           </div>
         )}
 
+        {/* Product Grid */}
         {products.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px', background: '#fff', borderRadius: '12px', border: '1px dashed #ddd' }}>
-            <p style={{ color: '#aaa' }}>{isOwner ? 'Add your first product above' : 'No products yet'}</p>
+          <div style={{ textAlign: 'center', padding: '60px 20px', border: '1px dashed #222', borderRadius: '12px' }}>
+            <p style={{ color: '#444', fontSize: '14px' }}>{isOwner ? 'Add your first product above' : 'No products yet'}</p>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             {products.map(p => (
-              <div key={p.id} style={{ background: '#fff', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-                <img src={p.imageUrl || 'https://placehold.co/300x200'} alt={p.name}
+              <div key={p.id} style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222' }}>
+                <img src={p.imageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
                   style={{ width: '100%', height: '160px', objectFit: 'cover' }} />
                 <div style={{ padding: '12px' }}>
-                  <p style={{ margin: '0 0 4px', fontWeight: '600', fontSize: '14px' }}>{p.name}</p>
-                  <p style={{ margin: '0 0 4px', color: '#666', fontSize: '13px' }}>{p.description}</p>
-                  <p style={{ margin: '0 0 10px', fontWeight: '700', color: '#1a1a1a', fontSize: '15px' }}>UGX {p.price}</p>
+                  <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: '#fff' }}>{p.name}</p>
+                  <p style={{ margin: '0 0 8px', color: '#666', fontSize: '12px' }}>{p.description}</p>
+                  <p style={{ margin: '0 0 12px', fontWeight: '800', color: green, fontSize: '15px' }}>UGX {p.price}</p>
                   {!isOwner && (
                     <button onClick={() => setOrderProduct(p)}
-                      style={{ width: '100%', padding: '10px', background: '#25D366', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}>
+                      style={{ width: '100%', padding: '10px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>
                       Order Now
                     </button>
                   )}
@@ -169,26 +192,50 @@ function StorePage() {
         )}
       </div>
 
-      {/* Order Form Modal */}
+      {/* Footer */}
+      <div style={{ textAlign: 'center', padding: '24px', borderTop: '1px solid #1a1a1a' }}>
+        <p style={{ color: '#333', fontSize: '12px', margin: 0 }}>
+          Powered by <span style={{ color: green, fontWeight: '700' }}>SocialBridge</span>
+        </p>
+      </div>
+
+      {/* Order Modal */}
       {orderProduct && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
-          <div style={{ background: '#fff', borderRadius: '16px', padding: '24px', width: '100%', maxWidth: '400px' }}>
-            <h3 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: '700' }}>Order {orderProduct.name}</h3>
-            <p style={{ margin: '0 0 20px', color: '#666', fontSize: '14px' }}>UGX {orderProduct.price} each</p>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222', textAlign: 'center' }}>
 
-            <input placeholder="Your name" value={buyerName} onChange={e => setBuyerName(e.target.value)}
-              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px' }} />
-            <input placeholder="Quantity" value={quantity} onChange={e => setQuantity(e.target.value)} type="number" min="1"
-              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', marginBottom: '20px', boxSizing: 'border-box', fontSize: '14px' }} />
+            {orderSuccess ? (
+              <div>
+                <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '28px' }}>
+                  ✓
+                </div>
+                <h3 style={{ color: '#fff', fontWeight: '800', fontSize: '18px', margin: '0 0 8px' }}>Order Sent!</h3>
+                <p style={{ color: '#888', fontSize: '14px', margin: 0 }}>Opening WhatsApp...</p>
+              </div>
+            ) : (
+              <>
+                <h3 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: '800', color: '#fff', textAlign: 'left' }}>
+                  Order {orderProduct.name}
+                </h3>
+                <p style={{ margin: '0 0 24px', color: green, fontSize: '14px', fontWeight: '700', textAlign: 'left' }}>
+                  UGX {orderProduct.price} each
+                </p>
 
-            <button onClick={handleOrder}
-              style={{ width: '100%', padding: '14px', background: '#25D366', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
-              Order on WhatsApp
-            </button>
-            <button onClick={() => setOrderProduct(null)}
-              style={{ width: '100%', padding: '12px', background: 'transparent', color: '#888', border: '1px solid #ddd', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
-              Cancel
-            </button>
+                <input placeholder="Your name" value={buyerName} onChange={e => setBuyerName(e.target.value)}
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', textAlign: 'left' }} />
+                <input placeholder="Quantity" value={quantity} onChange={e => setQuantity(e.target.value)} type="number" min="1"
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '24px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+
+                <button onClick={handleOrder}
+                  style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
+                  Send Order
+                </button>
+                <button onClick={() => setOrderProduct(null)}
+                  style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
+                  Cancel
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
