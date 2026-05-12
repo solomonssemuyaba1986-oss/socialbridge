@@ -14,7 +14,7 @@ function Onboarding() {
         {/* Seller */}
         <div onClick={() => navigate('/setup')}
           style={{ flex: 1, background: '#1a1a1a', border: '2px solid #333', borderRadius: '16px', padding: '24px', cursor: 'pointer' }}>
-          <div style={{ background: '#22c55e', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', fontSize: '22px' }}>🏪</div>
+          <div style={{ background: '#adff2f', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', fontSize: '22px' }}>🏪</div>
           <p style={{ color: '#fff', fontWeight: '700', fontSize: '16px', margin: '0 0 8px' }}>I'm a Seller</p>
           <p style={{ color: '#888', fontSize: '13px', margin: '0 0 16px' }}>I sell products on Instagram, TikTok, or WhatsApp and want to stop losing orders.</p>
           <div style={{ display: 'flex', gap: '8px', fontSize: '18px' }}>📸 🎵 💬</div>
