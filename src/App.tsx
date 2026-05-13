@@ -8,6 +8,7 @@ import SignIn from './SignIn.tsx'
 import SetupStore from './SetupStore.tsx'
 import Onboarding from './Onboarding.tsx'
 import Dashboard from './Dashboard.tsx'
+import BrowsePage from './BrowsePage.tsx'
 
 function App() {
   const [loading, setLoading] = useState(true)
@@ -49,6 +50,7 @@ function App() {
       <Route path="/setup" element={signedIn ? <SetupStore /> : <Navigate to="/" />} />
       <Route path="/store/:slug" element={<StorePage />} />
       <Route path="/dashboard" element={signedIn ? <Dashboard /> : <Navigate to="/" />} />
+      <Route path="/browse" element={<BrowsePage />} />
     </Routes>
   )
 }
