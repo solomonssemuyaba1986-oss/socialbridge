@@ -44,16 +44,16 @@ function SignIn() {
         <p style={{ fontSize: '18px', color: '#888', margin: '0 0 40px', maxWidth: '500px', marginInline: 'auto', lineHeight: '1.6' }}>
           Add  SocialBridge to your bio today. Manage your business anywhere — with one tap.
         </p>
-        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
-          <button onClick={handleGoogleSignIn}
-            style={{ background: green, color: '#000', border: 'none', padding: '16px 32px', borderRadius: '10px', fontWeight: '800', cursor: 'pointer', fontSize: '16px' }}>
-            Claim Your Free Link →
-          </button>
-          <button onClick={handleGoogleSignIn}
-            style={{ background: 'transparent', color: '#fff', border: '1px solid #333', padding: '16px 32px', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '16px' }}>
-            Get Started
-          </button>
-        </div>
+        <div style={{ display: 'flex', gap: '0', justifyContent: 'center', maxWidth: '480px', marginInline: 'auto' }}>
+  <input
+    placeholder="Enter your email"
+    style={{ flex: 1, padding: '16px 20px', borderRadius: '10px 0 0 10px', border: '1px solid #333', background: '#1a1a1a', color: '#fff', fontSize: '15px', outline: 'none' }}
+  />
+  <button onClick={handleGoogleSignIn}
+    style={{ background: green, color: '#000', border: 'none', padding: '16px 24px', borderRadius: '0 10px 10px 0', fontWeight: '800', cursor: 'pointer', fontSize: '15px', whiteSpace: 'nowrap' }}>
+    Get Started →
+  </button>
+</div>
         <p style={{ color: '#444', fontSize: '13px', marginTop: '16px' }}>Free forever. No credit card. Live in 2 minutes.</p>
       </div>
 
