@@ -21,7 +21,7 @@ function Onboarding() {
         </div>
 
         {/* Buyer */}
-        <div onClick={() => alert('Buyer marketplace coming soon!')}
+        <div onClick={() => navigate('/browse')}
           style={{ flex: 1, background: '#1a1a1a', border: '2px solid #333', borderRadius: '16px', padding: '24px', cursor: 'pointer' }}>
           <div style={{ background: '#3b82f6', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', fontSize: '22px' }}>🛍️</div>
           <p style={{ color: '#fff', fontWeight: '700', fontSize: '16px', margin: '0 0 8px' }}>I'm a Buyer</p>
