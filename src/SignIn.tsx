@@ -34,7 +34,7 @@ function SignIn() {
       {/* Hero */}
       <div style={{ textAlign: 'center', padding: '80px 20px 60px', maxWidth: '800px', margin: '0 auto' }}>
         <div style={{ display: 'inline-block', background: '#1a1a1a', border: '1px solid #333', borderRadius: '20px', padding: '6px 16px', fontSize: '13px', color: '#888', marginBottom: '24px' }}>
-          Your brand. Your audience. Across every platform. In one place.
+          Your brand. Your audience. Across every platform. In one inbox.
         </div>
         <h1 style={{ fontSize: '56px', fontWeight: '900', lineHeight: '1.1', margin: '0 0 24px', letterSpacing: '-2px' }}>
           Move your business with you<br />
