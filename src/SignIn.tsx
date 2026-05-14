@@ -27,22 +27,22 @@ function SignIn() {
         </div>
         <button onClick={handleGoogleSignIn}
           style={{ background: green, color: '#000', border: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '14px' }}>
-          Get Your Link →
+          Get Started →
         </button>
       </nav>
 
       {/* Hero */}
       <div style={{ textAlign: 'center', padding: '80px 20px 60px', maxWidth: '800px', margin: '0 auto' }}>
         <div style={{ display: 'inline-block', background: '#1a1a1a', border: '1px solid #333', borderRadius: '20px', padding: '6px 16px', fontSize: '13px', color: '#888', marginBottom: '24px' }}>
-          ⚡ Use your profile page as your best Asset
+          Your brand. Your audience. Across every platform. In one place.
         </div>
         <h1 style={{ fontSize: '56px', fontWeight: '900', lineHeight: '1.1', margin: '0 0 24px', letterSpacing: '-2px' }}>
-          Stop losing customers<br />
-          <span style={{ color: green }}>you already paid</span><br />
-          to attract.
+          Move your business with you<br />
+          <span style={{ color: green }}>everywhere you go</span><br />
+          across any social platform.
         </h1>
         <p style={{ fontSize: '18px', color: '#888', margin: '0 0 40px', maxWidth: '500px', marginInline: 'auto', lineHeight: '1.6' }}>
-          Add  SocialBridge to your bio today. Manage your business anywhere — with one tap.
+          Manage your business everywhere, anywhere.
         </p>
         <div style={{ display: 'flex', gap: '0', justifyContent: 'center', maxWidth: '480px', marginInline: 'auto' }}>
   <input
@@ -54,18 +54,18 @@ function SignIn() {
     Get Started →
   </button>
 </div>
-        <p style={{ color: '#444', fontSize: '13px', marginTop: '16px' }}>Free forever. No credit card. Live in 2 minutes.</p>
+        <p style={{ color: '#444', fontSize: '13px', marginTop: '16px' }}>Start selling smarter in minutes.</p>
       </div>
 
       {/* Problem Section */}
       <div style={{ background: '#0a0a0a', padding: '80px 20px', borderTop: '1px solid #1a1a1a' }}>
         <div style={{ maxWidth: '800px', margin: '0 auto', textAlign: 'center' }}>
           <h2 style={{ fontSize: '42px', fontWeight: '900', margin: '0 0 16px', letterSpacing: '-1px' }}>
-            You're losing customers<br />
-            <span style={{ color: '#ff4444' }}>and you can't even see it.</span>
+            Customers don't stop messaging, they stop waiting<br />
+            <span style={{ color: '#ff4444' }}>Get everything done from socialBridge.</span>
           </h2>
           <p style={{ color: '#666', fontSize: '16px', margin: '0 0 48px' }}>
-            Every missed DM, every slow reply, every order that got lost in a comment thread — that's revenue walking out the door.
+            Every missed DM, every slow reply, every order that got lost in a comment thread — leads to poor management.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
             {[
@@ -87,13 +87,13 @@ function SignIn() {
       <div style={{ padding: '80px 20px', maxWidth: '800px', margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: '48px' }}>
           <h2 style={{ fontSize: '42px', fontWeight: '900', margin: '0 0 16px', letterSpacing: '-1px' }}>Get set up in minutes.</h2>
-          <p style={{ color: '#666', fontSize: '16px', margin: 0 }}>No complicated setup. Just your link, your store, your business.</p>
+          <p style={{ color: '#666', fontSize: '16px', margin: 0 }}> It's you, your audience, your business, and socialBridge.</p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
           {[
             { num: '01', title: 'Add your link to your bio', desc: 'Paste one SocialBridge link on Instagram, TikTok, WhatsApp. Takes 60 seconds.' },
             { num: '02', title: 'Followers tap. They shop.', desc: 'They hit your link and land on your storefront. Products, pricing — all there.' },
-            { num: '03', title: 'You manage everything from one place', desc: 'See every order, every buyer, every product in your dashboard.' },
+            { num: '03', title: 'You manage everything from one place', desc: 'See every order, every buyer, every product in your dashboard, no matter what platform they use to find you.' },
           ].map(step => (
             <div key={step.num} style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
               <div style={{ fontSize: '48px', fontWeight: '900', color: green, opacity: 0.4, lineHeight: '1', minWidth: '60px' }}>{step.num}</div>
@@ -126,7 +126,7 @@ function SignIn() {
       {/* CTA */}
       <div style={{ padding: '80px 20px', textAlign: 'center' }}>
         <h2 style={{ fontSize: '42px', fontWeight: '900', margin: '0 0 16px', letterSpacing: '-1px' }}>
-          Your business deserves to<br />
+          Your business deserves a<br />
           <span style={{ color: green }}>stand tall on social.</span>
         </h2>
         <p style={{ color: '#666', fontSize: '16px', margin: '0 0 40px' }}>
@@ -134,15 +134,15 @@ function SignIn() {
         </p>
         <button onClick={handleGoogleSignIn}
           style={{ background: green, color: '#000', border: 'none', padding: '18px 40px', borderRadius: '10px', fontWeight: '800', cursor: 'pointer', fontSize: '18px' }}>
-          Claim Your Free Link →
+          Sign up for free.→
         </button>
-        <p style={{ color: '#444', fontSize: '13px', marginTop: '16px' }}>Free forever. No credit card. Live in 2 minutes.</p>
+        <p style={{ color: '#444', fontSize: '13px', marginTop: '16px' }}> Your followers become your audience.</p>
       </div>
 
       {/* Footer */}
       <div style={{ borderTop: '1px solid #1a1a1a', padding: '24px', textAlign: 'center' }}>
         <p style={{ color: '#333', fontSize: '13px', margin: 0 }}>
-          © 2026 <span style={{ color: green, fontWeight: '700' }}>SocialBridge</span> — One place for your business anywhere in the world.
+          © 2026 <span style={{ color: green, fontWeight: '700' }}>SocialBridge</span> — Reach your business potential from anywhere.
         </p>
       </div>
 
