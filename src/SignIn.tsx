@@ -142,7 +142,7 @@ function SignIn() {
       {/* Footer */}
       <div style={{ borderTop: '1px solid #1a1a1a', padding: '24px', textAlign: 'center' }}>
         <p style={{ color: '#333', fontSize: '13px', margin: 0 }}>
-          © 2026 <span style={{ color: green, fontWeight: '700' }}>SocialBridge</span> — Reach your business potential from anywhere.
+          © 2026 <span style={{ color: green, fontWeight: '700' }}>SocialBridge</span> — One inbox. Every customer. Every platform. <br />
         </p>
       </div>
 
