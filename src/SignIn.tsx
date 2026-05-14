@@ -37,12 +37,12 @@ function SignIn() {
           Your brand. Your audience. Across every platform. In one inbox.
         </div>
         <h1 style={{ fontSize: '56px', fontWeight: '900', lineHeight: '1.1', margin: '0 0 24px', letterSpacing: '-2px' }}>
-          Move your business with you<br />
-          <span style={{ color: green }}>everywhere you go</span><br />
-          across any social platform.
+          Your business<br />
+          <span style={{ color: green }}>deserves a clear future</span><br />
+          across social.
         </h1>
         <p style={{ fontSize: '18px', color: '#888', margin: '0 0 40px', maxWidth: '500px', marginInline: 'auto', lineHeight: '1.6' }}>
-          Manage your business everywhere, anywhere.
+          Lost messages. Slow replies. Orders scattered across platforms. SocialBridge fixes all of it.
         </p>
         <div style={{ display: 'flex', gap: '0', justifyContent: 'center', maxWidth: '480px', marginInline: 'auto' }}>
   <input
@@ -126,11 +126,11 @@ function SignIn() {
       {/* CTA */}
       <div style={{ padding: '80px 20px', textAlign: 'center' }}>
         <h2 style={{ fontSize: '42px', fontWeight: '900', margin: '0 0 16px', letterSpacing: '-1px' }}>
-          Your business deserves a<br />
-          <span style={{ color: green }}>stand tall on social.</span>
+          Manage your business<br />
+          <span style={{ color: green }}>from anywhere.</span>
         </h2>
         <p style={{ color: '#666', fontSize: '16px', margin: '0 0 40px' }}>
-          Lost messages. Slow replies. Orders scattered across platforms. SocialBridge fixes all of it.
+          Never lose track of your customers again.
         </p>
         <button onClick={handleGoogleSignIn}
           style={{ background: green, color: '#000', border: 'none', padding: '18px 40px', borderRadius: '10px', fontWeight: '800', cursor: 'pointer', fontSize: '18px' }}>
