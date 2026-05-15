@@ -32,19 +32,41 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onRefresh }: any) {
   const [editImageUrl, setEditImageUrl] = useState(p.imageUrl)
   const [uploadingEdit, setUploadingEdit] = useState(false)
 
-  const handleEditImageUpload = async (file: File) => {
-    setUploadingEdit(true)
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('upload_preset', UPLOAD_PRESET)
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
-      method: 'POST',
-      body: formData
-    })
-    const data = await res.json()
-    setEditImageUrl(data.secure_url)
-    setUploadingEdit(false)
+const handleEditImageUpload = async (file: File) => {
+  setUploadingEdit(true)
+  const canvas = document.createElement('canvas')
+  const img = new Image()
+  img.onload = async () => {
+    const maxSize = 800
+    let width = img.width
+    let height = img.height
+    if (width > height && width > maxSize) {
+      height = (height * maxSize) / width
+      width = maxSize
+    } else if (height > maxSize) {
+      width = (width * maxSize) / height
+      height = maxSize
+    }
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')!
+    ctx.drawImage(img, 0, 0, width, height)
+    canvas.toBlob(async blob => {
+      const compressed = new File([blob!], file.name, { type: 'image/jpeg' })
+      const formData = new FormData()
+      formData.append('file', compressed)
+      formData.append('upload_preset', UPLOAD_PRESET)
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
+        method: 'POST',
+        body: formData
+      })
+      const data = await res.json()
+      setEditImageUrl(data.secure_url)
+      setUploadingEdit(false)
+    }, 'image/jpeg', 0.7)
   }
+  img.src = URL.createObjectURL(file)
+}
 
   const handleSave = async () => {
     const { updateDoc, doc } = await import('firebase/firestore')
@@ -171,19 +193,47 @@ function StorePage() {
     setProducts(list)
   }
 
-  const handleImageUpload = async (file: File) => {
-    setUploading(true)
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('upload_preset', UPLOAD_PRESET)
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
-      method: 'POST',
-      body: formData
-    })
-    const data = await res.json()
-    setImageUrl(data.secure_url)
-    setUploading(false)
-  }
+const compressImage = (file: File): Promise<File> => {
+  return new Promise((resolve) => {
+    const canvas = document.createElement('canvas')
+    const img = new Image()
+    img.onload = () => {
+      const maxSize = 800
+      let width = img.width
+      let height = img.height
+      if (width > height && width > maxSize) {
+        height = (height * maxSize) / width
+        width = maxSize
+      } else if (height > maxSize) {
+        width = (width * maxSize) / height
+        height = maxSize
+      }
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext('2d')!
+      ctx.drawImage(img, 0, 0, width, height)
+      canvas.toBlob(blob => {
+        resolve(new File([blob!], file.name, { type: 'image/jpeg' }))
+      }, 'image/jpeg', 0.7)
+    }
+    img.src = URL.createObjectURL(file)
+  })
+}
+
+const handleImageUpload = async (file: File) => {
+  setUploading(true)
+  const compressed = await compressImage(file)
+  const formData = new FormData()
+  formData.append('file', compressed)
+  formData.append('upload_preset', UPLOAD_PRESET)
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
+    method: 'POST',
+    body: formData
+  })
+  const data = await res.json()
+  setImageUrl(data.secure_url)
+  setUploading(false)
+}
 
   const handleAddProduct = async () => {
     if (!name || !price) return alert('Name and price are required')
