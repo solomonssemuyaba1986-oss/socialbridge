@@ -134,7 +134,7 @@ function SignIn() {
         </p>
         <button onClick={handleGoogleSignIn}
           style={{ background: green, color: '#000', border: 'none', padding: '18px 40px', borderRadius: '10px', fontWeight: '800', cursor: 'pointer', fontSize: '18px' }}>
-          Sign up for free.→
+          Sign up for free →
         </button>
         <p style={{ color: '#444', fontSize: '13px', marginTop: '16px' }}> Your followers become your audience.</p>
       </div>
