@@ -192,7 +192,13 @@ function Dashboard() {
         )}
 
         {/* Products */}
-        <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px' }}>Products</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+  <h2 style={{ fontSize: '18px', fontWeight: '700', margin: 0 }}>Products</h2>
+  <button onClick={() => navigate('/bulk-upload')}
+    style={{ background: green, color: '#000', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>
+    + Bulk Upload
+  </button>
+</div>
         {products.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px', background: '#1a1a1a', borderRadius: '12px', border: '1px dashed #333' }}>
             <p style={{ color: '#444', margin: 0 }}>No products yet.</p>
