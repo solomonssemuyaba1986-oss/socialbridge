@@ -70,49 +70,115 @@ function StorePage() {
   }
 
   const handleImageUpload = async (file: File) => {
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+    if (!validTypes.includes(file.type)) {
+      alert('Please upload a valid image (JPEG, PNG, WebP, or GIF)')
+      return
+    }
+    
+    // Validate file size (max 5MB)
+    const maxSize = 5 * 1024 * 1024
+    if (file.size > maxSize) {
+      alert('Image must be under 5MB')
+      return
+    }
+    
     setUploading(true)
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('upload_preset', UPLOAD_PRESET)
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
-      method: 'POST',
-      body: formData
-    })
-    const data = await res.json()
-    setImageUrl(data.secure_url)
-    setUploading(false)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('upload_preset', UPLOAD_PRESET)
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
+        method: 'POST',
+        body: formData
+      })
+      
+      if (!res.ok) {
+        throw new Error('Image upload failed')
+      }
+      
+      const data = await res.json()
+      if (data.secure_url) {
+        setImageUrl(data.secure_url)
+      } else {
+        throw new Error('No image URL returned')
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Failed to upload image'
+      alert(errorMsg)
+      console.error('Image upload error:', error)
+    } finally {
+      setUploading(false)
+    }
   }
 
   const handleAddProduct = async () => {
-    if (!name || !price) return alert('Name and price are required')
+    const cleanName = name.trim()
+    const cleanPrice = price.trim()
+    const cleanDesc = description.trim()
+    
+    if (!cleanName) return alert('Product name is required')
+    if (cleanName.length > 100) return alert('Product name must be 100 characters or less')
+    
+    if (!cleanPrice) return alert('Price is required')
+    if (isNaN(Number(cleanPrice)) || Number(cleanPrice) <= 0) {
+      return alert('Price must be a valid positive number')
+    }
+    
+    if (cleanDesc.length > 500) return alert('Description must be 500 characters or less')
     if (!imageUrl) return alert('Please upload a product image')
-    await addDoc(collection(db, 'sellers', sellerId, 'products'), {
-      name, price, description, imageUrl
-    })
-    setName(''); setPrice(''); setDescription(''); setImageUrl('')
-    setShowForm(false)
-    fetchProducts(sellerId)
+    
+    try {
+      await addDoc(collection(db, 'sellers', sellerId, 'products'), {
+        name: cleanName,
+        price: cleanPrice,
+        description: cleanDesc,
+        imageUrl,
+        createdAt: new Date()
+      })
+      setName(''); setPrice(''); setDescription(''); setImageUrl('')
+      setShowForm(false)
+      fetchProducts(sellerId)
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Failed to add product'
+      alert(errorMsg)
+      console.error('Add product error:', error)
+    }
   }
 
   const handleOrder = async () => {
-    if (!buyerName) return alert('Please enter your name')
+    const cleanName = buyerName.trim()
+    const qty = parseInt(quantity)
+    
+    if (!cleanName) return alert('Please enter your name')
+    if (cleanName.length > 100) return alert('Name must be 100 characters or less')
     if (!orderProduct || !seller) return
-    await addDoc(collection(db, 'sellers', sellerId, 'orders'), {
-      buyerName,
-      productName: orderProduct.name,
-      productPrice: orderProduct.price,
-      quantity,
-      createdAt: new Date()
-    })
-    const message = `Hi! I'm *${buyerName}* and I want to order *${orderProduct.name}* x${quantity} at UGX ${orderProduct.price} each.`
-    const whatsappNumber = seller.whatsapp || ''
-    setOrderSuccess(true)
-    setTimeout(() => {
-      window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`, '_blank')
-      setBuyerName(''); setQuantity('1')
-      setOrderProduct(null)
-      setOrderSuccess(false)
-    }, 1500)
+    if (isNaN(qty) || qty < 1) return alert('Quantity must be at least 1')
+    
+    try {
+      await addDoc(collection(db, 'sellers', sellerId, 'orders'), {
+        buyerName: cleanName,
+        productName: orderProduct.name,
+        productPrice: orderProduct.price,
+        quantity: qty,
+        status: 'pending',
+        createdAt: new Date()
+      })
+      const message = `Hi! I'm *${cleanName}* and I want to order *${orderProduct.name}* x${qty} at UGX ${orderProduct.price} each.`
+      const whatsappNumber = seller.whatsapp || ''
+      setOrderSuccess(true)
+      setTimeout(() => {
+        window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`, '_blank')
+        setBuyerName(''); setQuantity('1')
+        setOrderProduct(null)
+        setOrderSuccess(false)
+      }, 1500)
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Failed to create order'
+      alert(errorMsg)
+      console.error('Order error:', error)
+    }
   }
 
   if (loading) return (
