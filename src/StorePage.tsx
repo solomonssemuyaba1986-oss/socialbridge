@@ -20,6 +20,86 @@ interface Product {
   imageUrl: string
 }
 
+const green = '#adff2f'
+const CLOUD_NAME = 'dzudmmuxg'
+const UPLOAD_PRESET = 'p2z65zrv'
+
+function ProductCard({ p, isOwner, sellerId, onOrder, onRefresh }: any) {
+  const [editing, setEditing] = useState(false)
+  const [editName, setEditName] = useState(p.name)
+  const [editPrice, setEditPrice] = useState(p.price)
+  const [editDescription, setEditDescription] = useState(p.description)
+
+  const handleSave = async () => {
+    const { updateDoc, doc } = await import('firebase/firestore')
+    await updateDoc(doc(db, 'sellers', sellerId, 'products', p.id), {
+      name: editName,
+      price: editPrice,
+      description: editDescription
+    })
+    setEditing(false)
+    onRefresh()
+  }
+
+  const handleDelete = async () => {
+    if (!confirm(`Delete ${p.name}?`)) return
+    const { deleteDoc, doc } = await import('firebase/firestore')
+    await deleteDoc(doc(db, 'sellers', sellerId, 'products', p.id))
+    onRefresh()
+  }
+
+  return (
+    <div style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222' }}>
+      <img src={p.imageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
+        style={{ width: '100%', height: '160px', objectFit: 'cover' }} />
+      <div style={{ padding: '12px' }}>
+        {editing ? (
+          <>
+            <input value={editName} onChange={e => setEditName(e.target.value)}
+              style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #333', background: '#111', color: '#fff', fontSize: '13px', marginBottom: '8px', boxSizing: 'border-box' }} />
+            <input value={editPrice} onChange={e => setEditPrice(e.target.value)}
+              style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #333', background: '#111', color: '#fff', fontSize: '13px', marginBottom: '8px', boxSizing: 'border-box' }} />
+            <input value={editDescription} onChange={e => setEditDescription(e.target.value)}
+              style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #333', background: '#111', color: '#fff', fontSize: '13px', marginBottom: '8px', boxSizing: 'border-box' }} />
+            <button onClick={handleSave}
+              style={{ width: '100%', padding: '8px', background: green, color: '#000', border: 'none', borderRadius: '6px', fontWeight: '700', cursor: 'pointer', fontSize: '13px', marginBottom: '6px' }}>
+              Save
+            </button>
+            <button onClick={() => setEditing(false)}
+              style={{ width: '100%', padding: '8px', background: 'transparent', color: '#555', border: '1px solid #333', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
+              Cancel
+            </button>
+          </>
+        ) : (
+          <>
+            <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: '#fff' }}>{p.name}</p>
+            <p style={{ margin: '0 0 8px', color: '#666', fontSize: '12px' }}>{p.description}</p>
+            <p style={{ margin: '0 0 12px', fontWeight: '800', color: green, fontSize: '15px' }}>UGX {p.price}</p>
+            {isOwner && (
+              <>
+                <button onClick={() => setEditing(true)}
+                  style={{ width: '100%', padding: '8px', background: 'transparent', color: green, border: `1px solid ${green}`, borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', marginBottom: '6px' }}>
+                  Edit
+                </button>
+                <button onClick={handleDelete}
+                  style={{ width: '100%', padding: '8px', background: 'transparent', color: '#ff4444', border: '1px solid #ff4444', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', marginBottom: '6px' }}>
+                  Delete
+                </button>
+              </>
+            )}
+            {!isOwner && (
+              <button onClick={onOrder}
+                style={{ width: '100%', padding: '10px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>
+                Order Now
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function StorePage() {
   const { slug } = useParams()
   const [seller, setSeller] = useState<Seller | null>(null)
@@ -39,10 +119,6 @@ function StorePage() {
   const [orderProduct, setOrderProduct] = useState<Product | null>(null)
   const [buyerName, setBuyerName] = useState('')
   const [quantity, setQuantity] = useState('1')
-
-  const green = '#adff2f'
-  const CLOUD_NAME = 'dzudmmuxg'
-  const UPLOAD_PRESET = 'p2z65zrv'
 
   useEffect(() => {
     const fetchSeller = async () => {
@@ -70,115 +146,49 @@ function StorePage() {
   }
 
   const handleImageUpload = async (file: File) => {
-    // Validate file type
-    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-    if (!validTypes.includes(file.type)) {
-      alert('Please upload a valid image (JPEG, PNG, WebP, or GIF)')
-      return
-    }
-    
-    // Validate file size (max 5MB)
-    const maxSize = 5 * 1024 * 1024
-    if (file.size > maxSize) {
-      alert('Image must be under 5MB')
-      return
-    }
-    
     setUploading(true)
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('upload_preset', UPLOAD_PRESET)
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
-        method: 'POST',
-        body: formData
-      })
-      
-      if (!res.ok) {
-        throw new Error('Image upload failed')
-      }
-      
-      const data = await res.json()
-      if (data.secure_url) {
-        setImageUrl(data.secure_url)
-      } else {
-        throw new Error('No image URL returned')
-      }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Failed to upload image'
-      alert(errorMsg)
-      console.error('Image upload error:', error)
-    } finally {
-      setUploading(false)
-    }
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('upload_preset', UPLOAD_PRESET)
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
+      method: 'POST',
+      body: formData
+    })
+    const data = await res.json()
+    setImageUrl(data.secure_url)
+    setUploading(false)
   }
 
   const handleAddProduct = async () => {
-    const cleanName = name.trim()
-    const cleanPrice = price.trim()
-    const cleanDesc = description.trim()
-    
-    if (!cleanName) return alert('Product name is required')
-    if (cleanName.length > 100) return alert('Product name must be 100 characters or less')
-    
-    if (!cleanPrice) return alert('Price is required')
-    if (isNaN(Number(cleanPrice)) || Number(cleanPrice) <= 0) {
-      return alert('Price must be a valid positive number')
-    }
-    
-    if (cleanDesc.length > 500) return alert('Description must be 500 characters or less')
+    if (!name || !price) return alert('Name and price are required')
     if (!imageUrl) return alert('Please upload a product image')
-    
-    try {
-      await addDoc(collection(db, 'sellers', sellerId, 'products'), {
-        name: cleanName,
-        price: cleanPrice,
-        description: cleanDesc,
-        imageUrl,
-        createdAt: new Date()
-      })
-      setName(''); setPrice(''); setDescription(''); setImageUrl('')
-      setShowForm(false)
-      fetchProducts(sellerId)
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Failed to add product'
-      alert(errorMsg)
-      console.error('Add product error:', error)
-    }
+    await addDoc(collection(db, 'sellers', sellerId, 'products'), {
+      name, price, description, imageUrl
+    })
+    setName(''); setPrice(''); setDescription(''); setImageUrl('')
+    setShowForm(false)
+    fetchProducts(sellerId)
   }
 
   const handleOrder = async () => {
-    const cleanName = buyerName.trim()
-    const qty = parseInt(quantity)
-    
-    if (!cleanName) return alert('Please enter your name')
-    if (cleanName.length > 100) return alert('Name must be 100 characters or less')
+    if (!buyerName) return alert('Please enter your name')
     if (!orderProduct || !seller) return
-    if (isNaN(qty) || qty < 1) return alert('Quantity must be at least 1')
-    
-    try {
-      await addDoc(collection(db, 'sellers', sellerId, 'orders'), {
-        buyerName: cleanName,
-        productName: orderProduct.name,
-        productPrice: orderProduct.price,
-        quantity: qty,
-        status: 'pending',
-        createdAt: new Date()
-      })
-      const message = `Hi! I'm *${cleanName}* and I want to order *${orderProduct.name}* x${qty} at UGX ${orderProduct.price} each.`
-      const whatsappNumber = seller.whatsapp || ''
-      setOrderSuccess(true)
-      setTimeout(() => {
-        window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`, '_blank')
-        setBuyerName(''); setQuantity('1')
-        setOrderProduct(null)
-        setOrderSuccess(false)
-      }, 1500)
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Failed to create order'
-      alert(errorMsg)
-      console.error('Order error:', error)
-    }
+    await addDoc(collection(db, 'sellers', sellerId, 'orders'), {
+      buyerName,
+      productName: orderProduct.name,
+      productPrice: orderProduct.price,
+      quantity,
+      createdAt: new Date()
+    })
+    const message = `Hi! I'm *${buyerName}* and I want to order *${orderProduct.name}* x${quantity} at UGX ${orderProduct.price} each.`
+    const whatsappNumber = seller.whatsapp || ''
+    setOrderSuccess(true)
+    setTimeout(() => {
+      window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`, '_blank')
+      setBuyerName(''); setQuantity('1')
+      setOrderProduct(null)
+      setOrderSuccess(false)
+    }, 1500)
   }
 
   if (loading) return (
@@ -235,25 +245,17 @@ function StorePage() {
               style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
             <textarea placeholder="Description" value={description} onChange={e => setDescription(e.target.value)}
               style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'none' }} rows={3} />
-
             <div style={{ marginBottom: '16px' }}>
               <label style={{ fontSize: '13px', color: '#888', marginBottom: '8px', display: 'block' }}>Product Image</label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={e => {
-                  const file = e.target.files?.[0]
-                  if (file) handleImageUpload(file)
-                }}
-                style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }}
-              />
+              <input type="file" accept="image/*"
+                onChange={e => { const file = e.target.files?.[0]; if (file) handleImageUpload(file) }}
+                style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
               {uploading && <p style={{ color: '#888', fontSize: '13px', marginTop: '8px' }}>Uploading image...</p>}
               {imageUrl && !uploading && (
                 <img src={imageUrl} alt="preview"
                   style={{ width: '100%', height: '140px', objectFit: 'cover', borderRadius: '8px', marginTop: '8px', border: `1px solid ${green}` }} />
               )}
             </div>
-
             <button onClick={handleAddProduct} disabled={uploading}
               style={{ width: '100%', padding: '12px', background: uploading ? '#333' : green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px' }}>
               {uploading ? 'Uploading...' : 'Save Product'}
@@ -269,31 +271,14 @@ function StorePage() {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             {products.map(p => (
-              <div key={p.id} style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222' }}>
-                <img src={p.imageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
-                  style={{ width: '100%', height: '160px', objectFit: 'cover' }} />
-                <div style={{ padding: '12px' }}>
-                  <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: '#fff' }}>{p.name}</p>
-                  <p style={{ margin: '0 0 8px', color: '#666', fontSize: '12px' }}>{p.description}</p>
-                  <p style={{ margin: '0 0 12px', fontWeight: '800', color: green, fontSize: '15px' }}>UGX {p.price}</p>
-                  {isOwner ? (
-                    <button type="button" onClick={async () => {
-                      if (!confirm(`Delete ${p.name}?`)) return
-                      const { deleteDoc, doc } = await import('firebase/firestore')
-                      await deleteDoc(doc(db, 'sellers', sellerId, 'products', p.id))
-                      fetchProducts(sellerId)
-                    }}
-                      style={{ width: '100%', padding: '8px', background: 'transparent', color: '#ff4444', border: '1px solid #ff4444', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', marginBottom: '8px' }}>
-                      Delete
-                    </button>
-                  ) : (
-                    <button type="button" onClick={() => setOrderProduct(p)}
-                      style={{ width: '100%', padding: '10px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>
-                      Order Now
-                    </button>
-                  )}
-                </div>
-              </div>
+              <ProductCard
+                key={p.id}
+                p={p}
+                isOwner={isOwner}
+                sellerId={sellerId}
+                onOrder={() => setOrderProduct(p)}
+                onRefresh={() => fetchProducts(sellerId)}
+              />
             ))}
           </div>
         )}
@@ -330,17 +315,14 @@ function StorePage() {
                   style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
                 <input placeholder="Quantity" value={quantity} onChange={e => setQuantity(e.target.value)} type="number" min="1"
                   style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '24px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
-
                 <button onClick={handleOrder}
                   style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
                   Send Order on WhatsApp
                 </button>
-
                 <a href={`tel:+${seller.whatsapp}`}
                   style={{ display: 'block', width: '100%', padding: '14px', background: 'transparent', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', marginBottom: '12px', textAlign: 'center', textDecoration: 'none', boxSizing: 'border-box' }}>
                   📞 Call Seller
                 </a>
-
                 <button onClick={() => setOrderProduct(null)}
                   style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
                   Cancel
