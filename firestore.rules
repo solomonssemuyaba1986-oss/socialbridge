@@ -1,0 +1,27 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Sellers collection - only signed in users can read their own
+    match /sellers/{userId} {
+      allow read: if request.auth.uid == userId || 
+                     // Allow public read for browsing stores
+                     request.query.limit <= 100;
+      allow write: if request.auth.uid == userId;
+      
+      // Sellers' products - public read, owner write
+      match /products/{productId} {
+        allow read: if true;
+        allow create, update, delete: if request.auth.uid == userId;
+      }
+      
+      // Sellers' orders - owner read/write, buyers can create
+      match /orders/{orderId} {
+        allow read: if request.auth.uid == userId;
+        allow create: if request.auth != null;
+        allow update: if request.auth.uid == userId && 
+                         request.resource.data.status in ['fulfilled', 'pending'];
+      }
+    }
+  }
+}
