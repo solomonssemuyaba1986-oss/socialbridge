@@ -281,6 +281,13 @@ const handleImageUpload = async (file: File) => {
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
+      {/* Back to Browse */}
+       <div style={{ padding: '12px 20px', borderBottom: '1px solid #1a1a1a' }}>
+          <button onClick={() => window.history.back()}
+            style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px', padding: 0 }}>
+           ← Back
+       </button>
+    </div>
 
       {/* Header */}
       <div style={{ padding: '48px 20px 32px', textAlign: 'center', borderBottom: '1px solid #1a1a1a' }}>
