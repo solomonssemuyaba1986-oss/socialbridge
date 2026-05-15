@@ -42,9 +42,37 @@ function BulkUpload({ sellerId, onDone }: { sellerId: string, onDone: () => void
     setDrafts(prev => prev.filter((_, i) => i !== index))
   }
 
+  const compressImage = (file: File): Promise<File> => {
+    return new Promise((resolve) => {
+      const canvas = document.createElement('canvas')
+      const img = new Image()
+      img.onload = () => {
+        const maxSize = 800
+        let width = img.width
+        let height = img.height
+        if (width > height && width > maxSize) {
+          height = (height * maxSize) / width
+          width = maxSize
+        } else if (height > maxSize) {
+          width = (width * maxSize) / height
+          height = maxSize
+        }
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')!
+        ctx.drawImage(img, 0, 0, width, height)
+        canvas.toBlob(blob => {
+          resolve(new File([blob!], file.name, { type: 'image/jpeg' }))
+        }, 'image/jpeg', 0.7)
+      }
+      img.src = URL.createObjectURL(file)
+    })
+  }
+
   const uploadImage = async (file: File): Promise<string> => {
+    const compressed = await compressImage(file)
     const formData = new FormData()
-    formData.append('file', file)
+    formData.append('file', compressed)
     formData.append('upload_preset', UPLOAD_PRESET)
     const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
       method: 'POST',
@@ -83,6 +111,12 @@ function BulkUpload({ sellerId, onDone }: { sellerId: string, onDone: () => void
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '32px 16px' }}>
       <div style={{ maxWidth: '640px', margin: '0 auto' }}>
+
+        {/* Back Button */}
+        <button onClick={onDone}
+          style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '14px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '6px', padding: 0 }}>
+          ← Back to Dashboard
+        </button>
 
         <h1 style={{ fontSize: '24px', fontWeight: '800', marginBottom: '8px' }}>Add Products in Bulk</h1>
         <p style={{ color: '#888', marginBottom: '32px', fontSize: '15px' }}>Select multiple photos from your phone or computer at once.</p>
