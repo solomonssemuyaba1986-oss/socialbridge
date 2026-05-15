@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { doc, getDoc, collection, getDocs, query, orderBy } from 'firebase/firestore'
+import { doc, getDoc, collection, getDocs, query, orderBy, updateDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 
@@ -9,11 +9,14 @@ function Dashboard() {
   const [products, setProducts] = useState<any[]>([])
   const [orders, setOrders] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [userId, setUserId] = useState<string>('')
   const navigate = useNavigate()
+  const green = '#adff2f'
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) { navigate('/'); return }
+      setUserId(user.uid)
       const docSnap = await getDoc(doc(db, 'sellers', user.uid))
       if (docSnap.exists()) {
         const data = docSnap.data()
@@ -28,6 +31,13 @@ function Dashboard() {
     return () => unsubscribe()
   }, [])
 
+  const markFulfilled = async (orderId: string) => {
+    await updateDoc(doc(db, 'sellers', userId, 'orders', orderId), {
+      status: 'fulfilled'
+    })
+    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'fulfilled' } : o))
+  }
+
   if (loading) return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p style={{ color: '#555', fontFamily: 'sans-serif' }}>Loading...</p>
@@ -41,7 +51,8 @@ function Dashboard() {
   )
 
   const storeLink = `https://socialbridge-dun.vercel.app/store/${seller.slug}`
-  const green = '#adff2f'
+  const pendingOrders = orders.filter(o => o.status !== 'fulfilled')
+  const fulfilledOrders = orders.filter(o => o.status === 'fulfilled')
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
@@ -76,7 +87,7 @@ function Dashboard() {
           {[
             { label: 'Total Orders', value: orders.length.toString() },
             { label: 'Products', value: products.length.toString() },
-            { label: 'Pending Orders', value: orders.length.toString() },
+            { label: 'Pending Orders', value: pendingOrders.length.toString() },
           ].map(stat => (
             <div key={stat.label} style={{ background: '#1a1a1a', borderRadius: '12px', padding: '24px', border: '1px solid #222' }}>
               <p style={{ fontSize: '32px', fontWeight: '800', margin: '0 0 4px', color: green }}>{stat.value}</p>
@@ -97,24 +108,29 @@ function Dashboard() {
           </button>
         </div>
 
-        {/* Orders */}
-        <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px', color: '#fff' }}>Orders</h2>
-        {orders.length === 0 ? (
+        {/* Pending Orders */}
+        <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px' }}>
+          Pending Orders <span style={{ color: green }}>({pendingOrders.length})</span>
+        </h2>
+        {pendingOrders.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px', background: '#1a1a1a', borderRadius: '12px', border: '1px dashed #333', marginBottom: '32px' }}>
-            <p style={{ color: '#444', margin: 0 }}>No orders yet. Share your store link to start receiving orders.</p>
+            <p style={{ color: '#444', margin: 0 }}>No pending orders.</p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
-            {orders.map(o => (
+            {pendingOrders.map(o => (
               <div key={o.id} style={{ background: '#1a1a1a', borderRadius: '12px', padding: '16px 20px', border: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '15px', color: '#fff' }}>{o.buyerName}</p>
                   <p style={{ margin: '0 0 4px', color: '#888', fontSize: '13px' }}>{o.productName} × {o.quantity}</p>
                   <p style={{ margin: 0, color: green, fontSize: '13px', fontWeight: '700' }}>UGX {o.productPrice}</p>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ background: '#222', color: '#aaa', padding: '4px 10px', borderRadius: '20px', fontSize: '12px' }}>Pending</span>
-                  <p style={{ margin: '8px 0 0', color: '#444', fontSize: '12px' }}>
+                <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+                  <button onClick={() => markFulfilled(o.id)}
+                    style={{ background: green, color: '#000', border: 'none', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700' }}>
+                    Mark as Done ✓
+                  </button>
+                  <p style={{ margin: 0, color: '#444', fontSize: '12px' }}>
                     {o.createdAt?.toDate?.()?.toLocaleDateString() || 'Just now'}
                   </p>
                 </div>
@@ -123,8 +139,29 @@ function Dashboard() {
           </div>
         )}
 
+        {/* Fulfilled Orders */}
+        {fulfilledOrders.length > 0 && (
+          <>
+            <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px', color: '#555' }}>
+              Fulfilled Orders ({fulfilledOrders.length})
+            </h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
+              {fulfilledOrders.map(o => (
+                <div key={o.id} style={{ background: '#111', borderRadius: '12px', padding: '16px 20px', border: '1px solid #1a1a1a', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: 0.6 }}>
+                  <div>
+                    <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '15px', color: '#fff' }}>{o.buyerName}</p>
+                    <p style={{ margin: '0 0 4px', color: '#666', fontSize: '13px' }}>{o.productName} × {o.quantity}</p>
+                    <p style={{ margin: 0, color: '#555', fontSize: '13px' }}>UGX {o.productPrice}</p>
+                  </div>
+                  <span style={{ background: '#1a2a1a', color: green, padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700' }}>✓ Done</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
         {/* Products */}
-        <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px', color: '#fff' }}>Products</h2>
+        <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px' }}>Products</h2>
         {products.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px', background: '#1a1a1a', borderRadius: '12px', border: '1px dashed #333' }}>
             <p style={{ color: '#444', margin: 0 }}>No products yet.</p>
