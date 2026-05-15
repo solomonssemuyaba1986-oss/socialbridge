@@ -27,23 +27,39 @@ function BrowsePage() {
 
   useEffect(() => {
     const fetchAll = async () => {
-      const sellersSnap = await getDocs(collection(db, 'sellers'))
-      const allProducts: Product[] = []
-      for (const sellerDoc of sellersSnap.docs) {
-        const sellerData = sellerDoc.data()
-        const productsSnap = await getDocs(query(collection(db, 'sellers', sellerDoc.id, 'products')))
-        productsSnap.docs.forEach(p => {
-          allProducts.push({
-            id: p.id,
-            ...p.data() as any,
-            sellerSlug: sellerData.slug,
-            businessName: sellerData.businessName
-          })
-        })
+      try {
+        const sellersSnap = await getDocs(collection(db, 'sellers'))
+        const allProducts: Product[] = []
+        
+        // Limit to first 50 sellers for MVP performance
+        const limitedSellers = sellersSnap.docs.slice(0, 50)
+        
+        for (const sellerDoc of limitedSellers) {
+          try {
+            const sellerData = sellerDoc.data()
+            const productsSnap = await getDocs(query(collection(db, 'sellers', sellerDoc.id, 'products')))
+            productsSnap.docs.forEach(p => {
+              const productData = p.data() as Product
+              allProducts.push({
+                ...productData,
+                id: p.id,
+                sellerSlug: sellerData.slug,
+                businessName: sellerData.businessName
+              })
+            })
+          } catch (err) {
+            console.error(`Error fetching products for seller ${sellerDoc.id}:`, err)
+          }
+        }
+        
+        setProducts(allProducts)
+        setFiltered(allProducts)
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : 'Failed to load products'
+        console.error('Browse page error:', errorMsg, err)
+      } finally {
+        setLoading(false)
       }
-      setProducts(allProducts)
-      setFiltered(allProducts)
-      setLoading(false)
     }
     fetchAll()
   }, [])
