@@ -276,8 +276,18 @@ function StorePage() {
                   <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: '#fff' }}>{p.name}</p>
                   <p style={{ margin: '0 0 8px', color: '#666', fontSize: '12px' }}>{p.description}</p>
                   <p style={{ margin: '0 0 12px', fontWeight: '800', color: green, fontSize: '15px' }}>UGX {p.price}</p>
-                  {!isOwner && (
-                    <button onClick={() => setOrderProduct(p)}
+                  {isOwner ? (
+                    <button type="button" onClick={async () => {
+                      if (!confirm(`Delete ${p.name}?`)) return
+                      const { deleteDoc, doc } = await import('firebase/firestore')
+                      await deleteDoc(doc(db, 'sellers', sellerId, 'products', p.id))
+                      fetchProducts(sellerId)
+                    }}
+                      style={{ width: '100%', padding: '8px', background: 'transparent', color: '#ff4444', border: '1px solid #ff4444', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', marginBottom: '8px' }}>
+                      Delete
+                    </button>
+                  ) : (
+                    <button type="button" onClick={() => setOrderProduct(p)}
                       style={{ width: '100%', padding: '10px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>
                       Order Now
                     </button>
