@@ -29,13 +29,30 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onRefresh }: any) {
   const [editName, setEditName] = useState(p.name)
   const [editPrice, setEditPrice] = useState(p.price)
   const [editDescription, setEditDescription] = useState(p.description)
+  const [editImageUrl, setEditImageUrl] = useState(p.imageUrl)
+  const [uploadingEdit, setUploadingEdit] = useState(false)
+
+  const handleEditImageUpload = async (file: File) => {
+    setUploadingEdit(true)
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('upload_preset', UPLOAD_PRESET)
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
+      method: 'POST',
+      body: formData
+    })
+    const data = await res.json()
+    setEditImageUrl(data.secure_url)
+    setUploadingEdit(false)
+  }
 
   const handleSave = async () => {
     const { updateDoc, doc } = await import('firebase/firestore')
     await updateDoc(doc(db, 'sellers', sellerId, 'products', p.id), {
       name: editName,
       price: editPrice,
-      description: editDescription
+      description: editDescription,
+      imageUrl: editImageUrl
     })
     setEditing(false)
     onRefresh()
@@ -50,19 +67,28 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onRefresh }: any) {
 
   return (
     <div style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222' }}>
-      <img src={p.imageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
+      <img src={editImageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
         style={{ width: '100%', height: '160px', objectFit: 'cover' }} />
       <div style={{ padding: '12px' }}>
         {editing ? (
           <>
+            {/* Change Photo */}
+            <label style={{ display: 'block', marginBottom: '8px', cursor: 'pointer' }}>
+              <input type="file" accept="image/*"
+                onChange={e => { const file = e.target.files?.[0]; if (file) handleEditImageUpload(file) }}
+                style={{ display: 'none' }} />
+              <div style={{ padding: '8px', background: '#111', border: '1px dashed #333', borderRadius: '6px', textAlign: 'center', fontSize: '12px', color: '#888' }}>
+                {uploadingEdit ? 'Uploading...' : '📷 Change Photo'}
+              </div>
+            </label>
             <input value={editName} onChange={e => setEditName(e.target.value)}
               style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #333', background: '#111', color: '#fff', fontSize: '13px', marginBottom: '8px', boxSizing: 'border-box' }} />
             <input value={editPrice} onChange={e => setEditPrice(e.target.value)}
               style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #333', background: '#111', color: '#fff', fontSize: '13px', marginBottom: '8px', boxSizing: 'border-box' }} />
             <input value={editDescription} onChange={e => setEditDescription(e.target.value)}
               style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #333', background: '#111', color: '#fff', fontSize: '13px', marginBottom: '8px', boxSizing: 'border-box' }} />
-            <button onClick={handleSave}
-              style={{ width: '100%', padding: '8px', background: green, color: '#000', border: 'none', borderRadius: '6px', fontWeight: '700', cursor: 'pointer', fontSize: '13px', marginBottom: '6px' }}>
+            <button onClick={handleSave} disabled={uploadingEdit}
+              style={{ width: '100%', padding: '8px', background: uploadingEdit ? '#333' : green, color: '#000', border: 'none', borderRadius: '6px', fontWeight: '700', cursor: 'pointer', fontSize: '13px', marginBottom: '6px' }}>
               Save
             </button>
             <button onClick={() => setEditing(false)}
