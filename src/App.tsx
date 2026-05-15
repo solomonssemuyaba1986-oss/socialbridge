@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { onAuthStateChanged } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
@@ -9,6 +9,15 @@ import SetupStore from './SetupStore.tsx'
 import Onboarding from './Onboarding.tsx'
 import Dashboard from './Dashboard.tsx'
 import BrowsePage from './BrowsePage.tsx'
+import BulkUpload from './BulkUpload.tsx'
+
+
+function BulkUploadWrapper() {
+  const navigate = useNavigate()
+  const user = auth.currentUser
+  if (!user) return <Navigate to="/" />
+  return <BulkUpload sellerId={user.uid} onDone={() => navigate('/dashboard')} />
+}
 
 function App() {
   const [loading, setLoading] = useState(true)
@@ -51,6 +60,7 @@ function App() {
       <Route path="/store/:slug" element={<StorePage />} />
       <Route path="/dashboard" element={signedIn ? <Dashboard /> : <Navigate to="/" />} />
       <Route path="/browse" element={<BrowsePage />} />
+      <Route path="/bulk-upload" element={signedIn ? <BulkUploadWrapper /> : <Navigate to="/" />} />
     </Routes>
   )
 }
