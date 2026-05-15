@@ -4,10 +4,35 @@ import { doc, getDoc, collection, getDocs, query, orderBy, updateDoc } from 'fir
 import { auth, db } from './firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 
+interface Seller {
+  businessName: string
+  bio: string
+  slug: string
+  whatsapp?: string
+}
+
+interface Product {
+  id: string
+  name: string
+  price: string
+  description: string
+  imageUrl: string
+}
+
+interface Order {
+  id: string
+  buyerName: string
+  productName: string
+  productPrice: string
+  quantity: number
+  createdAt: any
+  status?: string
+}
+
 function Dashboard() {
-  const [seller, setSeller] = useState<any>(null)
-  const [products, setProducts] = useState<any[]>([])
-  const [orders, setOrders] = useState<any[]>([])
+  const [seller, setSeller] = useState<Seller | null>(null)
+  const [products, setProducts] = useState<Product[]>([])
+  const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState<string>('')
   const navigate = useNavigate()
@@ -17,16 +42,22 @@ function Dashboard() {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) { navigate('/'); return }
       setUserId(user.uid)
-      const docSnap = await getDoc(doc(db, 'sellers', user.uid))
-      if (docSnap.exists()) {
-        const data = docSnap.data()
-        setSeller(data)
-        const prodSnap = await getDocs(collection(db, 'sellers', user.uid, 'products'))
-        setProducts(prodSnap.docs.map(d => ({ id: d.id, ...d.data() })))
-        const ordSnap = await getDocs(query(collection(db, 'sellers', user.uid, 'orders'), orderBy('createdAt', 'desc')))
-        setOrders(ordSnap.docs.map(d => ({ id: d.id, ...d.data() })))
+      try {
+        const docSnap = await getDoc(doc(db, 'sellers', user.uid))
+        if (docSnap.exists()) {
+          const data = docSnap.data() as Seller
+          setSeller(data)
+          const prodSnap = await getDocs(collection(db, 'sellers', user.uid, 'products'))
+          setProducts(prodSnap.docs.map(d => ({ id: d.id, ...d.data() } as Product)))
+          const ordSnap = await getDocs(query(collection(db, 'sellers', user.uid, 'orders'), orderBy('createdAt', 'desc')))
+          setOrders(ordSnap.docs.map(d => ({ id: d.id, ...d.data() } as Order)))
+        }
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : 'Failed to load dashboard'
+        console.error('Dashboard error:', errorMsg, err)
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     })
     return () => unsubscribe()
   }, [])
