@@ -29,44 +29,60 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onRefresh }: any) {
   const [editName, setEditName] = useState(p.name)
   const [editPrice, setEditPrice] = useState(p.price)
   const [editDescription, setEditDescription] = useState(p.description)
-  const [editImageUrl, setEditImageUrl] = useState(p.imageUrl)
+  const [editImages, setEditImages] = useState<string[]>(p.images || [p.imageUrl].filter(Boolean))
   const [uploadingEdit, setUploadingEdit] = useState(false)
   const [isOutOfStock, setIsOutOfStock] = useState(p.outOfStock || false)
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
 
-  const handleEditImageUpload = async (file: File) => {
+  const images = p.images?.length > 0 ? p.images : [p.imageUrl].filter(Boolean)
+
+  const handleEditImageUpload = async (files: FileList) => {
+    if (editImages.length >= 4) return alert('Maximum 4 images per product')
     setUploadingEdit(true)
-    const canvas = document.createElement('canvas')
-    const img = new Image()
-    img.onload = async () => {
-      const maxSize = 800
-      let width = img.width
-      let height = img.height
-      if (width > height && width > maxSize) {
-        height = (height * maxSize) / width
-        width = maxSize
-      } else if (height > maxSize) {
-        width = (width * maxSize) / height
-        height = maxSize
-      }
-      canvas.width = width
-      canvas.height = height
-      const ctx = canvas.getContext('2d')!
-      ctx.drawImage(img, 0, 0, width, height)
-      canvas.toBlob(async blob => {
-        const compressed = new File([blob!], file.name, { type: 'image/jpeg' })
-        const formData = new FormData()
-        formData.append('file', compressed)
-        formData.append('upload_preset', UPLOAD_PRESET)
-        const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
-          method: 'POST',
-          body: formData
-        })
-        const data = await res.json()
-        setEditImageUrl(data.secure_url)
-        setUploadingEdit(false)
-      }, 'image/jpeg', 0.7)
+    const remaining = 4 - editImages.length
+    const filesToUpload = Array.from(files).slice(0, remaining)
+    const newUrls: string[] = []
+
+    for (const file of filesToUpload) {
+      const canvas = document.createElement('canvas')
+      const img = new Image()
+      await new Promise<void>(resolve => {
+        img.onload = async () => {
+          const maxSize = 800
+          let width = img.width
+          let height = img.height
+          if (width > height && width > maxSize) {
+            height = (height * maxSize) / width
+            width = maxSize
+          } else if (height > maxSize) {
+            width = (width * maxSize) / height
+            height = maxSize
+          }
+          canvas.width = width
+          canvas.height = height
+          const ctx = canvas.getContext('2d')!
+          ctx.drawImage(img, 0, 0, width, height)
+          canvas.toBlob(async blob => {
+            const compressed = new File([blob!], file.name, { type: 'image/jpeg' })
+            const formData = new FormData()
+            formData.append('file', compressed)
+            formData.append('upload_preset', UPLOAD_PRESET)
+            const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: 'POST', body: formData })
+            const data = await res.json()
+            newUrls.push(data.secure_url)
+            resolve()
+          }, 'image/jpeg', 0.7)
+        }
+        img.src = URL.createObjectURL(file)
+      })
     }
-    img.src = URL.createObjectURL(file)
+
+    setEditImages(prev => [...prev, ...newUrls])
+    setUploadingEdit(false)
+  }
+
+  const removeEditImage = (index: number) => {
+    setEditImages(prev => prev.filter((_, i) => i !== index))
   }
 
   const handleSave = async () => {
@@ -75,7 +91,8 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onRefresh }: any) {
       name: editName,
       price: editPrice,
       description: editDescription,
-      imageUrl: editImageUrl
+      imageUrl: editImages[0] || p.imageUrl,
+      images: editImages
     })
     setEditing(false)
     onRefresh()
@@ -91,36 +108,75 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onRefresh }: any) {
   const toggleOutOfStock = async () => {
     const newStatus = !isOutOfStock
     const { updateDoc, doc } = await import('firebase/firestore')
-    await updateDoc(doc(db, 'sellers', sellerId, 'products', p.id), {
-      outOfStock: newStatus
-    })
+    await updateDoc(doc(db, 'sellers', sellerId, 'products', p.id), { outOfStock: newStatus })
     setIsOutOfStock(newStatus)
   }
 
   return (
     <div style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: `1px solid ${isOutOfStock ? '#333' : '#222'}`, position: 'relative', opacity: isOutOfStock && !isOwner ? 0.7 : 1 }}>
-      
+
       {/* Out of Stock Badge */}
       {isOutOfStock && (
-        <div style={{ position: 'absolute', top: '8px', left: '8px', background: '#ff4444', color: '#fff', padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', zIndex: 1 }}>
+        <div style={{ position: 'absolute', top: '8px', left: '8px', background: '#ff4444', color: '#fff', padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', zIndex: 2 }}>
           Out of Stock
         </div>
       )}
 
-      <img src={editImageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
-        style={{ width: '100%', height: '160px', objectFit: 'cover', filter: isOutOfStock ? 'grayscale(60%)' : 'none' }} />
-      
+      {/* Image Counter */}
+      {images.length > 1 && (
+        <div style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(0,0,0,0.6)', color: '#fff', padding: '4px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', zIndex: 2 }}>
+          {currentImageIndex + 1}/{images.length}
+        </div>
+      )}
+
+      {/* Image with Navigation */}
+      <div style={{ position: 'relative' }}>
+        <img
+          src={images[currentImageIndex] || 'https://placehold.co/300x200/1a1a1a/333333'}
+          alt={p.name}
+          style={{ width: '100%', height: '160px', objectFit: 'cover', filter: isOutOfStock ? 'grayscale(60%)' : 'none' }}
+        />
+        {images.length > 1 && (
+          <>
+            <button
+              onClick={() => setCurrentImageIndex(prev => prev === 0 ? images.length - 1 : prev - 1)}
+              style={{ position: 'absolute', left: '6px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.5)', border: 'none', color: '#fff', borderRadius: '50%', width: '24px', height: '24px', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              ‹
+            </button>
+            <button
+              onClick={() => setCurrentImageIndex(prev => prev === images.length - 1 ? 0 : prev + 1)}
+              style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.5)', border: 'none', color: '#fff', borderRadius: '50%', width: '24px', height: '24px', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              ›
+            </button>
+          </>
+        )}
+      </div>
+
       <div style={{ padding: '12px' }}>
         {editing ? (
           <>
-            <label style={{ display: 'block', marginBottom: '8px', cursor: 'pointer' }}>
-              <input type="file" accept="image/*"
-                onChange={e => { const file = e.target.files?.[0]; if (file) handleEditImageUpload(file) }}
-                style={{ display: 'none' }} />
-              <div style={{ padding: '8px', background: '#111', border: '1px dashed #333', borderRadius: '6px', textAlign: 'center', fontSize: '12px', color: '#888' }}>
-                {uploadingEdit ? 'Uploading...' : '📷 Change Photo'}
-              </div>
-            </label>
+            {/* Image Management */}
+            <p style={{ color: '#888', fontSize: '12px', marginBottom: '8px' }}>Product Images ({editImages.length}/4)</p>
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '8px', flexWrap: 'wrap' }}>
+              {editImages.map((url, i) => (
+                <div key={i} style={{ position: 'relative' }}>
+                  <img src={url} alt="" style={{ width: '56px', height: '56px', objectFit: 'cover', borderRadius: '6px', border: i === 0 ? `2px solid ${green}` : '2px solid #333' }} />
+                  <button onClick={() => removeEditImage(i)}
+                    style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#ff4444', border: 'none', color: '#fff', borderRadius: '50%', width: '16px', height: '16px', cursor: 'pointer', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    ✕
+                  </button>
+                  {i === 0 && <p style={{ color: green, fontSize: '9px', textAlign: 'center', margin: '2px 0 0' }}>Main</p>}
+                </div>
+              ))}
+              {editImages.length < 4 && (
+                <label style={{ width: '56px', height: '56px', border: '1px dashed #333', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#555', fontSize: '20px' }}>
+                  <input type="file" accept="image/*" multiple onChange={e => { if (e.target.files) handleEditImageUpload(e.target.files) }} style={{ display: 'none' }} />
+                  +
+                </label>
+              )}
+            </div>
+            {uploadingEdit && <p style={{ color: '#888', fontSize: '12px', marginBottom: '8px' }}>Uploading...</p>}
+
             <input value={editName} onChange={e => setEditName(e.target.value)}
               style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #333', background: '#111', color: '#fff', fontSize: '13px', marginBottom: '8px', boxSizing: 'border-box' }} />
             <input value={editPrice} onChange={e => setEditPrice(e.target.value)}
@@ -141,7 +197,7 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onRefresh }: any) {
             <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: isOutOfStock ? '#666' : '#fff' }}>{p.name}</p>
             <p style={{ margin: '0 0 8px', color: '#555', fontSize: '12px' }}>{p.description}</p>
             <p style={{ margin: '0 0 12px', fontWeight: '800', color: isOutOfStock ? '#555' : green, fontSize: '15px' }}>UGX {p.price}</p>
-            
+
             {isOwner && (
               <>
                 <button onClick={() => setEditing(true)}
@@ -153,7 +209,7 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onRefresh }: any) {
                   {isOutOfStock ? '✓ Back in Stock' : 'Mark Out of Stock'}
                 </button>
                 <button onClick={handleDelete}
-                  style={{ width: '100%', padding: '8px', background: 'transparent', color: '#555', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', marginBottom: '6px' }}>
+                  style={{ width: '100%', padding: '8px', background: 'transparent', color: '#555', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
                   Delete
                 </button>
               </>
