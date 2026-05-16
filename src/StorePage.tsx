@@ -167,6 +167,7 @@ function StorePage() {
   const [orderProduct, setOrderProduct] = useState<Product | null>(null)
   const [buyerName, setBuyerName] = useState('')
   const [quantity, setQuantity] = useState('1')
+  const [deliveryArea, setDeliveryArea] = useState('')
 
   useEffect(() => {
     const fetchSeller = async () => {
@@ -246,26 +247,53 @@ const handleImageUpload = async (file: File) => {
     fetchProducts(sellerId)
   }
 
-  const handleOrder = async () => {
-    if (!buyerName) return alert('Please enter your name')
-    if (!orderProduct || !seller) return
-    await addDoc(collection(db, 'sellers', sellerId, 'orders'), {
-      buyerName,
-      productName: orderProduct.name,
-      productPrice: orderProduct.price,
-      quantity,
-      createdAt: new Date()
-    })
-    const message = `Hi! I'm *${buyerName}* and I want to order *${orderProduct.name}* x${quantity} at UGX ${orderProduct.price} each.`
-    const whatsappNumber = seller.whatsapp || ''
-    setOrderSuccess(true)
-    setTimeout(() => {
-      window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`, '_blank')
-      setBuyerName(''); setQuantity('1')
-      setOrderProduct(null)
-      setOrderSuccess(false)
-    }, 1500)
-  }
+const handleOrder = async () => {
+  if (!buyerName) return alert('Please enter your name')
+  if (!deliveryArea) return alert('Please enter your delivery area')
+  if (!orderProduct || !seller) return
+
+  const orderRef = await addDoc(collection(db, 'sellers', sellerId, 'orders'), {
+    buyerName,
+    productName: orderProduct.name,
+    productPrice: orderProduct.price,
+    quantity,
+    deliveryArea,
+    status: 'pending',
+    createdAt: new Date()
+  })
+
+  const orderId = `SB-${orderRef.id.slice(0, 6).toUpperCase()}`
+
+  await import('firebase/firestore').then(({ updateDoc, doc }) =>
+    updateDoc(doc(db, 'sellers', sellerId, 'orders', orderRef.id), { orderId })
+  )
+
+  const message =
+`🟢 NEW ORDER — SocialBridge
+
+Customer: ${buyerName}
+Product: ${orderProduct.name}
+Price: UGX ${orderProduct.price}
+Quantity: ${quantity}
+Total: UGX ${Number(orderProduct.price.replace(/,/g, '')) * Number(quantity)}
+Delivery Area: ${deliveryArea}
+
+Order ID: #${orderId}
+
+Reply with:
+1️⃣ Confirm Order
+2️⃣ Out of Stock
+3️⃣ Need More Details`
+
+  const whatsappNumber = seller.whatsapp || ''
+  setOrderSuccess(true)
+  setTimeout(() => {
+    window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`, '_blank')
+    setBuyerName(''); setQuantity('1'); setDeliveryArea('')
+    setOrderProduct(null)
+    setOrderSuccess(false)
+  }, 1500)
+}
 
   if (loading) return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -397,6 +425,8 @@ const handleImageUpload = async (file: File) => {
                 <input placeholder="Your name" value={buyerName} onChange={e => setBuyerName(e.target.value)}
                   style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
                 <input placeholder="Quantity" value={quantity} onChange={e => setQuantity(e.target.value)} type="number" min="1"
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '24px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+                <input placeholder="Delivery area e.g. Nakawa, Kampala" value={deliveryArea} onChange={e => setDeliveryArea(e.target.value)}
                   style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '24px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
                 <button onClick={handleOrder}
                   style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
