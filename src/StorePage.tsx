@@ -31,42 +31,43 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onRefresh }: any) {
   const [editDescription, setEditDescription] = useState(p.description)
   const [editImageUrl, setEditImageUrl] = useState(p.imageUrl)
   const [uploadingEdit, setUploadingEdit] = useState(false)
+  const [isOutOfStock, setIsOutOfStock] = useState(p.outOfStock || false)
 
-const handleEditImageUpload = async (file: File) => {
-  setUploadingEdit(true)
-  const canvas = document.createElement('canvas')
-  const img = new Image()
-  img.onload = async () => {
-    const maxSize = 800
-    let width = img.width
-    let height = img.height
-    if (width > height && width > maxSize) {
-      height = (height * maxSize) / width
-      width = maxSize
-    } else if (height > maxSize) {
-      width = (width * maxSize) / height
-      height = maxSize
+  const handleEditImageUpload = async (file: File) => {
+    setUploadingEdit(true)
+    const canvas = document.createElement('canvas')
+    const img = new Image()
+    img.onload = async () => {
+      const maxSize = 800
+      let width = img.width
+      let height = img.height
+      if (width > height && width > maxSize) {
+        height = (height * maxSize) / width
+        width = maxSize
+      } else if (height > maxSize) {
+        width = (width * maxSize) / height
+        height = maxSize
+      }
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext('2d')!
+      ctx.drawImage(img, 0, 0, width, height)
+      canvas.toBlob(async blob => {
+        const compressed = new File([blob!], file.name, { type: 'image/jpeg' })
+        const formData = new FormData()
+        formData.append('file', compressed)
+        formData.append('upload_preset', UPLOAD_PRESET)
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
+          method: 'POST',
+          body: formData
+        })
+        const data = await res.json()
+        setEditImageUrl(data.secure_url)
+        setUploadingEdit(false)
+      }, 'image/jpeg', 0.7)
     }
-    canvas.width = width
-    canvas.height = height
-    const ctx = canvas.getContext('2d')!
-    ctx.drawImage(img, 0, 0, width, height)
-    canvas.toBlob(async blob => {
-      const compressed = new File([blob!], file.name, { type: 'image/jpeg' })
-      const formData = new FormData()
-      formData.append('file', compressed)
-      formData.append('upload_preset', UPLOAD_PRESET)
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
-        method: 'POST',
-        body: formData
-      })
-      const data = await res.json()
-      setEditImageUrl(data.secure_url)
-      setUploadingEdit(false)
-    }, 'image/jpeg', 0.7)
+    img.src = URL.createObjectURL(file)
   }
-  img.src = URL.createObjectURL(file)
-}
 
   const handleSave = async () => {
     const { updateDoc, doc } = await import('firebase/firestore')
@@ -87,14 +88,31 @@ const handleEditImageUpload = async (file: File) => {
     onRefresh()
   }
 
+  const toggleOutOfStock = async () => {
+    const newStatus = !isOutOfStock
+    const { updateDoc, doc } = await import('firebase/firestore')
+    await updateDoc(doc(db, 'sellers', sellerId, 'products', p.id), {
+      outOfStock: newStatus
+    })
+    setIsOutOfStock(newStatus)
+  }
+
   return (
-    <div style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222' }}>
+    <div style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: `1px solid ${isOutOfStock ? '#333' : '#222'}`, position: 'relative', opacity: isOutOfStock && !isOwner ? 0.7 : 1 }}>
+      
+      {/* Out of Stock Badge */}
+      {isOutOfStock && (
+        <div style={{ position: 'absolute', top: '8px', left: '8px', background: '#ff4444', color: '#fff', padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', zIndex: 1 }}>
+          Out of Stock
+        </div>
+      )}
+
       <img src={editImageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
-        style={{ width: '100%', height: '160px', objectFit: 'cover' }} />
+        style={{ width: '100%', height: '160px', objectFit: 'cover', filter: isOutOfStock ? 'grayscale(60%)' : 'none' }} />
+      
       <div style={{ padding: '12px' }}>
         {editing ? (
           <>
-            {/* Change Photo */}
             <label style={{ display: 'block', marginBottom: '8px', cursor: 'pointer' }}>
               <input type="file" accept="image/*"
                 onChange={e => { const file = e.target.files?.[0]; if (file) handleEditImageUpload(file) }}
@@ -120,26 +138,45 @@ const handleEditImageUpload = async (file: File) => {
           </>
         ) : (
           <>
-            <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: '#fff' }}>{p.name}</p>
-            <p style={{ margin: '0 0 8px', color: '#666', fontSize: '12px' }}>{p.description}</p>
-            <p style={{ margin: '0 0 12px', fontWeight: '800', color: green, fontSize: '15px' }}>UGX {p.price}</p>
+            <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: isOutOfStock ? '#666' : '#fff' }}>{p.name}</p>
+            <p style={{ margin: '0 0 8px', color: '#555', fontSize: '12px' }}>{p.description}</p>
+            <p style={{ margin: '0 0 12px', fontWeight: '800', color: isOutOfStock ? '#555' : green, fontSize: '15px' }}>UGX {p.price}</p>
+            
             {isOwner && (
               <>
                 <button onClick={() => setEditing(true)}
                   style={{ width: '100%', padding: '8px', background: 'transparent', color: green, border: `1px solid ${green}`, borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', marginBottom: '6px' }}>
                   Edit
                 </button>
+                <button onClick={toggleOutOfStock}
+                  style={{ width: '100%', padding: '8px', background: isOutOfStock ? '#1a2a1a' : 'transparent', color: isOutOfStock ? green : '#ff4444', border: `1px solid ${isOutOfStock ? green : '#ff4444'}`, borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', marginBottom: '6px' }}>
+                  {isOutOfStock ? '✓ Back in Stock' : 'Mark Out of Stock'}
+                </button>
                 <button onClick={handleDelete}
-                  style={{ width: '100%', padding: '8px', background: 'transparent', color: '#ff4444', border: '1px solid #ff4444', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', marginBottom: '6px' }}>
+                  style={{ width: '100%', padding: '8px', background: 'transparent', color: '#555', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', marginBottom: '6px' }}>
                   Delete
                 </button>
               </>
             )}
+
             {!isOwner && (
-              <button onClick={onOrder}
-                style={{ width: '100%', padding: '10px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>
-                Order Now
-              </button>
+              isOutOfStock ? (
+                <div>
+                  <div style={{ width: '100%', padding: '10px', background: '#222', color: '#666', borderRadius: '8px', fontSize: '13px', textAlign: 'center', marginBottom: '6px' }}>
+                    Out of Stock
+                  </div>
+                  <a href={`https://wa.me/${p.sellerWhatsapp}?text=Hi! Is ${p.name} back in stock soon?`}
+                    target="_blank"
+                    style={{ display: 'block', width: '100%', padding: '10px', background: 'transparent', color: green, border: `1px solid ${green}`, borderRadius: '8px', fontSize: '12px', textAlign: 'center', textDecoration: 'none', boxSizing: 'border-box', fontWeight: '600' }}>
+                    Ask Seller
+                  </a>
+                </div>
+              ) : (
+                <button onClick={onOrder}
+                  style={{ width: '100%', padding: '10px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>
+                  Order Now
+                </button>
+              )
             )}
           </>
         )}
@@ -147,7 +184,6 @@ const handleEditImageUpload = async (file: File) => {
     </div>
   )
 }
-
 function StorePage() {
   const { slug } = useParams()
   const [seller, setSeller] = useState<Seller | null>(null)
@@ -384,7 +420,7 @@ Reply with:
             {products.map(p => (
               <ProductCard
                 key={p.id}
-                p={p}
+                p={{ ...p, sellerWhatsapp: seller.whatsapp }}
                 isOwner={isOwner}
                 sellerId={sellerId}
                 onOrder={() => setOrderProduct(p)}
