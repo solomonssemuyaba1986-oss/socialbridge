@@ -27,6 +27,8 @@ interface Order {
   quantity: number
   createdAt: any
   status?: string
+  deliveryArea?: string
+  orderId?: string
 }
 
 function Dashboard() {
@@ -69,6 +71,11 @@ function Dashboard() {
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'fulfilled' } : o))
   }
 
+  const updateOrderStatus = async (orderId: string, status: string) => {
+    await updateDoc(doc(db, 'sellers', userId, 'orders', orderId), { status })
+    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o))
+  }
+
   if (loading) return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p style={{ color: '#555', fontFamily: 'sans-serif' }}>Loading...</p>
@@ -82,8 +89,9 @@ function Dashboard() {
   )
 
   const storeLink = `https://socialbridge-dun.vercel.app/store/${seller.slug}`
-  const pendingOrders = orders.filter(o => o.status !== 'fulfilled')
+  const pendingOrders = orders.filter(o => !['fulfilled', 'out_of_stock'].includes(o.status || ''))
   const fulfilledOrders = orders.filter(o => o.status === 'fulfilled')
+  const outOfStockOrders = orders.filter(o => o.status === 'out_of_stock')
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
@@ -150,22 +158,36 @@ function Dashboard() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
             {pendingOrders.map(o => (
-              <div key={o.id} style={{ background: '#1a1a1a', borderRadius: '12px', padding: '16px 20px', border: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '15px', color: '#fff' }}>{o.buyerName}</p>
-                  <p style={{ margin: '0 0 4px', color: '#888', fontSize: '13px' }}>{o.productName} × {o.quantity}</p>
-                  <p style={{ margin: 0, color: green, fontSize: '13px', fontWeight: '700' }}>UGX {o.productPrice}</p>
-                </div>
-                <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
-                  <button onClick={() => markFulfilled(o.id)}
-                    style={{ background: green, color: '#000', border: 'none', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700' }}>
-                    Mark as Done ✓
-                  </button>
-                  <p style={{ margin: 0, color: '#444', fontSize: '12px' }}>
-                    {o.createdAt?.toDate?.()?.toLocaleDateString() || 'Just now'}
-                  </p>
-                </div>
-              </div>
+  <div key={o.id} style={{ background: '#1a1a1a', borderRadius: '12px', padding: '16px 20px', border: '1px solid #222' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+      <div>
+        <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '15px', color: '#fff' }}>{o.buyerName}</p>
+        <p style={{ margin: '0 0 4px', color: '#888', fontSize: '13px' }}>{o.productName} × {o.quantity}</p>
+        <p style={{ margin: '0 0 4px', color: green, fontSize: '13px', fontWeight: '700' }}>UGX {o.productPrice}</p>
+        {o.deliveryArea && <p style={{ margin: '0 0 4px', color: '#666', fontSize: '12px' }}>📍 {o.deliveryArea}</p>}
+        {o.orderId && <p style={{ margin: 0, color: '#444', fontSize: '12px' }}>#{o.orderId}</p>}
+      </div>
+      <p style={{ margin: 0, color: '#444', fontSize: '12px' }}>
+        {o.createdAt?.toDate?.()?.toLocaleDateString() || 'Just now'}
+      </p>
+    </div>
+
+    {/* Status Buttons */}
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+      <button onClick={() => markFulfilled(o.id)}
+        style={{ padding: '8px', background: green, color: '#000', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '11px', fontWeight: '700' }}>
+        ✓ Confirm
+      </button>
+      <button onClick={() => updateOrderStatus(o.id, 'out_of_stock')}
+        style={{ padding: '8px', background: 'transparent', color: '#ff4444', border: '1px solid #ff4444', borderRadius: '8px', cursor: 'pointer', fontSize: '11px', fontWeight: '600' }}>
+        Out of Stock
+      </button>
+      <button onClick={() => updateOrderStatus(o.id, 'needs_details')}
+        style={{ padding: '8px', background: 'transparent', color: '#888', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer', fontSize: '11px', fontWeight: '600' }}>
+        Need Details
+      </button>
+    </div>
+  </div>
             ))}
           </div>
         )}
@@ -185,6 +207,23 @@ function Dashboard() {
                     <p style={{ margin: 0, color: '#555', fontSize: '13px' }}>UGX {o.productPrice}</p>
                   </div>
                   <span style={{ background: '#1a2a1a', color: green, padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700' }}>✓ Done</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {outOfStockOrders.length > 0 && (
+          <>
+            <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px', color: '#555' }}>
+              Out of Stock ({outOfStockOrders.length})
+            </h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
+              {outOfStockOrders.map(o => (
+                <div key={o.id} style={{ background: '#111', borderRadius: '12px', padding: '16px 20px', border: '1px solid #1a1a1a', opacity: 0.6 }}>
+                  <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '15px', color: '#fff' }}>{o.buyerName}</p>
+                  <p style={{ margin: '0 0 4px', color: '#666', fontSize: '13px' }}>{o.productName} × {o.quantity}</p>
+                  <span style={{ background: '#2a1a1a', color: '#ff4444', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700' }}>Out of Stock</span>
                 </div>
               ))}
             </div>
