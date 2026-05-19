@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { doc, getDoc, collection, getDocs, query, orderBy, updateDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
@@ -39,6 +39,7 @@ function Dashboard() {
   const [userId, setUserId] = useState<string>('')
   const navigate = useNavigate()
   const green = '#adff2f'
+  const prevOrderCount = useRef(0)
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -52,7 +53,14 @@ function Dashboard() {
           const prodSnap = await getDocs(collection(db, 'sellers', user.uid, 'products'))
           setProducts(prodSnap.docs.map(d => ({ id: d.id, ...d.data() } as Product)))
           const ordSnap = await getDocs(query(collection(db, 'sellers', user.uid, 'orders'), orderBy('createdAt', 'desc')))
-          setOrders(ordSnap.docs.map(d => ({ id: d.id, ...d.data() } as Order)))
+         const newOrders = ordSnap.docs.map(d => ({ id: d.id, ...d.data() }))as any[]
+          setOrders(newOrders)
+          if (prevOrderCount.current > 0 && newOrders.length > prevOrderCount.current) {
+           const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3')
+           audio.volume = 0.7
+          audio.play()
+       }
+       prevOrderCount.current = newOrders.length
         }
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Failed to load dashboard'
