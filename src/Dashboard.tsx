@@ -144,16 +144,16 @@ function Dashboard() {
         </div>
 
         {/* Store Link */}
-        <div style={{ background: '#1a1a1a', borderRadius: '12px', padding: '20px 24px', border: '1px solid #222', marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <p style={{ margin: '0 0 4px', fontWeight: '600', fontSize: '14px' }}>Your Store Link</p>
-            <p style={{ margin: 0, color: green, fontSize: '13px' }}>{storeLink}</p>
-          </div>
-          <button onClick={() => { navigator.clipboard.writeText(storeLink); alert('Link copied!') }}
-            style={{ background: green, color: '#000', border: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>
-            Copy & Share
-          </button>
-        </div>
+        {/* Share Guide */}
+<div style={{ borderTop: '1px solid #222', paddingTop: '16px' }}>
+  <p style={{ color: '#888', fontSize: '13px', margin: '0 0 12px' }}>
+    📢 <span style={{ color: '#fff', fontWeight: '600' }}>Grow your sales</span> — paste your link anywhere you have an audience. Instagram bio, TikTok profile, WhatsApp status, Facebook, Telegram, Pinterest, Reddit — anywhere.
+  </p>
+  <button onClick={() => { navigator.clipboard.writeText(storeLink); alert('Link copied! Paste it everywhere you sell.') }}
+    style={{ width: '100%', padding: '12px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '14px' }}>
+    📋 Copy Link — Share Everywhere
+  </button>
+</div>
 
         {/* Pending Orders */}
         <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px' }}>
