@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { doc, getDoc, collection, getDocs, query, orderBy, updateDoc } from 'firebase/firestore'
+import { doc, getDoc, collection, getDocs, updateDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
 import { onAuthStateChanged } from 'firebase/auth'
+import { useSellerOrders } from './useSellerOrders'
 
 interface Seller {
   businessName: string
@@ -19,28 +20,25 @@ interface Product {
   imageUrl: string
 }
 
-interface Order {
-  id: string
-  buyerName: string
-  productName: string
-  productPrice: string
-  quantity: number
-  createdAt: any
-  status?: string
-  deliveryArea?: string
-  orderId?: string
-  read?: boolean
-}
-
 function Dashboard() {
   const [seller, setSeller] = useState<Seller | null>(null)
   const [products, setProducts] = useState<Product[]>([])
-  const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState<string>('')
   const navigate = useNavigate()
   const green = '#adff2f'
-  const prevOrderCount = useRef(0)
+
+  const playNewOrderAlert = useCallback(() => {
+    try {
+      const audio = new Audio('/notification.mp3')
+      audio.volume = 0.7
+      audio.play().catch(() => {})
+    } catch {
+      // no sound file
+    }
+  }, [])
+
+  const { orders, unreadCount } = useSellerOrders(playNewOrderAlert)
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -53,15 +51,6 @@ function Dashboard() {
           setSeller(data)
           const prodSnap = await getDocs(collection(db, 'sellers', user.uid, 'products'))
           setProducts(prodSnap.docs.map(d => ({ id: d.id, ...d.data() } as Product)))
-          const ordSnap = await getDocs(query(collection(db, 'sellers', user.uid, 'orders'), orderBy('createdAt', 'desc')))
-         const newOrders = ordSnap.docs.map(d => ({ id: d.id, ...d.data() }))as any[]
-          setOrders(newOrders)
-          if (prevOrderCount.current > 0 && newOrders.length > prevOrderCount.current) {
-           const audio = new Audio('/notification.mp3')
-           audio.volume = 0.7
-          audio.play()
-       }
-       prevOrderCount.current = newOrders.length
         }
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Failed to load dashboard'
@@ -71,18 +60,14 @@ function Dashboard() {
       }
     })
     return () => unsubscribe()
-  }, [])
+  }, [navigate])
 
   const markFulfilled = async (orderId: string) => {
-    await updateDoc(doc(db, 'sellers', userId, 'orders', orderId), {
-      status: 'fulfilled'
-    })
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'fulfilled' } : o))
+    await updateDoc(doc(db, 'sellers', userId, 'orders', orderId), { status: 'fulfilled' })
   }
 
   const updateOrderStatus = async (orderId: string, status: string) => {
     await updateDoc(doc(db, 'sellers', userId, 'orders', orderId), { status })
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o))
   }
 
   if (loading) return (
@@ -121,15 +106,28 @@ function Dashboard() {
             style={{ background: 'transparent', border: '1px solid #333', color: '#fff', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
             View Store
           </button>
-          <button 
-          onClick={() => navigate('/inbox')}
-  style={{ background: 'transparent', border: '1px solid #333', color: '#fff', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', position: 'relative' }}>
-  📭 Inbox {orders.filter(o => !o.read).length > 0 && (
-    <span style={{ background: green, color: '#000', borderRadius: '50%', padding: '1px 6px', fontSize: '10px', fontWeight: '800', marginLeft: '4px' }}>
-      {orders.filter(o => !o.read).length}
-    </span>
-  )}
-    </button>
+          <button
+            onClick={() => navigate('/inbox')}
+            style={{ background: unreadCount > 0 ? '#1a2a1a' : 'transparent', border: `1px solid ${unreadCount > 0 ? green : '#333'}`, color: '#fff', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', position: 'relative', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            📭 Inbox
+            {unreadCount > 0 && (
+              <span style={{
+                background: green,
+                color: '#000',
+                borderRadius: '50%',
+                minWidth: '22px',
+                height: '22px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '12px',
+                fontWeight: '800',
+                padding: '0 6px',
+              }}>
+                {unreadCount}
+              </span>
+            )}
+          </button>
           <button onClick={() => { auth.signOut(); navigate('/') }}
             style={{ background: 'transparent', border: '1px solid #333', color: '#aaa', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
             Sign Out
@@ -138,6 +136,32 @@ function Dashboard() {
       </div>
 
       <div style={{ maxWidth: '800px', margin: '0 auto', padding: '32px 20px' }}>
+
+        {unreadCount > 0 && (
+          <div
+            onClick={() => navigate('/inbox')}
+            style={{
+              background: '#1a2a1a',
+              border: `1px solid ${green}`,
+              borderRadius: '12px',
+              padding: '16px 20px',
+              marginBottom: '24px',
+              cursor: 'pointer',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}>
+            <div>
+              <p style={{ margin: '0 0 4px', color: green, fontWeight: '800', fontSize: '15px' }}>
+                {unreadCount} new order{unreadCount !== 1 ? 's' : ''} waiting
+              </p>
+              <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>
+                Tap to open Inbox and see who ordered what
+              </p>
+            </div>
+            <span style={{ color: green, fontSize: '20px' }}>→</span>
+          </div>
+        )}
 
         {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '32px' }}>
