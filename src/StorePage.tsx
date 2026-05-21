@@ -351,6 +351,7 @@ const handleOrder = async () => {
     quantity,
     deliveryArea,
     status: 'pending',
+    read: false,
     createdAt: new Date()
   })
 
