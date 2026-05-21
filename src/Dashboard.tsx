@@ -29,6 +29,7 @@ interface Order {
   status?: string
   deliveryArea?: string
   orderId?: string
+  read?: boolean
 }
 
 function Dashboard() {
@@ -120,6 +121,15 @@ function Dashboard() {
             style={{ background: 'transparent', border: '1px solid #333', color: '#fff', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
             View Store
           </button>
+          <button 
+          onClick={() => navigate('/inbox')}
+  style={{ background: 'transparent', border: '1px solid #333', color: '#fff', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', position: 'relative' }}>
+  📭 Inbox {orders.filter(o => !o.read).length > 0 && (
+    <span style={{ background: green, color: '#000', borderRadius: '50%', padding: '1px 6px', fontSize: '10px', fontWeight: '800', marginLeft: '4px' }}>
+      {orders.filter(o => !o.read).length}
+    </span>
+  )}
+    </button>
           <button onClick={() => { auth.signOut(); navigate('/') }}
             style={{ background: 'transparent', border: '1px solid #333', color: '#aaa', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
             Sign Out
