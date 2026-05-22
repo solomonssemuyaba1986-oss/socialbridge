@@ -82,7 +82,7 @@ function Dashboard() {
     </div>
   )
 
-  const storeLink = `https://socialbridge-dun.vercel.app/store/${seller.slug}`
+  const storeLink = `${window.location.origin}/store/${seller.slug}`
   const pendingOrders = orders.filter(o => !['fulfilled', 'out_of_stock'].includes(o.status || ''))
   const fulfilledOrders = orders.filter(o => o.status === 'fulfilled')
   const outOfStockOrders = orders.filter(o => o.status === 'out_of_stock')
@@ -93,8 +93,8 @@ function Dashboard() {
       {/* Top Nav */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #1a1a1a' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ background: green, width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '14px', color: '#000' }}>SB</div>
-          <span style={{ fontWeight: '700', fontSize: '16px' }}>SocialBridge</span>
+          <div style={{ background: green, width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '14px', color: '#000' }}>R</div>
+          <span style={{ fontWeight: '700', fontSize: '16px' }}>Rachett</span>
           <span style={{ background: '#1a1a1a', padding: '4px 10px', borderRadius: '20px', fontSize: '13px', color: '#aaa', border: '1px solid #222' }}>{seller.businessName}</span>
         </div>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
