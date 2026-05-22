@@ -128,7 +128,7 @@ const handleOrder = async () => {
       redirect_url: `${window.location.origin}/store/${seller.slug}`,
       tx_ref: `order_${Date.now()}`,
       customizations: {
-        title: 'SocialBridge Order',
+        title: 'Rachett Order',
         description: `${orderProduct.name} x${qty}`
       }
     })
