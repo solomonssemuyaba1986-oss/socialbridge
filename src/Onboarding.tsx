@@ -5,7 +5,7 @@ function Onboarding() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-      <p style={{ color: '#aaa', marginBottom: '8px', fontSize: '14px' }}>Welcome to SocialBridge</p>
+      <p style={{ color: '#aaa', marginBottom: '8px', fontSize: '14px' }}>Welcome to Rachett</p>
       <h1 style={{ color: '#fff', fontSize: '32px', fontWeight: '800', marginBottom: '8px', textAlign: 'center' }}>What brings you here?</h1>
       <p style={{ color: '#888', marginBottom: '40px', fontSize: '15px' }}>We'll set up the right experience for you.</p>
 
