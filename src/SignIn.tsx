@@ -22,8 +22,8 @@ function SignIn() {
       {/* Navbar */}
       <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 32px', borderBottom: '1px solid #1a1a1a' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ background: green, width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '13px', color: '#000' }}>SB</div>
-          <span style={{ fontWeight: '800', fontSize: '18px' }}>SocialBridge</span>
+          <div style={{ background: green, width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '13px', color: '#000' }}>R</div>
+          <span style={{ fontWeight: '800', fontSize: '18px' }}>Rachett</span>
         </div>
         <button onClick={handleGoogleSignIn}
           style={{ background: green, color: '#000', border: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '14px' }}>
@@ -42,7 +42,7 @@ function SignIn() {
           across social.
         </h1>
         <p style={{ fontSize: '18px', color: '#888', margin: '0 0 40px', maxWidth: '500px', marginInline: 'auto', lineHeight: '1.6' }}>
-          Lost messages. Slow replies. Orders scattered across platforms. SocialBridge fixes all of it.
+          Lost messages. Slow replies. Orders scattered across platforms. Rachett fixes all of it.
         </p>
        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
   <button onClick={handleGoogleSignIn}
@@ -63,7 +63,7 @@ function SignIn() {
         <div style={{ maxWidth: '800px', margin: '0 auto', textAlign: 'center' }}>
           <h2 style={{ fontSize: '42px', fontWeight: '900', margin: '0 0 16px', letterSpacing: '-1px' }}>
             Customers don't stop messaging, they stop waiting<br />
-            <span style={{ color: '#ff4444' }}>Get everything done from socialBridge.</span>
+            <span style={{ color: '#ff4444' }}>Get everything done from Rachett.</span>
           </h2>
           <p style={{ color: '#666', fontSize: '16px', margin: '0 0 48px' }}>
             Every missed DM, every slow reply, every order that got lost in a comment thread — leads to poor management.
@@ -88,11 +88,11 @@ function SignIn() {
       <div style={{ padding: '80px 20px', maxWidth: '800px', margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: '48px' }}>
           <h2 style={{ fontSize: '42px', fontWeight: '900', margin: '0 0 16px', letterSpacing: '-1px' }}>Get set up in minutes.</h2>
-          <p style={{ color: '#666', fontSize: '16px', margin: 0 }}> It's you, your audience, your business, and socialBridge.</p>
+          <p style={{ color: '#666', fontSize: '16px', margin: 0 }}> It's you, your audience, your business, and Rachett.</p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
           {[
-            { num: '01', title: 'Add your link to your bio', desc: 'Paste one SocialBridge link on Instagram, TikTok, WhatsApp. Takes 60 seconds.' },
+            { num: '01', title: 'Add your link to your bio', desc: 'Paste one Rachett link on Instagram, TikTok, WhatsApp. Takes 60 seconds.' },
             { num: '02', title: 'Followers tap. They shop.', desc: 'They hit your link and land on your storefront. Products, pricing — all there.' },
             { num: '03', title: 'You manage everything from one place', desc: 'See every order, every buyer, every product in your dashboard, no matter what platform they use to find you.' },
           ].map(step => (
@@ -143,7 +143,7 @@ function SignIn() {
       {/* Footer */}
       <div style={{ borderTop: '1px solid #1a1a1a', padding: '24px', textAlign: 'center' }}>
         <p style={{ color: '#333', fontSize: '13px', margin: 0 }}>
-          © 2026 <span style={{ color: green, fontWeight: '700' }}>SocialBridge</span> — One inbox. Every customer. Every platform. <br />
+          © 2026 <span style={{ color: green, fontWeight: '700' }}>Rachett</span> — One inbox. Every customer. Every platform. <br />
         </p>
       </div>
 
