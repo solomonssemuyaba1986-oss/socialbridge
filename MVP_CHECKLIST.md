@@ -1,4 +1,4 @@
-# SocialBridge MVP Launch Checklist
+# Rachett MVP Launch Checklist
 
 ## ✅ COMPLETED
 - [x] Input validation & sanitization (SetupStore, StorePage)
