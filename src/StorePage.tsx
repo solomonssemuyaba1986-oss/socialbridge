@@ -355,14 +355,14 @@ const handleOrder = async () => {
     createdAt: new Date()
   })
 
-  const orderId = `SB-${orderRef.id.slice(0, 6).toUpperCase()}`
+  const orderId = `RT-${orderRef.id.slice(0, 6).toUpperCase()}`
 
   await import('firebase/firestore').then(({ updateDoc, doc }) =>
     updateDoc(doc(db, 'sellers', sellerId, 'orders', orderRef.id), { orderId })
   )
 
   const message =
-`🟢 NEW ORDER — SocialBridge
+`🟢 NEW ORDER — Rachett
 
 Customer: ${buyerName}
 Product: ${orderProduct.name}
@@ -491,7 +491,7 @@ Reply with:
       {/* Footer */}
       <div style={{ textAlign: 'center', padding: '24px', borderTop: '1px solid #1a1a1a' }}>
         <p style={{ color: '#333', fontSize: '12px', margin: 0 }}>
-          Powered by <span style={{ color: green, fontWeight: '700' }}>SocialBridge</span>
+          Powered by <span style={{ color: green, fontWeight: '700' }}>Rachett</span>
         </p>
       </div>
 
