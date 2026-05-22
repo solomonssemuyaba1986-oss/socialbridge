@@ -11,6 +11,7 @@ import Dashboard from './Dashboard.tsx'
 import BrowsePage from './BrowsePage.tsx'
 import BulkUpload from './BulkUpload.tsx'
 import Inbox from './Inbox.tsx'
+import OrderHistory from './OrderHistory.tsx'
 
 function BulkUploadWrapper() {
   const navigate = useNavigate()
@@ -62,6 +63,7 @@ function App() {
       <Route path="/browse" element={<BrowsePage />} />
       <Route path="/bulk-upload" element={signedIn ? <BulkUploadWrapper /> : <Navigate to="/" />} />
       <Route path="/inbox" element={signedIn ? <Inbox /> : <Navigate to="/" />} />
+      <Route path="/orders" element={signedIn ? <OrderHistory /> : <Navigate to="/" />} />
     </Routes>
   )
 }
