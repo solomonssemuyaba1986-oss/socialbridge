@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { collection, query, where, getDocs, addDoc } from 'firebase/firestore'
 import { db, auth } from './firebase'
+import { suppressNextSellerOrderAlert } from './orderAlerts.ts'
 import { onAuthStateChanged } from 'firebase/auth'
 
 interface Seller {
@@ -360,6 +361,10 @@ const handleOrder = async () => {
   await import('firebase/firestore').then(({ updateDoc, doc }) =>
     updateDoc(doc(db, 'sellers', sellerId, 'orders', orderRef.id), { orderId })
   )
+
+  if (auth.currentUser?.uid === sellerId) {
+    suppressNextSellerOrderAlert()
+  }
 
   const message =
 `🟢 NEW ORDER — Rachett
