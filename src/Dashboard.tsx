@@ -84,8 +84,6 @@ function Dashboard() {
 
   const storeLink = `${window.location.origin}/store/${seller.slug}`
   const pendingOrders = orders.filter(o => !['fulfilled', 'out_of_stock'].includes(o.status || ''))
-  const fulfilledOrders = orders.filter(o => o.status === 'fulfilled')
-  const outOfStockOrders = orders.filter(o => o.status === 'out_of_stock')
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
@@ -165,16 +163,25 @@ function Dashboard() {
 
         {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '32px' }}>
-          {[
-            { label: 'Total Orders', value: orders.length.toString() },
-            { label: 'Products', value: products.length.toString() },
-            { label: 'Pending Orders', value: pendingOrders.length.toString() },
-          ].map(stat => (
-            <div key={stat.label} style={{ background: '#1a1a1a', borderRadius: '12px', padding: '24px', border: '1px solid #222' }}>
-              <p style={{ fontSize: '32px', fontWeight: '800', margin: '0 0 4px', color: green }}>{stat.value}</p>
-              <p style={{ fontSize: '13px', color: '#888', margin: 0 }}>{stat.label}</p>
-            </div>
-          ))}
+          <button
+            type="button"
+            onClick={() => navigate('/orders')}
+            style={{
+              background: '#1a1a1a', borderRadius: '12px', padding: '24px', border: `1px solid ${green}`,
+              cursor: 'pointer', textAlign: 'left', width: '100%',
+            }}>
+            <p style={{ fontSize: '32px', fontWeight: '800', margin: '0 0 4px', color: green }}>{orders.length}</p>
+            <p style={{ fontSize: '13px', color: '#888', margin: '0 0 4px' }}>Total Orders</p>
+            <p style={{ fontSize: '11px', color: green, margin: 0, fontWeight: '600' }}>Tap to view all →</p>
+          </button>
+          <div style={{ background: '#1a1a1a', borderRadius: '12px', padding: '24px', border: '1px solid #222' }}>
+            <p style={{ fontSize: '32px', fontWeight: '800', margin: '0 0 4px', color: green }}>{products.length}</p>
+            <p style={{ fontSize: '13px', color: '#888', margin: 0 }}>Products</p>
+          </div>
+          <div style={{ background: '#1a1a1a', borderRadius: '12px', padding: '24px', border: '1px solid #222' }}>
+            <p style={{ fontSize: '32px', fontWeight: '800', margin: '0 0 4px', color: green }}>{pendingOrders.length}</p>
+            <p style={{ fontSize: '13px', color: '#888', margin: 0 }}>Pending Orders</p>
+          </div>
         </div>
 
         {/* Store Link */}
@@ -232,44 +239,6 @@ function Dashboard() {
   </div>
             ))}
           </div>
-        )}
-
-        {/* Fulfilled Orders */}
-        {fulfilledOrders.length > 0 && (
-          <>
-            <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px', color: '#555' }}>
-              Fulfilled Orders ({fulfilledOrders.length})
-            </h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
-              {fulfilledOrders.map(o => (
-                <div key={o.id} style={{ background: '#111', borderRadius: '12px', padding: '16px 20px', border: '1px solid #1a1a1a', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: 0.6 }}>
-                  <div>
-                    <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '15px', color: '#fff' }}>{o.buyerName}</p>
-                    <p style={{ margin: '0 0 4px', color: '#666', fontSize: '13px' }}>{o.productName} × {o.quantity}</p>
-                    <p style={{ margin: 0, color: '#555', fontSize: '13px' }}>UGX {o.productPrice}</p>
-                  </div>
-                  <span style={{ background: '#1a2a1a', color: green, padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700' }}>✓ Done</span>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-
-        {outOfStockOrders.length > 0 && (
-          <>
-            <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px', color: '#555' }}>
-              Out of Stock ({outOfStockOrders.length})
-            </h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
-              {outOfStockOrders.map(o => (
-                <div key={o.id} style={{ background: '#111', borderRadius: '12px', padding: '16px 20px', border: '1px solid #1a1a1a', opacity: 0.6 }}>
-                  <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '15px', color: '#fff' }}>{o.buyerName}</p>
-                  <p style={{ margin: '0 0 4px', color: '#666', fontSize: '13px' }}>{o.productName} × {o.quantity}</p>
-                  <span style={{ background: '#2a1a1a', color: '#ff4444', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700' }}>Out of Stock</span>
-                </div>
-              ))}
-            </div>
-          </>
         )}
 
         {/* Products */}
