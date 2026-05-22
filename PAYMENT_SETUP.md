@@ -44,7 +44,7 @@ const handleFlutterwavePayment = useFlutterwave({
     name: buyerName,
   },
   customizations: {
-    title: "SocialBridge Order",
+    title: "Rachett Order",
     description: `${orderProduct.name} x${quantity}`,
     logo: "https://...",
   },
