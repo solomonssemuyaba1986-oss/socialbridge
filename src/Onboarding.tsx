@@ -9,7 +9,7 @@ function Onboarding() {
       <h1 style={{ color: '#fff', fontSize: '32px', fontWeight: '800', marginBottom: '8px', textAlign: 'center' }}>What brings you here?</h1>
       <p style={{ color: '#888', marginBottom: '40px', fontSize: '15px' }}>We'll set up the right experience for you.</p>
 
-      <div style={{ display: 'flex', gap: '16px', width: '100%', maxWidth: '560px', marginBottom: '32px' }}>
+      <div className="rt-onboarding-cards" style={{ display: 'flex', gap: '16px', width: '100%', maxWidth: '560px', marginBottom: '32px' }}>
         
         {/* Seller */}
         <div onClick={() => navigate('/setup')}
