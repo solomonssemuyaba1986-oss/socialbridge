@@ -82,7 +82,7 @@ function BrowsePage() {
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
 
       {/* Navbar */}
-      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #1a1a1a' }}>
+      <nav className="rt-topnav" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #1a1a1a' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }} onClick={() => navigate('/')}>
           <div style={{ background: green, width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '13px', color: '#000' }}>R</div>
           <span style={{ fontWeight: '800', fontSize: '18px' }}>Rachett</span>
@@ -95,7 +95,7 @@ function BrowsePage() {
 
       {/* Hero */}
       <div style={{ textAlign: 'center', padding: '48px 20px 32px', borderBottom: '1px solid #1a1a1a' }}>
-        <h1 style={{ fontSize: '32px', fontWeight: '900', margin: '0 0 8px', letterSpacing: '-1px' }}>
+        <h1 className="rt-title-md" style={{ fontSize: '32px', fontWeight: '900', margin: '0 0 8px', letterSpacing: '-1px' }}>
           Shop from real sellers — <span style={{ color: green }}>safely.</span>
         </h1>
         <p style={{ color: '#666', fontSize: '15px', margin: '0 0 24px' }}>
@@ -115,7 +115,7 @@ function BrowsePage() {
       </div>
 
       {/* Categories */}
-      <div style={{ padding: '20px 24px', borderBottom: '1px solid #1a1a1a', display: 'flex', gap: '8px', overflowX: 'auto' }}>
+      <div className="rt-filters" style={{ padding: '20px 24px', borderBottom: '1px solid #1a1a1a', display: 'flex', gap: '8px', overflowX: 'auto' }}>
         {categories.map(cat => (
           <button key={cat} onClick={() => setActiveCategory(cat)}
             style={{ padding: '8px 18px', borderRadius: '20px', border: `1px solid ${activeCategory === cat ? green : '#333'}`, background: activeCategory === cat ? green : 'transparent', color: activeCategory === cat ? '#000' : '#aaa', fontWeight: activeCategory === cat ? '700' : '500', cursor: 'pointer', fontSize: '14px', whiteSpace: 'nowrap' }}>
@@ -125,7 +125,7 @@ function BrowsePage() {
       </div>
 
       {/* Products */}
-      <div style={{ maxWidth: '800px', margin: '0 auto', padding: '32px 16px' }}>
+      <div className="rt-container" style={{ maxWidth: '800px', margin: '0 auto', padding: '32px 16px' }}>
         {loading ? (
           <p style={{ textAlign: 'center', color: '#555' }}>Loading products...</p>
         ) : filtered.length === 0 ? (
@@ -137,7 +137,7 @@ function BrowsePage() {
         ) : (
           <>
             <p style={{ color: '#555', fontSize: '13px', marginBottom: '20px' }}>{filtered.length} products available</p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
+            <div className="rt-products" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
               {filtered.map(p => (
                 <div key={p.id} onClick={() => navigate(`/store/${p.sellerSlug}`)}
                   style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222', cursor: 'pointer' }}>
