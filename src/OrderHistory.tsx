@@ -41,7 +41,7 @@ function OrderHistory() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px 24px', borderBottom: '1px solid #1a1a1a' }}>
+      <div className="rt-topnav" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px 24px', borderBottom: '1px solid #1a1a1a' }}>
         <button onClick={() => navigate('/dashboard')}
           style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '14px', padding: 0 }}>
           ← Dashboard
@@ -50,7 +50,7 @@ function OrderHistory() {
         <span style={{ color: '#555', fontSize: '13px' }}>({orders.length})</span>
       </div>
 
-      <div style={{ display: 'flex', gap: '8px', padding: '16px 24px', borderBottom: '1px solid #1a1a1a', overflowX: 'auto' }}>
+      <div className="rt-filters" style={{ display: 'flex', gap: '8px', padding: '16px 24px', borderBottom: '1px solid #1a1a1a', overflowX: 'auto' }}>
         {([
           { key: 'all' as const, label: 'All' },
           { key: 'pending' as const, label: 'Pending' },
@@ -70,7 +70,7 @@ function OrderHistory() {
         ))}
       </div>
 
-      <div style={{ maxWidth: '640px', margin: '0 auto', padding: '16px' }}>
+      <div className="rt-container" style={{ maxWidth: '640px', margin: '0 auto', padding: '16px' }}>
         {filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 20px' }}>
             <p style={{ color: '#555', fontSize: '15px' }}>No orders in this filter yet.</p>
