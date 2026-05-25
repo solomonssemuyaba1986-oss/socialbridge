@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { collection, getDocs, query } from 'firebase/firestore'
 import { db } from './firebase'
 import { useNavigate } from 'react-router-dom'
+import { getMainCategories } from './categories'
 
 interface Product {
   id: string
@@ -12,9 +13,10 @@ interface Product {
   sellerSlug: string
   businessName: string
   category?: string
+  subCategory?: string
 }
 
-const categories = ['All', 'Fashion', 'Food', 'Beauty', 'Electronics', 'Art', 'Services']
+const categories = ['All', ...getMainCategories()]
 const green = '#adff2f'
 
 function BrowsePage() {
