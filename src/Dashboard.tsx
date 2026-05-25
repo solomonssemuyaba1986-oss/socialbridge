@@ -89,13 +89,13 @@ function Dashboard() {
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
 
       {/* Top Nav */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #1a1a1a' }}>
+      <div className="rt-topnav" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #1a1a1a' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ background: green, width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '14px', color: '#000' }}>R</div>
           <span style={{ fontWeight: '700', fontSize: '16px' }}>Rachett</span>
-          <span style={{ background: '#1a1a1a', padding: '4px 10px', borderRadius: '20px', fontSize: '13px', color: '#aaa', border: '1px solid #222' }}>{seller.businessName}</span>
+          <span className="rt-store-name" style={{ background: '#1a1a1a', padding: '4px 10px', borderRadius: '20px', fontSize: '13px', color: '#aaa', border: '1px solid #222' }}>{seller.businessName}</span>
         </div>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+        <div className="rt-topnav-actions" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <button onClick={() => { navigator.clipboard.writeText(storeLink); alert('Link copied!') }}
             style={{ background: green, color: '#000', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '700' }}>
             Copy Link
@@ -133,7 +133,7 @@ function Dashboard() {
         </div>
       </div>
 
-      <div style={{ maxWidth: '800px', margin: '0 auto', padding: '32px 20px' }}>
+      <div className="rt-container" style={{ maxWidth: '800px', margin: '0 auto', padding: '32px 20px' }}>
 
         {unreadCount > 0 && (
           <div
@@ -162,7 +162,7 @@ function Dashboard() {
         )}
 
         {/* Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '32px' }}>
+        <div className="rt-stats" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '32px' }}>
           <button
             type="button"
             onClick={() => navigate('/orders')}
@@ -208,7 +208,7 @@ function Dashboard() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
             {pendingOrders.map(o => (
   <div key={o.id} style={{ background: '#1a1a1a', borderRadius: '12px', padding: '16px 20px', border: '1px solid #222' }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+    <div className="rt-order-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
       <div>
         <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '15px', color: '#fff' }}>{o.buyerName}</p>
         <p style={{ margin: '0 0 4px', color: '#888', fontSize: '13px' }}>{o.productName} × {o.quantity}</p>
@@ -222,7 +222,7 @@ function Dashboard() {
     </div>
 
     {/* Status Buttons */}
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+    <div className="rt-order-actions" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
       <button onClick={() => markFulfilled(o.id)}
         style={{ padding: '8px', background: green, color: '#000', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '11px', fontWeight: '700' }}>
         ✓ Confirm
@@ -242,7 +242,7 @@ function Dashboard() {
         )}
 
         {/* Products */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <div className="rt-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
   <h2 style={{ fontSize: '18px', fontWeight: '700', margin: 0 }}>Products</h2>
   <button onClick={() => navigate('/bulk-upload')}
     style={{ background: green, color: '#000', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>
@@ -254,7 +254,7 @@ function Dashboard() {
             <p style={{ color: '#444', margin: 0 }}>No products yet.</p>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div className="rt-products" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             {products.map(p => (
               <div key={p.id} style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222' }}>
                 <img src={p.imageUrl || 'https://placehold.co/300x200'} alt={p.name}
