@@ -77,7 +77,7 @@ function Inbox() {
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #1a1a1a' }}>
+      <div className="rt-topnav" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #1a1a1a' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <button onClick={() => navigate('/dashboard')}
             style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '14px', padding: 0 }}>
@@ -92,7 +92,7 @@ function Inbox() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '8px', padding: '16px 24px', borderBottom: '1px solid #1a1a1a', overflowX: 'auto' }}>
+      <div className="rt-filters" style={{ display: 'flex', gap: '8px', padding: '16px 24px', borderBottom: '1px solid #1a1a1a', overflowX: 'auto' }}>
         {(['all', 'unread', 'pending', 'confirmed'] as const).map(f => {
           const count = f === 'unread' ? unreadCount : f === 'pending' ? orders.filter(o => o.status === 'pending' || !o.status).length : f === 'confirmed' ? orders.filter(o => o.status === 'fulfilled').length : orders.length
           const active = filter === f
@@ -113,7 +113,7 @@ function Inbox() {
         })}
       </div>
 
-      <div style={{ maxWidth: '640px', margin: '0 auto', padding: '16px' }}>
+      <div className="rt-container" style={{ maxWidth: '640px', margin: '0 auto', padding: '16px' }}>
         {filteredOrders.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 20px' }}>
             <div style={{ fontSize: '48px', marginBottom: '16px' }}>📭</div>
