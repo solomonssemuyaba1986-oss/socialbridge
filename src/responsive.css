@@ -1,7 +1,6 @@
 /**
  * Rachett responsive layout (WhatsApp-style).
- * Desktop: unchanged — inline styles still control layout.
- * Phone (≤768px): these rules override layout only.
+ * Layout adapts to screen width — nav/stats on phone; product grid scales 2→5 columns.
  */
 
 @media (max-width: 768px) {
@@ -146,5 +145,27 @@
   .rt-topnav-actions > button {
     flex: 1 1 100% !important;
     width: 100% !important;
+  }
+}
+
+/* Laptop / desktop — more columns as the screen gets wider (up to 5) */
+@media (min-width: 769px) {
+  .rt-products {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 14px !important;
+  }
+}
+
+@media (min-width: 992px) {
+  .rt-products {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 16px !important;
+  }
+}
+
+@media (min-width: 1200px) {
+  .rt-products {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
   }
 }
