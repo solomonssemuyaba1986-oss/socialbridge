@@ -20,7 +20,7 @@ function SignIn() {
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
 
       {/* Navbar */}
-      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 32px', borderBottom: '1px solid #1a1a1a' }}>
+      <nav className="rt-topnav" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 32px', borderBottom: '1px solid #1a1a1a' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{ background: green, width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '13px', color: '#000' }}>R</div>
           <span style={{ fontWeight: '800', fontSize: '18px' }}>Rachett</span>
@@ -32,11 +32,11 @@ function SignIn() {
       </nav>
 
       {/* Hero */}
-      <div style={{ textAlign: 'center', padding: '80px 20px 60px', maxWidth: '800px', margin: '0 auto' }}>
+      <div className="rt-hero" style={{ textAlign: 'center', padding: '80px 20px 60px', maxWidth: '800px', margin: '0 auto' }}>
         <div style={{ display: 'inline-block', background: '#1a1a1a', border: '1px solid #333', borderRadius: '20px', padding: '6px 16px', fontSize: '13px', color: '#888', marginBottom: '24px' }}>
           Your brand. Your audience. Across every platform. In one inbox.
         </div>
-        <h1 style={{ fontSize: '56px', fontWeight: '900', lineHeight: '1.1', margin: '0 0 24px', letterSpacing: '-2px' }}>
+        <h1 className="rt-title-lg" style={{ fontSize: '56px', fontWeight: '900', lineHeight: '1.1', margin: '0 0 24px', letterSpacing: '-2px' }}>
           Your business<br />
           <span style={{ color: green }}>deserves a clear future</span><br />
           across social.
@@ -61,7 +61,7 @@ function SignIn() {
       {/* Problem Section */}
       <div style={{ background: '#0a0a0a', padding: '80px 20px', borderTop: '1px solid #1a1a1a' }}>
         <div style={{ maxWidth: '800px', margin: '0 auto', textAlign: 'center' }}>
-          <h2 style={{ fontSize: '42px', fontWeight: '900', margin: '0 0 16px', letterSpacing: '-1px' }}>
+          <h2 className="rt-title-md" style={{ fontSize: '42px', fontWeight: '900', margin: '0 0 16px', letterSpacing: '-1px' }}>
             Customers don't stop messaging, they stop waiting<br />
             <span style={{ color: '#ff4444' }}>Get everything done from Rachett.</span>
           </h2>
@@ -87,7 +87,7 @@ function SignIn() {
       {/* How It Works */}
       <div style={{ padding: '80px 20px', maxWidth: '800px', margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: '48px' }}>
-          <h2 style={{ fontSize: '42px', fontWeight: '900', margin: '0 0 16px', letterSpacing: '-1px' }}>Get set up in minutes.</h2>
+          <h2 className="rt-title-md" style={{ fontSize: '42px', fontWeight: '900', margin: '0 0 16px', letterSpacing: '-1px' }}>Get set up in minutes.</h2>
           <p style={{ color: '#666', fontSize: '16px', margin: 0 }}> It's you, your audience, your business, and Rachett.</p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
@@ -126,7 +126,7 @@ function SignIn() {
 
       {/* CTA */}
       <div style={{ padding: '80px 20px', textAlign: 'center' }}>
-        <h2 style={{ fontSize: '42px', fontWeight: '900', margin: '0 0 16px', letterSpacing: '-1px' }}>
+        <h2 className="rt-title-md" style={{ fontSize: '42px', fontWeight: '900', margin: '0 0 16px', letterSpacing: '-1px' }}>
           Manage your business<br />
           <span style={{ color: green }}>from anywhere.</span>
         </h2>
