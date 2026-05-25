@@ -4,6 +4,7 @@ import { collection, query, where, getDocs, addDoc } from 'firebase/firestore'
 import { db, auth } from './firebase'
 import { suppressNextSellerOrderAlert } from './orderAlerts.ts'
 import { onAuthStateChanged } from 'firebase/auth'
+import { CATEGORIES, getSubcategories } from './categories'
 
 interface Seller {
   businessName: string
@@ -19,6 +20,8 @@ interface Product {
   price: string
   description: string
   imageUrl: string
+  category?: string
+  subCategory?: string
 }
 
 const green = '#adff2f'
@@ -256,6 +259,8 @@ function StorePage() {
   const [price, setPrice] = useState('')
   const [description, setDescription] = useState('')
   const [imageUrl, setImageUrl] = useState('')
+  const [category, setCategory] = useState('')
+  const [subCategory, setSubCategory] = useState('')
 
   const [orderProduct, setOrderProduct] = useState<Product | null>(null)
   const [buyerName, setBuyerName] = useState('')
@@ -332,10 +337,12 @@ const handleImageUpload = async (file: File) => {
   const handleAddProduct = async () => {
     if (!name || !price) return alert('Name and price are required')
     if (!imageUrl) return alert('Please upload a product image')
+    if (!category) return alert('Please select a category')
+    if (!subCategory) return alert('Please select a subcategory')
     await addDoc(collection(db, 'sellers', sellerId, 'products'), {
-      name, price, description, imageUrl
+      name, price, description, imageUrl, category, subCategory
     })
-    setName(''); setPrice(''); setDescription(''); setImageUrl('')
+    setName(''); setPrice(''); setDescription(''); setImageUrl(''); setCategory(''); setSubCategory('')
     setShowForm(false)
     fetchProducts(sellerId)
   }
@@ -452,6 +459,22 @@ Reply with:
               style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
             <input placeholder="Price e.g. 200000" value={price} onChange={e => setPrice(e.target.value)}
               style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+            <select value={category} onChange={e => { setCategory(e.target.value); setSubCategory('') }}
+              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: category ? '1px solid #333' : '1px solid #ff4444', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: category ? '#fff' : '#666' }}>
+              <option value="">Select Category *</option>
+              {Object.keys(CATEGORIES).map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+            {category && (
+              <select value={subCategory} onChange={e => setSubCategory(e.target.value)}
+                style={{ width: '100%', padding: '12px', borderRadius: '8px', border: subCategory ? '1px solid #333' : '1px solid #ff4444', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: subCategory ? '#fff' : '#666' }}>
+                <option value="">Select Subcategory *</option>
+                {getSubcategories(category).map(sub => (
+                  <option key={sub} value={sub}>{sub}</option>
+                ))}
+              </select>
+            )}
             <textarea placeholder="Description" value={description} onChange={e => setDescription(e.target.value)}
               style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'none' }} rows={3} />
             <div style={{ marginBottom: '16px' }}>
