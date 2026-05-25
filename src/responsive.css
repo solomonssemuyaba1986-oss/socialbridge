@@ -69,10 +69,11 @@
     font-size: 13px !important;
   }
 
+  /* Social storefront: show many products — 2 cols on phone, 3 on wider mobile */
   .rt-products {
     display: grid !important;
-    grid-template-columns: 1fr !important;
-    gap: 12px !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
   }
 
   .rt-row {
@@ -130,6 +131,14 @@
   .rt-order-header {
     flex-direction: column !important;
     gap: 8px !important;
+  }
+}
+
+/* Larger phones / small tablets in portrait: 3 product columns */
+@media (min-width: 520px) and (max-width: 768px) {
+  .rt-products {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 10px !important;
   }
 }
 
