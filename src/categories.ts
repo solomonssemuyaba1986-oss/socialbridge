@@ -2,16 +2,21 @@ export const CATEGORIES = {
   "Fashion": [
     "Tops & Shirts",
     "Bottoms & Pants",
-    "Dresses & Skirts",
+    "Dresses",
     "Jackets & Coats",
-    "Shoes",
+    "Sneakers",
+    "Hoodies",
+    "Jeans",
+    "Handbags",
+    "Watches",
     "Accessories",
     "Activewear"
   ],
-  "Beauty & Personal Care": [
+  "Beauty & Cosmetics": [
     "Skincare",
     "Haircare",
     "Makeup",
+    "Wigs",
     "Fragrances",
     "Bath & Body",
     "Health & Supplements"
@@ -32,9 +37,11 @@ export const CATEGORIES = {
   ],
   "Electronics & Gadgets": [
     "Smartphones",
+    "Phone Accessories",
     "Headphones & Earbuds",
     "Chargers & Cables",
     "Smartwatches",
+    "Speakers",
     "Cameras",
     "Laptops & Computers",
     "Tablets"
@@ -58,6 +65,8 @@ export const CATEGORIES = {
     "Snacks",
     "Coffee & Tea",
     "Baked Goods",
+    "Drinks",
+    "Desserts",
     "Beverages",
     "Spices & Condiments",
     "Dairy & Alternatives"
@@ -95,7 +104,8 @@ export const CATEGORIES = {
     "Grooming",
     "Pet Clothing",
     "Health & Wellness"
-  ]\r?\n};
+  ]
+};
 
 // Helper function to get subcategories for a category
 export const getSubcategories = (category: string): string[] => {
@@ -106,5 +116,3 @@ export const getSubcategories = (category: string): string[] => {
 export const getMainCategories = (): string[] => {
   return Object.keys(CATEGORIES);
 };
-
-
