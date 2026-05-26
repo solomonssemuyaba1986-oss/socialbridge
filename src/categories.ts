@@ -16,6 +16,20 @@ export const CATEGORIES = {
     "Bath & Body",
     "Health & Supplements"
   ],
+  "Perfume": [
+    "Men's Fragrances",
+    "Women's Fragrances",
+    "Unisex Fragrances",
+    "Perfume Sets"
+  ],
+  "Jewelry": [
+    "Necklaces",
+    "Bracelets",
+    "Rings",
+    "Earrings",
+    "Watches",
+    "Body Jewelry"
+  ],
   "Electronics & Gadgets": [
     "Smartphones",
     "Headphones & Earbuds",
@@ -81,22 +95,7 @@ export const CATEGORIES = {
     "Grooming",
     "Pet Clothing",
     "Health & Wellness"
-  ],
-  "Jewelry": [
-    "Necklaces",
-    "Bracelets",
-    "Rings",
-    "Earrings",
-    "Watches",
-    "Body Jewelry"
-  ],
-  "Perfume": [
-    "Men's Fragrances",
-    "Women's Fragrances",
-    "Unisex Fragrances",
-    "Perfume Sets"
-  ]
-};
+  ]\r?\n};
 
 // Helper function to get subcategories for a category
 export const getSubcategories = (category: string): string[] => {
@@ -107,3 +106,5 @@ export const getSubcategories = (category: string): string[] => {
 export const getMainCategories = (): string[] => {
   return Object.keys(CATEGORIES);
 };
+
+
