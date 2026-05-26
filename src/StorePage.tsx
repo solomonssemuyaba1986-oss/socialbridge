@@ -249,6 +249,10 @@ ${storeUrl}`
                   style={{ width: '100%', padding: '8px', background: isOutOfStock ? '#1a2a1a' : 'transparent', color: isOutOfStock ? green : '#ff4444', border: `1px solid ${isOutOfStock ? green : '#ff4444'}`, borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', marginBottom: '6px' }}>
                   {isOutOfStock ? '✓ Back in Stock' : 'Mark Out of Stock'}
                 </button>
+                <button onClick={handleShare}
+                  style={{ width: '100%', padding: '8px', background: 'transparent', border: '1px solid #333', color: '#fff', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', marginBottom: '6px' }}>
+                  Share
+                </button>
                 <button onClick={handleDelete}
                   style={{ width: '100%', padding: '8px', background: 'transparent', color: '#555', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
                   Delete
@@ -273,10 +277,6 @@ ${storeUrl}`
                 <button onClick={onOrder}
                   style={{ width: '100%', padding: '10px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>
                   Order Now
-                </button>
-                <button onClick={handleShare}
-                  style={{ width: '100%', padding: '8px', marginTop: '8px', background: 'transparent', border: '1px solid #333', color: '#fff', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
-                  Share
                 </button>
               </div>
               )
