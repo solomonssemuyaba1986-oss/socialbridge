@@ -119,9 +119,8 @@ function ProductCard({ p, isOwner, sellerId, sellerSlug, sellerName, onOrder, on
   const handleShare = async () => {
     try {
       const storeUrl = `${window.location.origin}/store/${sellerSlug}?productId=${p.id}`
-      const shareText = `${p.name} — UGX ${p.price}
-Buy from ${sellerName}
-${storeUrl}`
+      const storeHandle = sellerName ? `@${sellerName.replace(/\s+/g, '')}` : ''
+      const shareText = `${p.name}\nUGX ${p.price}\n\nAvailable now\n${storeHandle}\n\n🟢 Order instantly\n${storeUrl}\n\nPowered by Ratchet`
 
       if (navigator.share) {
         try {
@@ -129,7 +128,7 @@ ${storeUrl}`
           const blob = await res.blob()
           const file = new File([blob], 'image.jpg', { type: blob.type || 'image/jpeg' })
           if ((navigator as any).canShare && (navigator as any).canShare({ files: [file] })) {
-            await (navigator as any).share({ title: p.name, text: p.description || '', files: [file], url: storeUrl })
+            await (navigator as any).share({ title: p.name, text: shareText, files: [file], url: storeUrl })
             return
           }
         } catch (err) {
@@ -139,8 +138,8 @@ ${storeUrl}`
         return
       }
 
-      await navigator.clipboard.writeText(storeUrl)
-      alert('Store link copied to clipboard')
+      await navigator.clipboard.writeText(shareText)
+      alert('Product share copy ready. Paste it into your status or chat.')
     } catch (err) {
       console.error('Share failed', err)
       try {
