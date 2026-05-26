@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { collection, query, where, getDocs, addDoc } from 'firebase/firestore'
 import { db, auth } from './firebase'
 import { suppressNextSellerOrderAlert } from './orderAlerts.ts'
@@ -118,7 +118,7 @@ function ProductCard({ p, isOwner, sellerId, sellerSlug, sellerName, onOrder, on
 
   const handleShare = async () => {
     try {
-      const storeUrl = `${window.location.origin}/store/${sellerSlug}`
+      const storeUrl = `${window.location.origin}/store/${sellerSlug}?productId=${p.id}`
       const shareText = `${p.name} — UGX ${p.price}
 Buy from ${sellerName}
 ${storeUrl}`
@@ -289,6 +289,8 @@ ${storeUrl}`
 }
 function StorePage() {
   const { slug } = useParams()
+  const [searchParams] = useSearchParams()
+  const productDeepLinkId = searchParams.get('productId')
   const [seller, setSeller] = useState<Seller | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [isOwner, setIsOwner] = useState(false)
@@ -327,6 +329,15 @@ function StorePage() {
     }
     fetchSeller()
   }, [slug])
+
+  useEffect(() => {
+    if (!orderProduct && productDeepLinkId && products.length > 0) {
+      const deepProduct = products.find(p => p.id === productDeepLinkId)
+      if (deepProduct) {
+        setOrderProduct(deepProduct)
+      }
+    }
+  }, [productDeepLinkId, products, orderProduct])
 
   const fetchProducts = async (sid: string) => {
     const q = query(collection(db, 'sellers', sid, 'products'))
