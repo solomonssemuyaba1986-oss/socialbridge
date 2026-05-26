@@ -28,6 +28,31 @@ function Dashboard() {
   const navigate = useNavigate()
   const green = '#adff2f'
 
+  const handleShareProduct = async (product: Product) => {
+    const storeLink = `${window.location.origin}/store/${seller?.slug}`
+    const shareText = `${product.name} — UGX ${product.price}\nBuy from ${seller?.businessName || 'my store'}\n${storeLink}`
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: product.name,
+          text: shareText,
+          url: storeLink
+        })
+        return
+      }
+      await navigator.clipboard.writeText(shareText)
+      alert('Product share text copied. Paste it in your app.')
+    } catch (err) {
+      console.error('Share failed', err)
+      try {
+        await navigator.clipboard.writeText(shareText)
+        alert('Could not open share sheet — text copied instead')
+      } catch {
+        alert('Could not share. Please copy your store link manually.')
+      }
+    }
+  }
+
   const playNewOrderAlert = useCallback(() => {
     try {
       const audio = new Audio('/notification.mp3')
@@ -262,6 +287,10 @@ function Dashboard() {
                 <div style={{ padding: '12px' }}>
                   <p style={{ margin: '0 0 4px', fontWeight: '600', fontSize: '14px' }}>{p.name}</p>
                   <p style={{ margin: 0, fontWeight: '700', color: green, fontSize: '14px' }}>UGX {p.price}</p>
+                  <button onClick={() => handleShareProduct(p)}
+                    style={{ marginTop: '10px', width: '100%', padding: '10px', background: 'transparent', border: '1px solid #333', color: '#fff', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '700' }}>
+                    Share Product
+                  </button>
                 </div>
               </div>
             ))}
