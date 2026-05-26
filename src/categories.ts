@@ -46,6 +46,13 @@ export const CATEGORIES = {
     "Laptops & Computers",
     "Tablets"
   ],
+  "Digital Products & Services": [
+    "Courses",
+    "Templates",
+    "Presets",
+    "eBooks",
+    "Design Services"
+  ],
   "Home & Living": [
     "Furniture",
     "Bedding & Linens",
