@@ -29,7 +29,7 @@ function Dashboard() {
   const green = '#adff2f'
 
   const handleShareProduct = async (product: Product) => {
-    const storeLink = `${window.location.origin}/store/${seller?.slug}`
+    const storeLink = `${window.location.origin}/store/${seller?.slug}?productId=${product.id}`
     const shareText = `${product.name} — UGX ${product.price}\nBuy from ${seller?.businessName || 'my store'}\n${storeLink}`
     try {
       if (navigator.share) {
