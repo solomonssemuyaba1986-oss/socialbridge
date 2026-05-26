@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { auth, db } from './firebase'
-import { doc, setDoc } from 'firebase/firestore'
+import { collection, doc, getDocs, query, setDoc, where } from 'firebase/firestore'
 import { useNavigate } from 'react-router-dom'
 
 interface SetupFormErrors {
@@ -24,6 +24,22 @@ function SetupStore() {
 
   const generateSlug = (name: string): string => {
     return name.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 50)
+  }
+
+  const generateUniqueSlug = async (name: string): Promise<string> => {
+    const baseSlug = generateSlug(name)
+    let slug = baseSlug
+    let suffix = 1
+
+    while (true) {
+      const q = query(collection(db, 'sellers'), where('slug', '==', slug))
+      const snapshot = await getDocs(q)
+      if (snapshot.empty) {
+        return slug
+      }
+      slug = `${baseSlug}-${suffix}`
+      suffix += 1
+    }
   }
 
   const validateForm = (): boolean => {
@@ -67,7 +83,7 @@ function SetupStore() {
     try {
       const cleanedName = sanitizeInput(businessName)
       const cleanedBio = sanitizeInput(bio, 500)
-      const slug = generateSlug(cleanedName)
+      const slug = await generateUniqueSlug(cleanedName)
       const fullNumber = `256${whatsapp}`
       await setDoc(doc(db, 'sellers', user.uid), {
         businessName: cleanedName,
