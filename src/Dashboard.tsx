@@ -30,7 +30,8 @@ function Dashboard() {
 
   const handleShareProduct = async (product: Product) => {
     const storeLink = `${window.location.origin}/store/${seller?.slug}?productId=${product.id}`
-    const shareText = `${product.name} — UGX ${product.price}\nBuy from ${seller?.businessName || 'my store'}\n${storeLink}`
+    const storeHandle = seller?.businessName ? `@${seller.businessName.replace(/\s+/g, '')}` : ''
+    const shareText = `${product.name}\nUGX ${product.price}\n\nAvailable now\n${storeHandle}\n\n🟢 Order instantly\n${storeLink}\n\nPowered by Ratchet`
     try {
       if (navigator.share) {
         await navigator.share({
@@ -41,7 +42,7 @@ function Dashboard() {
         return
       }
       await navigator.clipboard.writeText(shareText)
-      alert('Product share text copied. Paste it in your app.')
+      alert('Product share copy ready. Paste it into your status or chat.')
     } catch (err) {
       console.error('Share failed', err)
       try {
