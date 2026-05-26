@@ -28,7 +28,7 @@ const green = '#adff2f'
 const CLOUD_NAME = 'dzudmmuxg'
 const UPLOAD_PRESET = 'p2z65zrv'
 
-function ProductCard({ p, isOwner, sellerId, onOrder, onRefresh }: any) {
+function ProductCard({ p, isOwner, sellerId, sellerSlug, sellerName, onOrder, onRefresh }: any) {
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(p.name)
   const [editPrice, setEditPrice] = useState(p.price)
@@ -115,6 +115,43 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onRefresh }: any) {
     await updateDoc(doc(db, 'sellers', sellerId, 'products', p.id), { outOfStock: newStatus })
     setIsOutOfStock(newStatus)
   }
+
+  const handleShare = async () => {
+    try {
+      const storeUrl = `${window.location.origin}/store/${sellerSlug}`
+      const shareText = `${p.name} — UGX ${p.price}
+Buy from ${sellerName}
+${storeUrl}`
+
+      if (navigator.share) {
+        try {
+          const res = await fetch(p.imageUrl || '')
+          const blob = await res.blob()
+          const file = new File([blob], 'image.jpg', { type: blob.type || 'image/jpeg' })
+          if ((navigator as any).canShare && (navigator as any).canShare({ files: [file] })) {
+            await (navigator as any).share({ title: p.name, text: p.description || '', files: [file], url: storeUrl })
+            return
+          }
+        } catch (err) {
+          // ignore image share errors
+        }
+        await navigator.share({ title: p.name, text: shareText, url: storeUrl })
+        return
+      }
+
+      await navigator.clipboard.writeText(storeUrl)
+      alert('Store link copied to clipboard')
+    } catch (err) {
+      console.error('Share failed', err)
+      try {
+        await navigator.clipboard.writeText(`${window.location.origin}/store/${sellerSlug}`)
+      } catch (copyErr) {
+        console.error('Clipboard fallback failed', copyErr)
+      }
+      alert('Could not share — link copied instead')
+    }
+  }
+
 
   return (
     <div style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: `1px solid ${isOutOfStock ? '#333' : '#222'}`, position: 'relative', opacity: isOutOfStock && !isOwner ? 0.7 : 1 }}>
@@ -232,10 +269,16 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onRefresh }: any) {
                   </a>
                 </div>
               ) : (
+                <div>
                 <button onClick={onOrder}
                   style={{ width: '100%', padding: '10px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>
                   Order Now
                 </button>
+                <button onClick={handleShare}
+                  style={{ width: '100%', padding: '8px', marginTop: '8px', background: 'transparent', border: '1px solid #333', color: '#fff', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                  Share
+                </button>
+              </div>
               )
             )}
           </>
