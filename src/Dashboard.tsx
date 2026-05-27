@@ -45,14 +45,10 @@ function Dashboard() {
       const file = new File([blob], 'product.jpg', { type: blob.type || 'image/jpeg' })
 
       if ((navigator as any).canShare && (navigator as any).canShare({ files: [file] })) {
-        await (navigator as any).share({ title: product.name, files: [file] })
-        return
+        await (navigator as any).share({ files: [file] })
       }
-
-      alert('This browser does not support sharing images yet.')
     } catch (err) {
       console.error('Share failed', err)
-      alert('Could not share the image.')
     }
   }
 
