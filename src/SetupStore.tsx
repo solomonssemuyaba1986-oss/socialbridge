@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { auth, db } from './firebase'
 import { collection, doc, getDocs, query, setDoc, where } from 'firebase/firestore'
 import { useNavigate } from 'react-router-dom'
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 
 interface SetupFormErrors {
   businessName?: string
@@ -16,6 +17,9 @@ function SetupStore() {
   const [whatsapp, setWhatsapp] = useState('')
   const [errors, setErrors] = useState<SetupFormErrors>({})
   const [loading, setLoading] = useState(false)
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [logoPreview, setLogoPreview] = useState('')
+  const [uploadingLogo, setUploadingLogo] = useState(false)
   const navigate = useNavigate()
 
   const sanitizeInput = (input: string, maxLength: number = 100): string => {
@@ -85,11 +89,26 @@ function SetupStore() {
       const cleanedBio = sanitizeInput(bio, 500)
       const slug = await generateUniqueSlug(cleanedName)
       const fullNumber = `256${whatsapp}`
+      let finalLogoUrl = user.photoURL || ''
+      if (logoFile) {
+        try {
+          setUploadingLogo(true)
+          const storage = getStorage()
+          const storageRef = ref(storage, `sellers/${user.uid}/logo.jpg`)
+          await uploadBytes(storageRef, logoFile)
+          finalLogoUrl = await getDownloadURL(storageRef)
+        } catch (err) {
+          console.error('Logo upload failed', err)
+        } finally {
+          setUploadingLogo(false)
+        }
+      }
+
       await setDoc(doc(db, 'sellers', user.uid), {
         businessName: cleanedName,
         bio: cleanedBio,
         whatsapp: fullNumber,
-        logoUrl: user.photoURL || '',
+        logoUrl: finalLogoUrl,
         slug,
         email: user.email,
         createdAt: new Date(),
@@ -151,11 +170,17 @@ function SetupStore() {
         {!errors.whatsapp && whatsapp.length === 9 && (
           <p style={{ color: '#4a4', fontSize: '12px', margin: '4px 0 16px' }}>✓ Number looks good</p>
         )}
-        {!errors.whatsapp && whatsapp.length === 0 && <div style={{ marginBottom: '16px' }} />}
+        {!errors.whatsapp && whatsapp.length === 0 && <div style={{ marginBottom: '8px' }} />}
 
-        <button onClick={handleSubmit} disabled={loading}
+        <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Logo (optional)</label>
+        <div style={{ margin: '8px 0 12px' }}>
+          <input type="file" accept="image/*" onChange={e => { const f = e.target.files?.[0]; if (f) { setLogoFile(f); setLogoPreview(URL.createObjectURL(f)) } }} />
+        </div>
+        {logoPreview && <div style={{ marginBottom: '12px' }}><img src={logoPreview} alt="logo preview" style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 8 }} /></div>}
+
+        <button onClick={handleSubmit} disabled={loading || uploadingLogo}
           style={{ width: '100%', padding: '14px', background: loading ? '#999' : '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer', marginTop: '8px' }}>
-          {loading ? 'Creating...' : 'Create My Store'}
+          {loading || uploadingLogo ? 'Creating...' : 'Create My Store'}
         </button>
       </div>
     </div>
