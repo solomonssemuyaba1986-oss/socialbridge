@@ -8,6 +8,9 @@ function EditStore() {
   const [businessName, setBusinessName] = useState('')
   const [bio, setBio] = useState('')
   const [whatsapp, setWhatsapp] = useState('')
+  const [email, setEmail] = useState('')
+  const [instagram, setInstagram] = useState('')
+  const [tiktok, setTiktok] = useState('')
   const [logoUrl, setLogoUrl] = useState('')
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
@@ -25,6 +28,9 @@ function EditStore() {
           setBusinessName(data.businessName || '')
           setBio(data.bio || '')
           setWhatsapp((data.whatsapp || '').replace(/^256/, ''))
+          setEmail(data.email || '')
+          setInstagram((data.instagram || '').replace(/^@+/, ''))
+          setTiktok((data.tiktok || '').replace(/^@+/, ''))
           setLogoUrl(data.logoUrl || '')
         }
       } catch (err) {
@@ -104,6 +110,9 @@ function EditStore() {
         businessName: businessName.trim(),
         bio: bio.trim(),
         whatsapp: fullNumber,
+        email: email.trim(),
+        instagram: instagram.trim().replace(/^@+/, ''),
+        tiktok: tiktok.trim().replace(/^@+/, ''),
         logoUrl: finalLogoUrl,
       })
       navigate('/dashboard')
@@ -126,6 +135,15 @@ function EditStore() {
 
         <label>WhatsApp (local)</label>
         <input value={whatsapp} onChange={e => setWhatsapp(e.target.value.replace(/\D/g, '').slice(0,9))} placeholder="771234567" style={{ width: '100%', padding: 8, marginBottom: 8 }} />
+
+        <label>Email (optional)</label>
+        <input value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" style={{ width: '100%', padding: 8, marginBottom: 8 }} />
+
+        <label>Instagram username</label>
+        <input value={instagram} onChange={e => setInstagram(e.target.value.replace(/^@+/, ''))} placeholder="yourhandle" style={{ width: '100%', padding: 8, marginBottom: 8 }} />
+
+        <label>TikTok username</label>
+        <input value={tiktok} onChange={e => setTiktok(e.target.value.replace(/^@+/, ''))} placeholder="yourhandle" style={{ width: '100%', padding: 8, marginBottom: 8 }} />
 
         <label>Logo (optional)</label>
         <div style={{ marginBottom: 8 }}>
