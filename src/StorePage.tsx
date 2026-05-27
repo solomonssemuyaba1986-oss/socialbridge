@@ -117,13 +117,7 @@ function ProductCard({ p, isOwner, sellerId, sellerSlug, sellerName, onOrder, on
   }
 
   const handleShare = async () => {
-    if (!p.imageUrl) {
-      alert('No product image available to share.')
-      return
-    }
-
-    if (!navigator.share) {
-      alert('Image sharing is not available on this device yet.')
+    if (!p.imageUrl || !navigator.share) {
       return
     }
 
@@ -134,13 +128,9 @@ function ProductCard({ p, isOwner, sellerId, sellerSlug, sellerName, onOrder, on
 
       if ((navigator as any).canShare && (navigator as any).canShare({ files: [file] })) {
         await (navigator as any).share({ title: p.name, files: [file] })
-        return
       }
-
-      alert('This browser does not support sharing images yet.')
     } catch (err) {
       console.error('Share failed', err)
-      alert('Could not share the image.')
     }
   }
 
