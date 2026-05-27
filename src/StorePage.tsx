@@ -127,7 +127,7 @@ function ProductCard({ p, isOwner, sellerId, sellerSlug, sellerName, onOrder, on
       const file = new File([blob], 'product.jpg', { type: blob.type || 'image/jpeg' })
 
       if ((navigator as any).canShare && (navigator as any).canShare({ files: [file] })) {
-        await (navigator as any).share({ title: p.name, files: [file] })
+        await (navigator as any).share({ files: [file] })
       }
     } catch (err) {
       console.error('Share failed', err)
