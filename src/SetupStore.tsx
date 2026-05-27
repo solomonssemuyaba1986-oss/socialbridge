@@ -8,6 +8,7 @@ interface SetupFormErrors {
   businessName?: string
   bio?: string
   whatsapp?: string
+  email?: string
   submit?: string
 }
 
@@ -15,6 +16,9 @@ function SetupStore() {
   const [businessName, setBusinessName] = useState('')
   const [bio, setBio] = useState('')
   const [whatsapp, setWhatsapp] = useState('')
+  const [email, setEmail] = useState(auth.currentUser?.email || '')
+  const [instagram, setInstagram] = useState('')
+  const [tiktok, setTiktok] = useState('')
   const [errors, setErrors] = useState<SetupFormErrors>({})
   const [loading, setLoading] = useState(false)
   const [logoFile, setLogoFile] = useState<File | null>(null)
@@ -89,6 +93,9 @@ function SetupStore() {
     } else if (!/^7\d{8}$/.test(whatsapp)) {
       newErrors.whatsapp = 'Uganda number must start with 7'
     }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sanitizeInput(email))) {
+      newErrors.email = 'Enter a valid email address'
+    }
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -113,6 +120,9 @@ function SetupStore() {
     try {
       const cleanedName = sanitizeInput(businessName)
       const cleanedBio = sanitizeInput(bio, 500)
+      const cleanedEmail = email ? sanitizeInput(email) : ''
+      const cleanedInstagram = instagram ? sanitizeInput(instagram, 50).replace(/^@+/, '') : ''
+      const cleanedTiktok = tiktok ? sanitizeInput(tiktok, 50).replace(/^@+/, '') : ''
       const slug = await generateUniqueSlug(cleanedName)
       const fullNumber = `256${whatsapp}`
       let finalLogoUrl = user.photoURL || ''
@@ -156,7 +166,9 @@ function SetupStore() {
         whatsapp: fullNumber,
         logoUrl: finalLogoUrl,
         slug,
-        email: user.email,
+        email: cleanedEmail || user.email || '',
+        instagram: cleanedInstagram,
+        tiktok: cleanedTiktok,
         createdAt: new Date(),
       })
       navigate('/dashboard')
@@ -217,6 +229,25 @@ function SetupStore() {
           <p style={{ color: '#4a4', fontSize: '12px', margin: '4px 0 16px' }}>✓ Number looks good</p>
         )}
         {!errors.whatsapp && whatsapp.length === 0 && <div style={{ marginBottom: '8px' }} />}
+
+        <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Email</label>
+        <input value={email} onChange={e => setEmail(e.target.value)}
+          placeholder="you@example.com"
+          style={{ width: '100%', padding: '12px', borderRadius: '8px', border: errors.email ? '2px solid #c33' : '1px solid #ddd', marginTop: '8px', marginBottom: '4px', fontSize: '15px', boxSizing: 'border-box' }} />
+        {errors.email && <p style={{ color: '#c33', fontSize: '12px', margin: '4px 0 16px' }}>{errors.email}</p>}
+        {!errors.email && <div style={{ marginBottom: '16px' }} />}
+
+        <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Instagram username</label>
+        <input value={instagram} onChange={e => setInstagram(e.target.value)}
+          placeholder="yourhandle"
+          style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', marginTop: '8px', marginBottom: '4px', fontSize: '15px', boxSizing: 'border-box' }} />
+        <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 16px' }}>Add your Instagram handle without the @</p>
+
+        <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>TikTok username</label>
+        <input value={tiktok} onChange={e => setTiktok(e.target.value)}
+          placeholder="yourhandle"
+          style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', marginTop: '8px', marginBottom: '4px', fontSize: '15px', boxSizing: 'border-box' }} />
+        <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 16px' }}>Add your TikTok handle without the @</p>
 
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Logo (optional)</label>
         <div style={{ margin: '8px 0 12px' }}>
