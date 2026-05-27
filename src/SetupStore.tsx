@@ -20,7 +20,6 @@ function SetupStore() {
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [logoPreview, setLogoPreview] = useState('')
   const [uploadingLogo, setUploadingLogo] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(0)
   const navigate = useNavigate()
 
   const sanitizeInput = (input: string, maxLength: number = 100): string => {
