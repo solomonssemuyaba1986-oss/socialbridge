@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { auth, db } from './firebase'
 import { doc, getDoc, updateDoc } from 'firebase/firestore'
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
 
 function EditStore() {
   const [businessName, setBusinessName] = useState('')
@@ -47,10 +47,56 @@ function EditStore() {
     try {
       let finalLogoUrl = logoUrl || ''
       if (logoFile) {
-        const storage = getStorage()
-        const storageRef = ref(storage, `sellers/${user.uid}/logo.jpg`)
-        await uploadBytes(storageRef, logoFile)
-        finalLogoUrl = await getDownloadURL(storageRef)
+        try {
+          // resize before upload
+          const resizeImage = (file: File, maxWidth = 1024, quality = 0.8): Promise<Blob> => {
+            return new Promise((resolve, reject) => {
+              const img = new Image()
+              img.onload = () => {
+                try {
+                  const scale = Math.min(1, maxWidth / img.width)
+                  const w = Math.round(img.width * scale)
+                  const h = Math.round(img.height * scale)
+                  const canvas = document.createElement('canvas')
+                  canvas.width = w
+                  canvas.height = h
+                  const ctx = canvas.getContext('2d')!
+                  ctx.drawImage(img, 0, 0, w, h)
+                  canvas.toBlob((blob) => {
+                    if (blob) resolve(blob)
+                    else reject(new Error('Image resize failed'))
+                  }, 'image/jpeg', quality)
+                } catch (err) {
+                  reject(err)
+                }
+              }
+              img.onerror = (e) => reject(e)
+              img.src = URL.createObjectURL(file)
+            })
+          }
+
+          const processedBlob = await resizeImage(logoFile, 1024, 0.8)
+          const processedFile = new File([processedBlob], 'logo.jpg', { type: 'image/jpeg' })
+          const storage = getStorage()
+          const storageRef = ref(storage, `sellers/${user.uid}/logo.jpg`)
+          const uploadTask = uploadBytesResumable(storageRef, processedFile)
+
+          await new Promise<void>((resolve, reject) => {
+            uploadTask.on('state_changed', (snapshot) => {
+              // could update progress UI here
+            }, (error) => {
+              console.error('Upload failed', error)
+              reject(error)
+            }, async () => {
+              try {
+                finalLogoUrl = await getDownloadURL(uploadTask.snapshot.ref)
+                resolve()
+              } catch (e) { reject(e) }
+            })
+          })
+        } catch (err) {
+          console.error('Logo upload failed', err)
+        }
       }
 
       const fullNumber = whatsapp ? `256${whatsapp}` : ''
