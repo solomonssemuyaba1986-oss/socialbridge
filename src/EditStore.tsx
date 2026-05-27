@@ -82,7 +82,7 @@ function EditStore() {
           const uploadTask = uploadBytesResumable(storageRef, processedFile)
 
           await new Promise<void>((resolve, reject) => {
-            uploadTask.on('state_changed', (snapshot) => {
+            uploadTask.on('state_changed', () => {
               // could update progress UI here
             }, (error) => {
               console.error('Upload failed', error)
