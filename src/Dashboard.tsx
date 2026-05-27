@@ -273,10 +273,16 @@ function Dashboard() {
         {/* Products */}
         <div className="rt-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
   <h2 style={{ fontSize: '18px', fontWeight: '700', margin: 0 }}>Products</h2>
-  <button onClick={() => navigate('/bulk-upload')}
-    style={{ background: green, color: '#000', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>
-    + Bulk Upload
-  </button>
+  <div style={{ display: 'flex', gap: '8px' }}>
+    <button onClick={() => navigate('/bulk-upload')}
+      style={{ background: green, color: '#000', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>
+      + Bulk Upload
+    </button>
+    <button onClick={() => navigate('/edit-store')}
+      style={{ background: '#444', color: '#fff', border: 'none', padding: '10px 14px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>
+      Edit Store
+    </button>
+  </div>
 </div>
         {products.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px', background: '#1a1a1a', borderRadius: '12px', border: '1px dashed #333' }}>
