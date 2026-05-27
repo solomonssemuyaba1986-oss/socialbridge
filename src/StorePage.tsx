@@ -425,12 +425,8 @@ Quantity: ${quantity}
 Total: UGX ${Number(orderProduct.price.replace(/,/g, '')) * Number(quantity)}
 Delivery Area: ${deliveryArea}
 
-Order ID: #${orderId}
+Order ID: #${orderId}`
 
-Reply with:
-1️⃣ Confirm Order
-2️⃣ Out of Stock
-3️⃣ Need More Details`
 
   const whatsappNumber = seller.whatsapp || ''
   setOrderSuccess(true)
