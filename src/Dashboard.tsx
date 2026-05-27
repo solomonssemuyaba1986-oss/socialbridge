@@ -46,7 +46,12 @@ function Dashboard() {
 
       if ((navigator as any).canShare && (navigator as any).canShare({ files: [file] })) {
         await (navigator as any).share({ files: [file] })
+        return
       }
+
+      const blobUrl = URL.createObjectURL(blob)
+      window.open(blobUrl, '_blank')
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 15000)
     } catch (err) {
       console.error('Share failed', err)
     }
