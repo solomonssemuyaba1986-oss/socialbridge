@@ -28,7 +28,7 @@ const green = '#adff2f'
 const CLOUD_NAME = 'dzudmmuxg'
 const UPLOAD_PRESET = 'p2z65zrv'
 
-function ProductCard({ p, isOwner, sellerId, sellerSlug, sellerName, onOrder, onRefresh }: any) {
+function ProductCard({ p, isOwner, sellerId, onOrder, onRefresh }: any) {
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(p.name)
   const [editPrice, setEditPrice] = useState(p.price)
