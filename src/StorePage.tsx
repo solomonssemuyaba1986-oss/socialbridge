@@ -128,7 +128,13 @@ function ProductCard({ p, isOwner, sellerId, sellerSlug, sellerName, onOrder, on
 
       if ((navigator as any).canShare && (navigator as any).canShare({ files: [file] })) {
         await (navigator as any).share({ files: [file] })
+        return
       }
+
+      // Fallback: open image in a new tab so users can long-press/share from the app
+      const blobUrl = URL.createObjectURL(blob)
+      window.open(blobUrl, '_blank')
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 15000)
     } catch (err) {
       console.error('Share failed', err)
     }
