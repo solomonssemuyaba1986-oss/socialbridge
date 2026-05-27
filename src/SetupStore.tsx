@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { auth, db } from './firebase'
 import { collection, doc, getDocs, query, setDoc, where } from 'firebase/firestore'
 import { useNavigate } from 'react-router-dom'
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { getStorage, ref, getDownloadURL } from 'firebase/storage'
 
 interface SetupFormErrors {
   businessName?: string
@@ -20,6 +20,7 @@ function SetupStore() {
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [logoPreview, setLogoPreview] = useState('')
   const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const navigate = useNavigate()
 
   const sanitizeInput = (input: string, maxLength: number = 100): string => {
@@ -44,6 +45,32 @@ function SetupStore() {
       slug = `${baseSlug}-${suffix}`
       suffix += 1
     }
+  }
+
+  const resizeImage = (file: File, maxWidth = 1024, quality = 0.8): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => {
+        try {
+          const scale = Math.min(1, maxWidth / img.width)
+          const w = Math.round(img.width * scale)
+          const h = Math.round(img.height * scale)
+          const canvas = document.createElement('canvas')
+          canvas.width = w
+          canvas.height = h
+          const ctx = canvas.getContext('2d')!
+          ctx.drawImage(img, 0, 0, w, h)
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob)
+            else reject(new Error('Image resize failed'))
+          }, 'image/jpeg', quality)
+        } catch (err) {
+          reject(err)
+        }
+      }
+      img.onerror = (e) => reject(e)
+      img.src = URL.createObjectURL(file)
+    })
   }
 
   const validateForm = (): boolean => {
@@ -93,10 +120,30 @@ function SetupStore() {
       if (logoFile) {
         try {
           setUploadingLogo(true)
+          const processedBlob = await resizeImage(logoFile, 1024, 0.8)
+          const processedFile = new File([processedBlob], 'logo.jpg', { type: 'image/jpeg' })
           const storage = getStorage()
           const storageRef = ref(storage, `sellers/${user.uid}/logo.jpg`)
-          await uploadBytes(storageRef, logoFile)
-          finalLogoUrl = await getDownloadURL(storageRef)
+          const uploadTask = (await import('firebase/storage')).uploadBytesResumable(storageRef, processedFile)
+
+          await new Promise<void>((resolve, reject) => {
+            uploadTask.on('state_changed', () => {
+              // progress available if needed
+            }, (error: any) => {
+              console.error('Upload error', error)
+              setUploadingLogo(false)
+              reject(error)
+            }, async () => {
+              try {
+                finalLogoUrl = await getDownloadURL(uploadTask.snapshot.ref)
+                resolve()
+              } catch (e) {
+                reject(e)
+              } finally {
+                setUploadingLogo(false)
+              }
+            })
+          })
         } catch (err) {
           console.error('Logo upload failed', err)
         } finally {
