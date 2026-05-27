@@ -29,28 +29,30 @@ function Dashboard() {
   const green = '#adff2f'
 
   const handleShareProduct = async (product: Product) => {
-    const storeLink = `${window.location.origin}/store/${seller?.slug}?productId=${product.id}`
-    const storeHandle = seller?.businessName ? `@${seller.businessName.replace(/\s+/g, '')}` : ''
-    const shareText = `${product.name}\nUGX ${product.price}\n\nAvailable now\n${storeHandle}\n\n🟢 Order instantly\n${storeLink}\n\nPowered by Ratchet`
+    if (!product.imageUrl) {
+      alert('No product image available to share.')
+      return
+    }
+
+    if (!navigator.share) {
+      alert('Image sharing is not available on this device yet.')
+      return
+    }
+
     try {
-      if (navigator.share) {
-        await navigator.share({
-          title: product.name,
-          text: shareText,
-          url: storeLink
-        })
+      const res = await fetch(product.imageUrl)
+      const blob = await res.blob()
+      const file = new File([blob], 'product.jpg', { type: blob.type || 'image/jpeg' })
+
+      if ((navigator as any).canShare && (navigator as any).canShare({ files: [file] })) {
+        await (navigator as any).share({ title: product.name, files: [file] })
         return
       }
-      await navigator.clipboard.writeText(shareText)
-      alert('Product share copy ready. Paste it into your status or chat.')
+
+      alert('This browser does not support sharing images yet.')
     } catch (err) {
       console.error('Share failed', err)
-      try {
-        await navigator.clipboard.writeText(shareText)
-        alert('Could not open share sheet — text copied instead')
-      } catch {
-        alert('Could not share. Please copy your store link manually.')
-      }
+      alert('Could not share the image.')
     }
   }
 
