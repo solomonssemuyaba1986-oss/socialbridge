@@ -13,6 +13,7 @@ import BulkUpload from './BulkUpload.tsx'
 import Inbox from './Inbox.tsx'
 import OrderHistory from './OrderHistory.tsx'
 import EditStore from './EditStore.tsx'
+import TopNav from './TopNav.tsx'
 
 function BulkUploadWrapper() {
   const navigate = useNavigate()
@@ -51,7 +52,9 @@ function App() {
   )
 
   return (
-    <Routes>
+    <>
+      <TopNav />
+      <Routes>
       <Route path="/" element={
         !signedIn ? <SignIn /> :
         slug ? <Navigate to="/dashboard" /> :
@@ -66,7 +69,8 @@ function App() {
       <Route path="/inbox" element={signedIn ? <Inbox /> : <Navigate to="/" />} />
       <Route path="/orders" element={signedIn ? <OrderHistory /> : <Navigate to="/" />} />
       <Route path="/edit-store" element={signedIn ? <EditStore /> : <Navigate to="/" />} />
-    </Routes>
+      </Routes>
+    </>
   )
 }
 
