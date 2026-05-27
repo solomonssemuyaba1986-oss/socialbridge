@@ -12,6 +12,9 @@ interface Seller {
   logoUrl: string
   slug: string
   whatsapp?: string
+  email?: string
+  instagram?: string
+  tiktok?: string
 }
 
 interface Product {
@@ -470,6 +473,23 @@ Order ID: #${orderId}`
         <p style={{ margin: '0 0 16px', color: '#888', fontSize: '15px', maxWidth: '360px', marginInline: 'auto' }}>
           {seller.bio}
         </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '10px', marginBottom: '16px' }}>
+          {seller.email && (
+            <a href={`mailto:${seller.email}`} style={{ color: '#fff', fontSize: '13px', textDecoration: 'none', background: '#111', padding: '8px 12px', borderRadius: '999px', border: '1px solid #333' }}>
+              ✉️ {seller.email}
+            </a>
+          )}
+          {seller.instagram && (
+            <a href={`https://instagram.com/${seller.instagram}`} target="_blank" rel="noreferrer" style={{ color: '#fff', fontSize: '13px', textDecoration: 'none', background: '#111', padding: '8px 12px', borderRadius: '999px', border: '1px solid #333' }}>
+              📸 @{seller.instagram}
+            </a>
+          )}
+          {seller.tiktok && (
+            <a href={`https://www.tiktok.com/@${seller.tiktok}`} target="_blank" rel="noreferrer" style={{ color: '#fff', fontSize: '13px', textDecoration: 'none', background: '#111', padding: '8px 12px', borderRadius: '999px', border: '1px solid #333' }}>
+              🎵 @{seller.tiktok}
+            </a>
+          )}
+        </div>
         {isOwner && (
           <button onClick={() => { auth.signOut(); window.location.href = '/' }}
             style={{ background: 'transparent', border: '1px solid #333', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', color: '#555', cursor: 'pointer' }}>
