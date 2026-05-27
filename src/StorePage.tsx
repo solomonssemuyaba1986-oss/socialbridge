@@ -117,37 +117,30 @@ function ProductCard({ p, isOwner, sellerId, sellerSlug, sellerName, onOrder, on
   }
 
   const handleShare = async () => {
-    try {
-      const storeUrl = `${window.location.origin}/store/${sellerSlug}?productId=${p.id}`
-      const storeHandle = sellerName ? `@${sellerName.replace(/\s+/g, '')}` : ''
-      const shareText = `${p.name}\nUGX ${p.price}\n\nAvailable now\n${storeHandle}\n\n🟢 Order instantly\n${storeUrl}\n\nPowered by Ratchet`
+    if (!p.imageUrl) {
+      alert('No product image available to share.')
+      return
+    }
 
-      if (navigator.share) {
-        try {
-          const res = await fetch(p.imageUrl || '')
-          const blob = await res.blob()
-          const file = new File([blob], 'image.jpg', { type: blob.type || 'image/jpeg' })
-          if ((navigator as any).canShare && (navigator as any).canShare({ files: [file] })) {
-            await (navigator as any).share({ title: p.name, text: shareText, files: [file], url: storeUrl })
-            return
-          }
-        } catch (err) {
-          // ignore image share errors
-        }
-        await navigator.share({ title: p.name, text: shareText, url: storeUrl })
+    if (!navigator.share) {
+      alert('Image sharing is not available on this device yet.')
+      return
+    }
+
+    try {
+      const res = await fetch(p.imageUrl)
+      const blob = await res.blob()
+      const file = new File([blob], 'product.jpg', { type: blob.type || 'image/jpeg' })
+
+      if ((navigator as any).canShare && (navigator as any).canShare({ files: [file] })) {
+        await (navigator as any).share({ title: p.name, files: [file] })
         return
       }
 
-      await navigator.clipboard.writeText(shareText)
-      alert('Product share copy ready. Paste it into your status or chat.')
+      alert('This browser does not support sharing images yet.')
     } catch (err) {
       console.error('Share failed', err)
-      try {
-        await navigator.clipboard.writeText(`${window.location.origin}/store/${sellerSlug}`)
-      } catch (copyErr) {
-        console.error('Clipboard fallback failed', copyErr)
-      }
-      alert('Could not share — link copied instead')
+      alert('Could not share the image.')
     }
   }
 
