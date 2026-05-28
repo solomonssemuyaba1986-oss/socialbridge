@@ -25,6 +25,8 @@ interface Product {
   imageUrl: string
   category?: string
   subCategory?: string
+  outOfStock?: boolean
+  orderCount?: number
 }
 
 const green = '#adff2f'
@@ -402,6 +404,13 @@ const handleOrder = async () => {
 
   await import('firebase/firestore').then(({ updateDoc, doc }) =>
     updateDoc(doc(db, 'sellers', sellerId, 'orders', orderRef.id), { orderId })
+  )
+
+  // Increment product orderCount
+  await import('firebase/firestore').then(({ updateDoc, doc }) =>
+    updateDoc(doc(db, 'sellers', sellerId, 'products', orderProduct.id), { 
+      orderCount: (orderProduct.orderCount || 0) + 1 
+    })
   )
 
   if (auth.currentUser?.uid === sellerId) {
