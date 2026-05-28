@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
-import { collection, query, where, getDocs, addDoc, doc, runTransaction } from 'firebase/firestore'
+import { collection, query, where, getDocs, addDoc } from 'firebase/firestore'
 import { db, auth } from './firebase'
 import { suppressNextSellerOrderAlert } from './orderAlerts.ts'
 import { onAuthStateChanged } from 'firebase/auth'
@@ -25,8 +25,6 @@ interface Product {
   imageUrl: string
   category?: string
   subCategory?: string
-  stock?: number
-  outOfStock?: boolean
 }
 
 const green = '#adff2f'
@@ -38,10 +36,9 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onRefresh }: any) {
   const [editName, setEditName] = useState(p.name)
   const [editPrice, setEditPrice] = useState(p.price)
   const [editDescription, setEditDescription] = useState(p.description)
-  const [editStock, setEditStock] = useState<number>(p.stock ?? 0)
   const [editImages, setEditImages] = useState<string[]>(p.images || [p.imageUrl].filter(Boolean))
   const [uploadingEdit, setUploadingEdit] = useState(false)
-  const [isOutOfStock, setIsOutOfStock] = useState(p.outOfStock || (p.stock ?? 0) <= 0)
+  const [isOutOfStock, setIsOutOfStock] = useState(p.outOfStock || false)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
 
   const images = p.images?.length > 0 ? p.images : [p.imageUrl].filter(Boolean)
@@ -101,7 +98,6 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onRefresh }: any) {
       name: editName,
       price: editPrice,
       description: editDescription,
-      stock: editStock,
       imageUrl: editImages[0] || p.imageUrl,
       images: editImages
     })
@@ -217,8 +213,6 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onRefresh }: any) {
               style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #333', background: '#111', color: '#fff', fontSize: '13px', marginBottom: '8px', boxSizing: 'border-box' }} />
             <input value={editPrice} onChange={e => setEditPrice(e.target.value)}
               style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #333', background: '#111', color: '#fff', fontSize: '13px', marginBottom: '8px', boxSizing: 'border-box' }} />
-            <input type="number" min="0" value={editStock} onChange={e => setEditStock(Math.max(0, Number(e.target.value || 0)))}
-              style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #333', background: '#111', color: '#fff', fontSize: '13px', marginBottom: '8px', boxSizing: 'border-box' }} placeholder="Stock quantity" />
             <input value={editDescription} onChange={e => setEditDescription(e.target.value)}
               style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #333', background: '#111', color: '#fff', fontSize: '13px', marginBottom: '8px', boxSizing: 'border-box' }} />
             <button onClick={handleSave} disabled={uploadingEdit}
@@ -235,9 +229,6 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onRefresh }: any) {
             <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: isOutOfStock ? '#666' : '#fff' }}>{p.name}</p>
             <p style={{ margin: '0 0 8px', color: '#555', fontSize: '12px' }}>{p.description}</p>
             <p style={{ margin: '0 0 12px', fontWeight: '800', color: isOutOfStock ? '#555' : green, fontSize: '15px' }}>UGX {p.price}</p>
-            <p style={{ margin: '0 0 10px', fontSize: '12px', fontWeight: '700', color: isOutOfStock ? '#ff5555' : p.stock && p.stock <= 5 ? '#ffd700' : '#4ade80' }}>
-              {isOutOfStock ? 'Sold out' : p.stock && p.stock <= 5 ? `Only ${p.stock} left` : 'In stock'}
-            </p>
 
             {isOwner && (
               <>
@@ -274,13 +265,11 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onRefresh }: any) {
                 </div>
               ) : (
                 <div>
-                  <button onClick={onOrder}
-                    style={{ width: '100%', padding: '10px', background: p.stock && p.stock > 0 ? green : '#444', color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: p.stock && p.stock > 0 ? 'pointer' : 'not-allowed', fontSize: '13px' }}
-                    disabled={!p.stock || p.stock <= 0}
-                  >
-                    {p.stock && p.stock > 0 ? 'Order Now' : 'Sold out'}
-                  </button>
-                </div>
+                <button onClick={onOrder}
+                  style={{ width: '100%', padding: '10px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>
+                  Order Now
+                </button>
+              </div>
               )
             )}
           </>
@@ -308,13 +297,11 @@ function StorePage() {
   const [imageUrl, setImageUrl] = useState('')
   const [category, setCategory] = useState('')
   const [subCategory, setSubCategory] = useState('')
-  const [stock, setStock] = useState('')
 
   const [orderProduct, setOrderProduct] = useState<Product | null>(null)
   const [buyerName, setBuyerName] = useState('')
   const [quantity, setQuantity] = useState('1')
   const [deliveryArea, setDeliveryArea] = useState('')
-  const visibleProducts = isOwner ? products : products.filter(p => (p.stock ?? 0) > 0)
 
   useEffect(() => {
     const fetchSeller = async () => {
@@ -346,7 +333,7 @@ function StorePage() {
   const fetchProducts = async (sid: string) => {
     const q = query(collection(db, 'sellers', sid, 'products'))
     const snapshot = await getDocs(q)
-    const list = snapshot.docs.map(d => ({ id: d.id, stock: d.data().stock ?? 0, ...d.data() })) as Product[]
+    const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Product[]
     setProducts(list)
   }
 
@@ -397,17 +384,10 @@ const handleImageUpload = async (file: File) => {
     if (!imageUrl) return alert('Please upload a product image')
     if (!category) return alert('Please select a category')
     if (!subCategory) return alert('Please select a subcategory')
-    const stockCount = Math.max(0, Number(stock) || 1)
     await addDoc(collection(db, 'sellers', sellerId, 'products'), {
-      name,
-      price,
-      description,
-      imageUrl,
-      category,
-      subCategory,
-      stock: stockCount
+      name, price, description, imageUrl, category, subCategory
     })
-    setName(''); setPrice(''); setDescription(''); setImageUrl(''); setCategory(''); setSubCategory(''); setStock('')
+    setName(''); setPrice(''); setDescription(''); setImageUrl(''); setCategory(''); setSubCategory('')
     setShowForm(false)
     fetchProducts(sellerId)
   }
@@ -553,9 +533,6 @@ Order ID: #${orderId}`
                 ))}
               </select>
             )}
-            <input type="number" min="0" value={stock} onChange={e => setStock(e.target.value.replace(/[^0-9]/g, ''))}
-              placeholder="Stock quantity"
-              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
             <textarea placeholder="Description" value={description} onChange={e => setDescription(e.target.value)}
               style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'none' }} rows={3} />
             <div style={{ marginBottom: '16px' }}>
