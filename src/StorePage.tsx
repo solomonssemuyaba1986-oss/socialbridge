@@ -295,6 +295,7 @@ function StorePage() {
   const [buyerName, setBuyerName] = useState('')
   const [quantity, setQuantity] = useState('1')
   const [deliveryArea, setDeliveryArea] = useState('')
+  const [message, setMessage] = useState('')
 
   useEffect(() => {
     const fetchSeller = async () => {
@@ -444,7 +445,7 @@ const handleOrder = async () => {
     suppressNextSellerOrderAlert()
   }
 
-  const message =
+  const whatsappText =
 `🟢 NEW ORDER — Rachett
 
 Customer: ${buyerName}
@@ -453,15 +454,16 @@ Price: UGX ${orderProduct.price}
 Quantity: ${quantity}
 Total: UGX ${Number(orderProduct.price.replace(/,/g, '')) * Number(quantity)}
 Delivery Area: ${deliveryArea}
-
+${message ? `Message: ${message}
+` : ''}
 Order ID: #${orderId}`
 
 
   const whatsappNumber = seller.whatsapp || ''
   setOrderSuccess(true)
   setTimeout(() => {
-    window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`, '_blank')
-    setBuyerName(''); setQuantity('1'); setDeliveryArea('')
+    window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappText)}`, '_blank')
+    setBuyerName(''); setQuantity('1'); setDeliveryArea(''); setMessage('')
     setOrderProduct(null)
     setOrderSuccess(false)
   }, 1500)
@@ -647,6 +649,8 @@ Order ID: #${orderId}`
                   style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '24px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
                 <input placeholder="Delivery area e.g. Nakawa, Kampala" value={deliveryArea} onChange={e => setDeliveryArea(e.target.value)}
                   style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '24px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+                <textarea placeholder="Write a message to the seller (optional)" value={message} onChange={e => setMessage(e.target.value)}
+                  style={{ width: '100%', minHeight: '100px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '24px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
                 <button onClick={handleOrder}
                   style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
                   Send Order on WhatsApp
