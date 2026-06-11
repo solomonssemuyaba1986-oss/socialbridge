@@ -43,6 +43,7 @@ function BrowsePage() {
     const fetchAll = async () => {
       try {
         const sellersSnap = await getDocs(collection(db, 'sellers'))
+        console.log('BrowsePage: seller document count', sellersSnap.size)
         const allProducts: Product[] = []
         
         // Limit to first 50 sellers for MVP performance
@@ -51,7 +52,9 @@ function BrowsePage() {
         for (const sellerDoc of limitedSellers) {
           try {
             const sellerData = sellerDoc.data()
+            console.log('BrowsePage: fetching products for seller', sellerDoc.id)
             const productsSnap = await getDocs(query(collection(db, 'sellers', sellerDoc.id, 'products')))
+            console.log('BrowsePage: seller', sellerDoc.id, 'product count', productsSnap.size)
             productsSnap.docs.forEach(p => {
               const productData = p.data() as Product
               allProducts.push({
