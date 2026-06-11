@@ -31,6 +31,7 @@ function BrowsePage() {
   const [sortBy, setSortBy] = useState<'relevance' | 'price-asc' | 'price-desc' | 'newest' | 'popular'>('relevance')
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 10000000])
   const [hideOutOfStock, setHideOutOfStock] = useState(true)
+  const [errorMsg, setErrorMsg] = useState<string>('')
   const navigate = useNavigate()
 
   // Popular products fallback (top 5 by order count)
@@ -69,9 +70,14 @@ function BrowsePage() {
         
         setProducts(allProducts)
         setFiltered(allProducts)
-      } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : 'Failed to load products'
-        console.error('Browse page error:', errorMsg, err)
+      } catch (err: any) {
+        const errorText = err instanceof Error ? err.message : 'Failed to load products'
+        console.error('Browse page error:', errorText, err)
+        if (err?.code === 'permission-denied') {
+          setErrorMsg('Permission denied when loading products. Check Firestore rules and authentication.')
+        } else {
+          setErrorMsg('Failed to load products. Check network or Firestore permissions.')
+        }
       } finally {
         setLoading(false)
       }
@@ -168,6 +174,14 @@ function BrowsePage() {
           />
         </div>
       </div>
+
+      {errorMsg && (
+        <div style={{ padding: '12px 24px' }}>
+          <div style={{ background: '#fee', border: '1px solid #fcc', color: '#c33', padding: '12px', borderRadius: '8px', maxWidth: '900px', margin: '0 auto' }}>
+            {errorMsg}
+          </div>
+        </div>
+      )}
 
       {/* Sort, Price Range, Out-of-Stock Controls */}
       <div style={{ padding: '16px 24px', borderBottom: '1px solid #1a1a1a', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', fontSize: '13px' }}>
