@@ -1,4 +1,4 @@
-import { signInWithPopup } from 'firebase/auth'
+import { signInWithPopup, signInWithRedirect } from 'firebase/auth'
 import { auth, googleProvider } from './firebase'
 import { useNavigate } from 'react-router-dom'
 
@@ -10,9 +10,18 @@ function SignIn() {
     try {
       await signInWithPopup(auth, googleProvider)
       navigate('/onboarding')
-    } catch (error) {
-      console.error(error)
-      alert('Sign in failed. Try again.')
+    } catch (error: any) {
+      console.error('Google sign-in error:', error)
+      if (error?.code === 'auth/popup-blocked' || error?.code === 'auth/operation-not-supported-in-this-environment') {
+        try {
+          await signInWithRedirect(auth, googleProvider)
+        } catch (redirectError) {
+          console.error('Redirect fallback failed:', redirectError)
+          alert('Opps! Sign in failed. Please allow popups or try again in a browser tab.')
+        }
+      } else {
+        alert('Opps!Try again.')
+      }
     }
   }
 
