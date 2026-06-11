@@ -282,6 +282,7 @@ function StorePage() {
   const [sellerId, setSellerId] = useState<string>('')
   const [orderSuccess, setOrderSuccess] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string>('')
 
   const [name, setName] = useState('')
   const [price, setPrice] = useState('')
@@ -297,20 +298,31 @@ function StorePage() {
 
   useEffect(() => {
     const fetchSeller = async () => {
-      const q = query(collection(db, 'sellers'), where('slug', '==', slug))
-      const snapshot = await getDocs(q)
-      if (!snapshot.empty) {
-        const docData = snapshot.docs[0]
-        setSeller(docData.data() as Seller)
-        setSellerId(docData.id)
-        fetchProducts(docData.id)
-        onAuthStateChanged(auth, (user) => {
-          if (user && user.uid === docData.id) setIsOwner(true)
-        })
+      try {
+        const q = query(collection(db, 'sellers'), where('slug', '==', slug))
+        const snapshot = await getDocs(q)
+        if (!snapshot.empty) {
+          const docData = snapshot.docs[0]
+          setSeller(docData.data() as Seller)
+          setSellerId(docData.id)
+          await fetchProducts(docData.id)
+          const unsubscribe = onAuthStateChanged(auth, (user) => {
+            if (user && user.uid === docData.id) setIsOwner(true)
+          })
+          return unsubscribe
+        }
+      } catch (err) {
+        console.error('Store page load failed:', err)
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     }
-    fetchSeller()
+    const cleanupPromise = fetchSeller()
+    return () => {
+      cleanupPromise.then((unsubscribe) => {
+        if (typeof unsubscribe === 'function') unsubscribe()
+      }).catch(() => {})
+    }
   }, [slug])
 
   useEffect(() => {
@@ -323,10 +335,21 @@ function StorePage() {
   }, [productDeepLinkId, products, orderProduct])
 
   const fetchProducts = async (sid: string) => {
-    const q = query(collection(db, 'sellers', sid, 'products'))
-    const snapshot = await getDocs(q)
-    const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Product[]
-    setProducts(list)
+    try {
+      const q = query(collection(db, 'sellers', sid, 'products'))
+      const snapshot = await getDocs(q)
+      const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Product[]
+      setProducts(list)
+      setErrorMsg('')
+    } catch (err: any) {
+      console.error('Failed to load store products:', err)
+      if (err?.code === 'permission-denied') {
+        setErrorMsg('Permission denied when loading products. Check Firestore rules or authentication.')
+      } else {
+        setErrorMsg('Failed to load products. Check network or permissions.')
+      }
+      setProducts([])
+    }
   }
 
 const compressImage = (file: File): Promise<File> => {
@@ -516,6 +539,11 @@ Order ID: #${orderId}`
             </button>
           )}
         </div>
+        {errorMsg && (
+          <div style={{ background: '#fee', border: '1px solid #fcc', color: '#c33', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
+            {errorMsg}
+          </div>
+        )}
 
         {/* Add Product Form */}
         {showForm && (
