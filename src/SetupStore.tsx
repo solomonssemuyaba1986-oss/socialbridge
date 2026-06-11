@@ -174,7 +174,11 @@ function SetupStore() {
       navigate('/dashboard')
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to create store'
-      setErrors({ submit: errorMessage })
+      if ((error as any)?.code === 'permission-denied') {
+        setErrors({ submit: 'Permission denied: cannot create store. Check authentication or Firestore rules.' })
+      } else {
+        setErrors({ submit: errorMessage })
+      }
       console.error('Setup error:', error)
     } finally {
       setLoading(false)
