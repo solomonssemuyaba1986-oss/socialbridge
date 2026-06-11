@@ -301,8 +301,10 @@ function StorePage() {
       try {
         const q = query(collection(db, 'sellers'), where('slug', '==', slug))
         const snapshot = await getDocs(q)
+        console.log('StorePage: seller query count', snapshot.size, 'slug', slug)
         if (!snapshot.empty) {
           const docData = snapshot.docs[0]
+          console.log('StorePage: found seller doc', docData.id, docData.data())
           setSeller(docData.data() as Seller)
           setSellerId(docData.id)
           await fetchProducts(docData.id)
@@ -336,8 +338,10 @@ function StorePage() {
 
   const fetchProducts = async (sid: string) => {
     try {
+      console.log('StorePage: fetching products for seller', sid)
       const q = query(collection(db, 'sellers', sid, 'products'))
       const snapshot = await getDocs(q)
+      console.log('StorePage: products query result count', snapshot.size)
       const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Product[]
       setProducts(list)
       setErrorMsg('')
@@ -592,6 +596,7 @@ Order ID: #${orderId}`
         {products.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px', border: '1px dashed #222', borderRadius: '12px' }}>
             <p style={{ color: '#444', fontSize: '14px' }}>{isOwner ? 'Add your first product above' : 'No products yet'}</p>
+            {errorMsg && <p style={{ color: '#c33', fontSize: '13px', marginTop: '8px' }}>{errorMsg}</p>}
           </div>
         ) : (
           <div className="rt-products" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
