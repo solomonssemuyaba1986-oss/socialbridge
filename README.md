@@ -10,6 +10,14 @@ npm run deploy:rules
 ```
 
 This keeps the live Firestore rules in sync with the repo and prevents permission issues when the app is published.
+
+### Automatic deployment with GitHub Actions
+
+A workflow is included at `.github/workflows/deploy-firestore-rules.yml`.
+When `firestore.rules`, `firebase.json`, or `.firebaserc` changes on `main` or `master`, GitHub will automatically deploy the updated rules.
+
+To enable it, add a repository secret named `FIREBASE_TOKEN` with a Firebase CI token from `firebase login:ci`.
+
 Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
