@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { onAuthStateChanged } from 'firebase/auth'
+import { onAuthStateChanged, getRedirectResult } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
 import StorePage from './StorePage.tsx'
@@ -28,6 +28,15 @@ function App() {
   const [signedIn, setSignedIn] = useState(false)
 
   useEffect(() => {
+    // If the user was redirected after sign-in (mobile redirect fallback), finalize the redirect login.
+    (async () => {
+      try {
+        await getRedirectResult(auth)
+      } catch (err) {
+        console.warn('Redirect result error:', err)
+      }
+    })()
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       try {
         if (user) {
