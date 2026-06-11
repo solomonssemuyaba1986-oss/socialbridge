@@ -12,6 +12,7 @@ export interface SellerOrder {
   deliveryArea?: string
   orderId?: string
   status?: string
+  message?: string
   createdAt: { toDate?: () => Date } | null
   read?: boolean
 }
