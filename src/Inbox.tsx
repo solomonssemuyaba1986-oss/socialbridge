@@ -59,6 +59,7 @@ function Inbox() {
 
   const filteredOrders = orders.filter(o => {
     if (filter === 'unread') return isUnread(o)
+    if (filter === 'messages') return Boolean(o.message)
     if (filter === 'pending') return o.status === 'pending' || !o.status
     if (filter === 'confirmed') return o.status === 'fulfilled'
     return true
@@ -93,8 +94,8 @@ function Inbox() {
       </div>
 
       <div className="rt-filters" style={{ display: 'flex', gap: '8px', padding: '16px 24px', borderBottom: '1px solid #1a1a1a', overflowX: 'auto' }}>
-        {(['all', 'unread', 'pending', 'confirmed'] as const).map(f => {
-          const count = f === 'unread' ? unreadCount : f === 'pending' ? orders.filter(o => o.status === 'pending' || !o.status).length : f === 'confirmed' ? orders.filter(o => o.status === 'fulfilled').length : orders.length
+        {(['all', 'messages', 'unread', 'pending', 'confirmed'] as const).map(f => {
+          const count = f === 'unread' ? unreadCount : f === 'messages' ? orders.filter(o => Boolean((o as any).message)).length : f === 'pending' ? orders.filter(o => o.status === 'pending' || !o.status).length : f === 'confirmed' ? orders.filter(o => o.status === 'fulfilled').length : orders.length
           const active = filter === f
           return (
             <button key={f} onClick={() => setFilter(f)}
