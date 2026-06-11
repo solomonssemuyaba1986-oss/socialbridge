@@ -29,18 +29,23 @@ function App() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setSignedIn(true)
-        const docRef = doc(db, 'sellers', user.uid)
-        const docSnap = await getDoc(docRef)
-        if (docSnap.exists()) {
-          setSlug(docSnap.data().slug)
+      try {
+        if (user) {
+          setSignedIn(true)
+          const docRef = doc(db, 'sellers', user.uid)
+          const docSnap = await getDoc(docRef)
+          if (docSnap.exists()) {
+            setSlug(docSnap.data().slug)
+          }
+        } else {
+          setSignedIn(false)
+          setSlug(null)
         }
-      } else {
-        setSignedIn(false)
-        setSlug(null)
+      } catch (err) {
+        console.error('Auth state error:', err)
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     })
     return () => unsubscribe()
   }, [])
