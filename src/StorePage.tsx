@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
-import { collection, query, where, getDocs, addDoc } from 'firebase/firestore'
+import { collection, query, where, getDocs, addDoc, setDoc, doc } from 'firebase/firestore'
 import { db, auth } from './firebase'
 import { suppressNextSellerOrderAlert } from './orderAlerts.ts'
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
@@ -489,12 +489,15 @@ const handleSendMessage = async () => {
   }
 
   try {
+    const currentUid = auth.currentUser.uid
     const messageDoc = await addDoc(collection(db, 'sellers', sellerId, 'messages'), {
-      buyerId: auth.currentUser.uid,
-      buyerEmail: auth.currentUser.email || 'unknown',
+      senderUid: currentUid,
+      senderEmail: auth.currentUser.email || 'unknown',
+      senderName: auth.currentUser.displayName || 'Buyer',
+      receiverUid: sellerId,
       productId: messageProduct.id,
       productName: messageProduct.name,
-      text: messageText,
+      text: messageText.trim(),
       createdAt: new Date(),
       read: false
     })
@@ -512,15 +515,24 @@ const handleSignupAndSendMessage = async () => {
     const provider = new GoogleAuthProvider()
     const result = await signInWithPopup(auth, provider)
     console.log('User signed up/in:', result.user.uid)
+
+    await setDoc(doc(db, 'users', result.user.uid), {
+      displayName: result.user.displayName || '',
+      email: result.user.email || '',
+      lastSeen: new Date(),
+      signupAt: new Date()
+    }, { merge: true })
     
     // Now send the message
     if (messageText.trim() && messageProduct && seller) {
       const messageDoc = await addDoc(collection(db, 'sellers', sellerId, 'messages'), {
-        buyerId: result.user.uid,
-        buyerEmail: result.user.email || 'unknown',
+        senderUid: result.user.uid,
+        senderEmail: result.user.email || 'unknown',
+        senderName: result.user.displayName || 'Buyer',
+        receiverUid: sellerId,
         productId: messageProduct.id,
         productName: messageProduct.name,
-        text: messageText,
+        text: messageText.trim(),
         createdAt: new Date(),
         read: false
       })
@@ -531,6 +543,7 @@ const handleSignupAndSendMessage = async () => {
     }
   } catch (err) {
     console.error('Signup/message error:', err)
+    alert('Failed to sign in and send message')
   }
 }
 
