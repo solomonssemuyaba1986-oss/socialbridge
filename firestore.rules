@@ -25,7 +25,7 @@ service cloud.firestore {
       match /messages/{messageId} {
         allow create: if request.auth != null
           && request.resource.data.senderUid == request.auth.uid
-          && request.resource.data.receiverUid == userId
+          && request.resource.data.receiverUid is string
           && request.resource.data.text is string
           && request.resource.data.text.size() > 0;
 
