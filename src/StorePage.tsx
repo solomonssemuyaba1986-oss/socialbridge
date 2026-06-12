@@ -299,8 +299,6 @@ function StorePage() {
   const [subCategory, setSubCategory] = useState('')
 
   const [orderProduct, setOrderProduct] = useState<Product | null>(null)
-  const [messageProduct, setMessageProduct] = useState<Product | null>(null)
-  const [messageText, setMessageText] = useState('')
   const [buyerName, setBuyerName] = useState('')
   const [quantity, setQuantity] = useState('1')
   const [deliveryArea, setDeliveryArea] = useState('')
@@ -618,7 +616,7 @@ Order ID: #${orderId}`
                 isOwner={isOwner}
                 sellerId={sellerId}
                 onOrder={() => setOrderProduct(p)}
-                onMessage={() => setMessageProduct(p)}
+                onMessage={() => {}}
                 onRefresh={() => fetchProducts(sellerId)}
               />
             ))}
