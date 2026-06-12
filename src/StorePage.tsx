@@ -33,7 +33,7 @@ const green = '#adff2f'
 const CLOUD_NAME = 'dzudmmuxg'
 const UPLOAD_PRESET = 'p2z65zrv'
 
-function ProductCard({ p, isOwner, sellerId, onOrder, onRefresh }: any) {
+function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onRefresh }: any) {
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(p.name)
   const [editPrice, setEditPrice] = useState(p.price)
@@ -257,10 +257,17 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onRefresh }: any) {
                 </div>
               ) : (
                 <div>
-                <button onClick={onOrder}
-                  style={{ width: '100%', padding: '10px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>
-                  Order Now
-                </button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button onClick={onMessage}
+                    style={{ flex: 1, padding: '10px', background: '#222', color: green, border: `1px solid ${green}`, borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                    <img src="/message icon.png" alt="message" style={{ width: '14px', height: '14px' }} />
+                    Message
+                  </button>
+                  <button onClick={onOrder}
+                    style={{ flex: 1, padding: '10px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>
+                    Order Now
+                  </button>
+                </div>
               </div>
               )
             )}
@@ -292,6 +299,8 @@ function StorePage() {
   const [subCategory, setSubCategory] = useState('')
 
   const [orderProduct, setOrderProduct] = useState<Product | null>(null)
+  const [messageProduct, setMessageProduct] = useState<Product | null>(null)
+  const [messageText, setMessageText] = useState('')
   const [buyerName, setBuyerName] = useState('')
   const [quantity, setQuantity] = useState('1')
   const [deliveryArea, setDeliveryArea] = useState('')
@@ -609,6 +618,7 @@ Order ID: #${orderId}`
                 isOwner={isOwner}
                 sellerId={sellerId}
                 onOrder={() => setOrderProduct(p)}
+                onMessage={() => setMessageProduct(p)}
                 onRefresh={() => fetchProducts(sellerId)}
               />
             ))}
