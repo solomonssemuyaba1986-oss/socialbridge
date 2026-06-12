@@ -3,7 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { collection, query, where, getDocs, addDoc } from 'firebase/firestore'
 import { db, auth } from './firebase'
 import { suppressNextSellerOrderAlert } from './orderAlerts.ts'
-import { onAuthStateChanged } from 'firebase/auth'
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
 import { CATEGORIES, getSubcategories } from './categories'
 
 interface Seller {
@@ -299,6 +299,9 @@ function StorePage() {
   const [subCategory, setSubCategory] = useState('')
 
   const [orderProduct, setOrderProduct] = useState<Product | null>(null)
+  const [messageProduct, setMessageProduct] = useState<Product | null>(null)
+  const [messageText, setMessageText] = useState('')
+  const [showSignupSheet, setShowSignupSheet] = useState(false)
   const [buyerName, setBuyerName] = useState('')
   const [quantity, setQuantity] = useState('1')
   const [deliveryArea, setDeliveryArea] = useState('')
@@ -476,6 +479,61 @@ Order ID: #${orderId}`
   }, 1500)
 }
 
+const handleSendMessage = async () => {
+  if (!messageText.trim()) return alert('Please write a message')
+  if (!messageProduct || !seller) return
+
+  if (!auth.currentUser) {
+    setShowSignupSheet(true)
+    return
+  }
+
+  try {
+    const messageDoc = await addDoc(collection(db, 'sellers', sellerId, 'messages'), {
+      buyerId: auth.currentUser.uid,
+      buyerEmail: auth.currentUser.email || 'unknown',
+      productId: messageProduct.id,
+      productName: messageProduct.name,
+      text: messageText,
+      createdAt: new Date(),
+      read: false
+    })
+    console.log('Message saved:', messageDoc.id)
+    setMessageText('')
+    setMessageProduct(null)
+  } catch (err) {
+    console.error('Failed to send message:', err)
+    alert('Failed to send message')
+  }
+}
+
+const handleSignupAndSendMessage = async () => {
+  try {
+    const provider = new GoogleAuthProvider()
+    const result = await signInWithPopup(auth, provider)
+    console.log('User signed up/in:', result.user.uid)
+    
+    // Now send the message
+    if (messageText.trim() && messageProduct && seller) {
+      const messageDoc = await addDoc(collection(db, 'sellers', sellerId, 'messages'), {
+        buyerId: result.user.uid,
+        buyerEmail: result.user.email || 'unknown',
+        productId: messageProduct.id,
+        productName: messageProduct.name,
+        text: messageText,
+        createdAt: new Date(),
+        read: false
+      })
+      console.log('Message saved after signup:', messageDoc.id)
+      setMessageText('')
+      setMessageProduct(null)
+      setShowSignupSheet(false)
+    }
+  } catch (err) {
+    console.error('Signup/message error:', err)
+  }
+}
+
   if (loading) return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p style={{ color: '#555', fontFamily: 'sans-serif' }}>Loading store...</p>
@@ -616,7 +674,7 @@ Order ID: #${orderId}`
                 isOwner={isOwner}
                 sellerId={sellerId}
                 onOrder={() => setOrderProduct(p)}
-                onMessage={() => {}}
+                onMessage={() => setMessageProduct(p)}
                 onRefresh={() => fetchProducts(sellerId)}
               />
             ))}
@@ -673,6 +731,66 @@ Order ID: #${orderId}`
                 </button>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Message Composer Modal */}
+      {messageProduct && (
+        <div className="rt-modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div className="rt-modal-box" style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222', textAlign: 'center' }}>
+            <h3 style={{ margin: '0 0 16px', fontSize: '16px', fontWeight: '800', color: '#fff', textAlign: 'left' }}>
+              Message about {messageProduct.name}
+            </h3>
+
+            {/* Product Preview */}
+            <div style={{ marginBottom: '20px', padding: '12px', background: '#111', borderRadius: '8px', border: `1px solid #333` }}>
+              <img src={messageProduct.imageUrl} alt={messageProduct.name}
+                style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '6px', marginBottom: '8px' }} />
+              <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '13px', color: '#fff', textAlign: 'left' }}>{messageProduct.name}</p>
+              <p style={{ margin: 0, color: green, fontSize: '13px', fontWeight: '700', textAlign: 'left' }}>UGX {messageProduct.price}</p>
+            </div>
+
+            {/* Message Input */}
+            <textarea placeholder="Write your message..." value={messageText} onChange={e => setMessageText(e.target.value)}
+              style={{ width: '100%', minHeight: '100px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '20px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
+
+            {/* Send Button */}
+            <button onClick={handleSendMessage}
+              style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
+              Send Message
+            </button>
+
+            {/* Cancel Button */}
+            <button onClick={() => { setMessageProduct(null); setMessageText('') }}
+              style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Signup Sheet Modal */}
+      {showSignupSheet && (
+        <div className="rt-modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1001, padding: '20px' }}>
+          <div className="rt-modal-box" style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '380px', border: '1px solid #222', textAlign: 'center' }}>
+            <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: '800', color: '#fff' }}>Join Rachett</h3>
+            <p style={{ margin: '0 0 24px', color: '#888', fontSize: '14px' }}>Sign up to send your message</p>
+
+            {/* Google Sign In */}
+            <button onClick={handleSignupAndSendMessage}
+              style={{ width: '100%', padding: '14px', background: '#fff', color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '14px', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '16px' }}>🔵</span> Continue with Google
+            </button>
+
+            {/* Phone Auth Note */}
+            <p style={{ margin: '12px 0', color: '#666', fontSize: '12px' }}>Phone sign-up coming soon</p>
+
+            {/* Cancel */}
+            <button onClick={() => setShowSignupSheet(false)}
+              style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
+              Cancel
+            </button>
           </div>
         </div>
       )}
