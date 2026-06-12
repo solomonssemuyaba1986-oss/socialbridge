@@ -21,10 +21,15 @@ service cloud.firestore {
         allow update: if request.auth.uid == userId;
       }
 
-      // Messages - buyers can create, sellers can read their own messages
+      // Messages - authenticated users can send messages, sellers can read their own inbox
       match /messages/{messageId} {
+        allow create: if request.auth != null
+          && request.resource.data.senderUid == request.auth.uid
+          && request.resource.data.receiverUid == userId
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0;
+
         allow read: if request.auth.uid == userId;
-        allow create: if request.auth != null;
       }
     }
   }
