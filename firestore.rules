@@ -22,7 +22,7 @@ service cloud.firestore {
       }
 
       // Messages - authenticated users can send messages, sellers can read their own inbox
-      match /messages/{messageId} {
+       match /sellers/{sellerid}/messages/{messageId} {
         allow create: if request.auth != null
           && request.resource.data.senderUid == request.auth.uid
           && request.resource.data.receiverUid is string
