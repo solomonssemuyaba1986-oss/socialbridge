@@ -504,9 +504,9 @@ const handleSendMessage = async () => {
     console.log('Message saved:', messageDoc.id)
     setMessageText('')
     setMessageProduct(null)
-  } catch (err) {
-    console.error('Failed to send message:', err)
-    alert('Failed to send message')
+  } catch (err: any) {
+    console.error('Failed to send message:', err?.code, err?.message, err)
+    alert(`Failed to send message: ${err?.code || 'error'} - ${err?.message || err}`)
   }
 }
 
