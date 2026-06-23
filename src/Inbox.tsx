@@ -1,10 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { doc, getDoc, updateDoc } from 'firebase/firestore'
 import { db } from './firebase'
 import { useNavigate } from 'react-router-dom'
 import { useSellerOrders, isUnread, type SellerOrder } from './useSellerOrders'
+import { useSellerMessages, isUnreadMessage, type SellerMessage } from './useSellerMessages'
 
 const green = '#adff2f'
+
+type InboxFilter = 'all' | 'messages' | 'unread' | 'pending' | 'confirmed'
 
 function orderTotal(price: string, quantity: number | string): number {
   const unit = Number(String(price).replace(/,/g, '')) || 0
@@ -12,7 +15,7 @@ function orderTotal(price: string, quantity: number | string): number {
   return unit * qty
 }
 
-function formatDate(createdAt: SellerOrder['createdAt']): string {
+function formatDate(createdAt: { toDate?: () => Date } | null | undefined): string {
   if (createdAt?.toDate) return createdAt.toDate().toLocaleString()
   return 'Just now'
 }
@@ -26,10 +29,15 @@ function statusLabel(status?: string): { text: string; color: string; bg: string
 
 function Inbox() {
   const navigate = useNavigate()
-  const { orders, unreadCount, loading, userId } = useSellerOrders()
-  const [filter, setFilter] = useState('unread')
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const { orders, unreadCount: unreadOrders, loading: ordersLoading, userId } = useSellerOrders()
+  const { messages, unreadCount: unreadMessages, loading: messagesLoading } = useSellerMessages()
+  const [filter, setFilter] = useState<InboxFilter>('unread')
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null)
   const [seller, setSeller] = useState<{ whatsapp?: string } | null>(null)
+
+  const loading = ordersLoading || messagesLoading
+  const showingMessages = filter === 'messages'
 
   useEffect(() => {
     if (!userId) return
@@ -38,34 +46,58 @@ function Inbox() {
     })
   }, [userId])
 
-  const markAsRead = async (orderId: string) => {
+  const markOrderRead = async (orderId: string) => {
     if (!userId) return
     await updateDoc(doc(db, 'sellers', userId, 'orders', orderId), { read: true })
   }
 
+  const markMessageRead = async (messageId: string) => {
+    if (!userId) return
+    await updateDoc(doc(db, 'sellers', userId, 'messages', messageId), { read: true })
+  }
+
   const selectOrder = async (order: SellerOrder) => {
-    setSelectedId(order.id)
-    if (isUnread(order)) {
-      await markAsRead(order.id)
+    setSelectedOrderId(order.id)
+    setSelectedMessageId(null)
+    if (isUnread(order)) await markOrderRead(order.id)
+  }
+
+  const selectMessage = async (message: SellerMessage) => {
+    setSelectedMessageId(message.id)
+    setSelectedOrderId(null)
+    if (isUnreadMessage(message)) await markMessageRead(message.id)
+  }
+
+  const openWhatsAppForOrder = (order: SellerOrder) => {
+    if (seller?.whatsapp) {
+      const text = `Hi ${order.buyerName}, following up on your order for ${order.productName} x${order.quantity}.`
+      window.open(`https://wa.me/${seller.whatsapp}?text=${encodeURIComponent(text)}`, '_blank')
     }
   }
 
-  const openWhatsApp = (order: SellerOrder) => {
+  const openWhatsAppForMessage = (message: SellerMessage) => {
     if (seller?.whatsapp) {
-      const message = `Hi ${order.buyerName}, following up on your order for ${order.productName} x${order.quantity}.`
-      window.open(`https://wa.me/${seller.whatsapp}?text=${encodeURIComponent(message)}`, '_blank')
+      const text = `Hi ${message.senderName}, thanks for your message about ${message.productName}. You wrote: "${message.text}"`
+      window.open(`https://wa.me/${seller.whatsapp}?text=${encodeURIComponent(text)}`, '_blank')
     }
   }
 
   const filteredOrders = orders.filter(o => {
     if (filter === 'unread') return isUnread(o)
-    if (filter === 'messages') return Boolean(o.message)
     if (filter === 'pending') return o.status === 'pending' || !o.status
     if (filter === 'confirmed') return o.status === 'fulfilled'
-    return true
+    if (filter === 'all') return true
+    return false
   })
 
-  const selectedOrder = orders.find(o => o.id === selectedId) ?? null
+  const filteredMessages = filter === 'messages' || filter === 'all'
+    ? messages
+    : []
+
+  const selectedOrder = orders.find(o => o.id === selectedOrderId) ?? null
+  const selectedMessage = messages.find(m => m.id === selectedMessageId) ?? null
+
+  const totalUnread = unreadOrders + unreadMessages
 
   if (loading) {
     return (
@@ -74,6 +106,18 @@ function Inbox() {
       </div>
     )
   }
+
+  const emptyCopy = filter === 'messages'
+    ? 'No buyer messages yet'
+    : filter === 'unread'
+      ? 'No unread orders — you\'re all caught up'
+      : 'Nothing here yet'
+
+  const listEmpty = showingMessages
+    ? filteredMessages.length === 0
+    : filter === 'all'
+      ? filteredOrders.length === 0 && filteredMessages.length === 0
+      : filteredOrders.length === 0
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
@@ -85,28 +129,34 @@ function Inbox() {
             ← Back
           </button>
           <h1 style={{ margin: 0, fontSize: '18px', fontWeight: '800' }}>Inbox</h1>
-          {unreadCount > 0 && (
+          {totalUnread > 0 && (
             <div style={{ background: green, color: '#000', borderRadius: '20px', padding: '2px 10px', fontSize: '12px', fontWeight: '800' }}>
-              {unreadCount} unread
+              {totalUnread} new
             </div>
           )}
         </div>
       </div>
 
       <div className="rt-filters" style={{ display: 'flex', gap: '8px', padding: '16px 24px', borderBottom: '1px solid #1a1a1a', overflowX: 'auto' }}>
-        {(['all', 'messages', 'unread', 'pending', 'confirmed'] as const).map(f => {
-          const count = f === 'unread' ? unreadCount : f === 'messages' ? orders.filter(o => Boolean((o as any).message)).length : f === 'pending' ? orders.filter(o => o.status === 'pending' || !o.status).length : f === 'confirmed' ? orders.filter(o => o.status === 'fulfilled').length : orders.length
-          const active = filter === f
+        {([
+          { key: 'all' as const, count: orders.length + messages.length },
+          { key: 'messages' as const, count: messages.length },
+          { key: 'unread' as const, count: unreadOrders },
+          { key: 'pending' as const, count: orders.filter(o => o.status === 'pending' || !o.status).length },
+          { key: 'confirmed' as const, count: orders.filter(o => o.status === 'fulfilled').length },
+        ]).map(({ key, count }) => {
+          const active = filter === key
+          const badgeCount = key === 'messages' ? unreadMessages : key === 'unread' ? unreadOrders : 0
           return (
-            <button key={f} onClick={() => setFilter(f)}
+            <button key={key} onClick={() => { setFilter(key); setSelectedOrderId(null); setSelectedMessageId(null) }}
               style={{ padding: '8px 16px', borderRadius: '20px', border: `1px solid ${active ? green : '#333'}`, background: active ? green : 'transparent', color: active ? '#000' : '#aaa', fontWeight: active ? '700' : '500', cursor: 'pointer', fontSize: '13px', whiteSpace: 'nowrap', textTransform: 'capitalize', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              {f}
-              {f === 'unread' && unreadCount > 0 && (
+              {key}
+              {badgeCount > 0 && (key === 'messages' || key === 'unread') && (
                 <span style={{ background: active ? '#000' : green, color: active ? green : '#000', borderRadius: '50%', minWidth: '20px', height: '20px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '800', padding: '0 5px' }}>
-                  {unreadCount}
+                  {badgeCount}
                 </span>
               )}
-              {f !== 'unread' && f !== 'all' && count > 0 && (
+              {key !== 'unread' && key !== 'messages' && count > 0 && (
                 <span style={{ color: active ? '#333' : '#555', fontSize: '11px' }}>({count})</span>
               )}
             </button>
@@ -115,21 +165,20 @@ function Inbox() {
       </div>
 
       <div className="rt-container" style={{ maxWidth: '640px', margin: '0 auto', padding: '16px' }}>
-        {filteredOrders.length === 0 ? (
+        {listEmpty ? (
           <div style={{ textAlign: 'center', padding: '80px 20px' }}>
             <div style={{ fontSize: '48px', marginBottom: '16px' }}>📭</div>
-            <p style={{ color: '#555', fontSize: '15px' }}>
-              {filter === 'unread' ? 'No unread orders — you\'re all caught up' : 'No orders here yet'}
-            </p>
+            <p style={{ color: '#555', fontSize: '15px' }}>{emptyCopy}</p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {filteredOrders.map(o => {
+
+            {!showingMessages && filteredOrders.map(o => {
               const unread = isUnread(o)
-              const selected = selectedId === o.id
+              const selected = selectedOrderId === o.id
               const st = statusLabel(o.status)
               return (
-                <div key={o.id}>
+                <div key={`order-${o.id}`}>
                   <div
                     onClick={() => selectOrder(o)}
                     style={{
@@ -141,12 +190,10 @@ function Inbox() {
                     }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        {unread && (
-                          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: green, flexShrink: 0 }} />
-                        )}
+                        {unread && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: green, flexShrink: 0 }} />}
                         <div>
                           <p style={{ margin: '0 0 2px', fontWeight: '700', fontSize: '15px', color: '#fff' }}>{o.buyerName}</p>
-                          <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>{o.productName} × {o.quantity}</p>
+                          <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>Order · {o.productName} × {o.quantity}</p>
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
@@ -154,47 +201,67 @@ function Inbox() {
                         <p style={{ margin: 0, color: '#444', fontSize: '11px' }}>{formatDate(o.createdAt)}</p>
                       </div>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ color: '#555', fontSize: '12px' }}>
-                        {unread ? 'Tap to view order' : 'Tap to view again'}
-                      </span>
-                      <span style={{ background: st.bg, color: st.color, padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600' }}>
-                        {st.text}
-                      </span>
-                    </div>
+                    <span style={{ color: '#555', fontSize: '12px' }}>{unread ? 'Tap to view order' : 'Tap to view again'}</span>
+                    <span style={{ float: 'right', background: st.bg, color: st.color, padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600' }}>{st.text}</span>
                   </div>
 
-                  {selected && (
-                    <div style={{
-                      background: '#111',
-                      border: `1px solid ${green}`,
-                      borderTop: 'none',
-                      borderRadius: '0 0 12px 12px',
-                      padding: '20px',
-                      marginBottom: '8px',
+                  {selected && selectedOrder && (
+                    <DetailPanel title="Order details" action={<ActionButton label="💬 Open WhatsApp Chat" onClick={() => openWhatsAppForOrder(o)} />}>
+                      <DetailRow label="Customer" value={o.buyerName} />
+                      <DetailRow label="Product" value={o.productName} />
+                      <DetailRow label="Quantity" value={String(o.quantity)} />
+                      <DetailRow label="Unit price" value={`UGX ${o.productPrice}`} />
+                      <DetailRow label="Total" value={`UGX ${orderTotal(o.productPrice, o.quantity).toLocaleString()}`} highlight />
+                      {o.deliveryArea && <DetailRow label="Delivery area" value={o.deliveryArea} />}
+                      {o.orderId && <DetailRow label="Order ID" value={`#${o.orderId}`} />}
+                      <DetailRow label="Placed" value={formatDate(o.createdAt)} />
+                      <DetailRow label="Status" value={st.text} />
+                    </DetailPanel>
+                  )}
+                </div>
+              )
+            })}
+
+            {(showingMessages || filter === 'all') && filteredMessages.map(m => {
+              const unread = isUnreadMessage(m)
+              const selected = selectedMessageId === m.id
+              return (
+                <div key={`msg-${m.id}`}>
+                  <div
+                    onClick={() => selectMessage(m)}
+                    style={{
+                      background: selected ? '#1a2a1a' : unread ? '#152015' : '#1a1a1a',
+                      borderRadius: selected && selectedMessage ? '12px 12px 0 0' : '12px',
+                      padding: '16px',
+                      border: `1px solid ${selected ? green : unread ? green : '#222'}`,
+                      cursor: 'pointer',
                     }}>
-                      <p style={{ margin: '0 0 16px', color: green, fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                        Order details
-                      </p>
-
-                      <div style={{ display: 'grid', gap: '12px', marginBottom: '20px' }}>
-                        <DetailRow label="Customer" value={o.buyerName} />
-                        <DetailRow label="Product" value={o.productName} />
-                        <DetailRow label="Quantity" value={String(o.quantity)} />
-                        <DetailRow label="Unit price" value={`UGX ${o.productPrice}`} />
-                        <DetailRow label="Total" value={`UGX ${orderTotal(o.productPrice, o.quantity).toLocaleString()}`} highlight />
-                        {o.deliveryArea && <DetailRow label="Delivery area" value={o.deliveryArea} />}
-                        {o.orderId && <DetailRow label="Order ID" value={`#${o.orderId}`} />}
-                        <DetailRow label="Placed" value={formatDate(o.createdAt)} />
-                        <DetailRow label="Status" value={st.text} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                        {unread && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: green, flexShrink: 0 }} />}
+                        <div style={{ minWidth: 0 }}>
+                          <p style={{ margin: '0 0 2px', fontWeight: '700', fontSize: '15px', color: '#fff' }}>{m.senderName}</p>
+                          <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>Message · {m.productName}</p>
+                        </div>
                       </div>
-
-                      <button
-                        onClick={e => { e.stopPropagation(); openWhatsApp(o) }}
-                        style={{ width: '100%', padding: '12px', background: 'transparent', color: green, border: `1px solid ${green}`, borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>
-                        💬 Open WhatsApp Chat
-                      </button>
+                      <p style={{ margin: 0, color: '#444', fontSize: '11px', flexShrink: 0, marginLeft: '8px' }}>{formatDate(m.createdAt)}</p>
                     </div>
+                    <p style={{ margin: '0 0 8px', color: '#aaa', fontSize: '13px', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {m.text}
+                    </p>
+                    <span style={{ color: '#555', fontSize: '12px' }}>{unread ? 'Tap to read message' : 'Tap to view again'}</span>
+                  </div>
+
+                  {selected && selectedMessage && (
+                    <DetailPanel title="Message" action={<ActionButton label="💬 Reply on WhatsApp" onClick={() => openWhatsAppForMessage(m)} />}>
+                      <DetailRow label="From" value={m.senderName} />
+                      {m.senderEmail && <DetailRow label="Email" value={m.senderEmail} />}
+                      <DetailRow label="Product" value={m.productName} />
+                      <DetailRow label="Sent" value={formatDate(m.createdAt)} />
+                      <p style={{ margin: 0, padding: '12px', background: '#0a0a0a', borderRadius: '8px', color: '#ccc', fontSize: '14px', lineHeight: 1.5, textAlign: 'left' }}>
+                        {m.text}
+                      </p>
+                    </DetailPanel>
                   )}
                 </div>
               )
@@ -206,12 +273,37 @@ function Inbox() {
   )
 }
 
+function DetailPanel({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
+  return (
+    <div style={{
+      background: '#111', border: `1px solid ${green}`, borderTop: 'none',
+      borderRadius: '0 0 12px 12px', padding: '20px', marginBottom: '8px',
+    }}>
+      <p style={{ margin: '0 0 16px', color: green, fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        {title}
+      </p>
+      <div style={{ display: 'grid', gap: '12px', marginBottom: action ? '16px' : 0 }}>{children}</div>
+      {action}
+    </div>
+  )
+}
+
 function DetailRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '16px' }}>
       <span style={{ color: '#666', fontSize: '13px', flexShrink: 0 }}>{label}</span>
-      <span style={{ color: highlight ? '#adff2f' : '#fff', fontSize: '14px', fontWeight: highlight ? '800' : '600', textAlign: 'right' }}>{value}</span>
+      <span style={{ color: highlight ? green : '#fff', fontSize: '14px', fontWeight: highlight ? '800' : '600', textAlign: 'right' }}>{value}</span>
     </div>
+  )
+}
+
+function ActionButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={e => { e.stopPropagation(); onClick() }}
+      style={{ width: '100%', padding: '12px', background: 'transparent', color: green, border: `1px solid ${green}`, borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>
+      {label}
+    </button>
   )
 }
 
