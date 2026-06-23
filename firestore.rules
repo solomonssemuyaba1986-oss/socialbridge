@@ -20,12 +20,12 @@ service cloud.firestore {
       match /messages/{messageId} {
         allow create: if request.auth != null
           && request.resource.data.senderUid == request.auth.uid
-          && request.resource.data.receiverUid is string
+          && request.resource.data.receiverUid == sellerId
           && request.resource.data.text is string
           && request.resource.data.text.size() > 0;
-        allow read: if request.auth != null
-          && (resource.data.senderUid == request.auth.uid
-          || resource.data.receiverUid == request.auth.uid);
+        allow read: if request.auth.uid == sellerId
+          || (request.auth != null && resource.data.senderUid == request.auth.uid);
+        allow update: if request.auth.uid == sellerId;
       }
     }
 
