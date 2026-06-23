@@ -5,6 +5,7 @@ import { db, auth } from './firebase'
 import { suppressNextSellerOrderAlert } from './orderAlerts.ts'
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
 import { CATEGORIES, getSubcategories } from './categories'
+import { useConversation } from './useConversation.ts'
 
 interface Seller {
   businessName: string
@@ -301,6 +302,7 @@ function StorePage() {
   const [orderProduct, setOrderProduct] = useState<Product | null>(null)
   const [messageProduct, setMessageProduct] = useState<Product | null>(null)
   const [messageText, setMessageText] = useState('')
+  const {sendMessage} = useConversation(sellerId, auth.currentUser?.uid ?? null)
   const [showSignupSheet, setShowSignupSheet] = useState(false)
   const [buyerName, setBuyerName] = useState('')
   const [quantity, setQuantity] = useState('1')
@@ -489,24 +491,18 @@ const handleSendMessage = async () => {
   }
 
   try {
-    const currentUid = auth.currentUser.uid
-    const messageDoc = await addDoc(collection(db, 'sellers', sellerId, 'messages'), {
-      senderUid: currentUid,
-      senderEmail: auth.currentUser.email || 'unknown',
-      senderName: auth.currentUser.displayName || 'Buyer',
-      receiverUid: sellerId,
-      productId: messageProduct.id,
-      productName: messageProduct.name,
-      text: messageText.trim(),
-      createdAt: new Date(),
-      read: false
-    })
-    console.log('Message saved:', messageDoc.id)
+    await sendMessage(
+      auth.currentUser.uid,
+      messageText.trim(),
+      seller.businessName || 'Seller',
+      auth.currentUser.displayName || 'Buyer'
+    )
+    console.log('Message sent')
     setMessageText('')
     setMessageProduct(null)
   } catch (err: any) {
-    console.error('Failed to send message:', err?.code, err?.message, err)
-    alert(`Failed to send message: ${err?.code || 'error'} - ${err?.message || err}`)
+    console.error('opps! something is not adding up:', err?.code, err?.message, err)
+    alert(`opps! something is not adding up: ${err?.code || 'error'} - ${err?.message || err}`)
   }
 }
 
@@ -522,28 +518,23 @@ const handleSignupAndSendMessage = async () => {
       lastSeen: new Date(),
       signupAt: new Date()
     }, { merge: true })
-    
+
     // Now send the message
     if (messageText.trim() && messageProduct && seller) {
-      const messageDoc = await addDoc(collection(db, 'sellers', sellerId, 'messages'), {
-        senderUid: result.user.uid,
-        senderEmail: result.user.email || 'unknown',
-        senderName: result.user.displayName || 'Buyer',
-        receiverUid: sellerId,
-        productId: messageProduct.id,
-        productName: messageProduct.name,
-        text: messageText.trim(),
-        createdAt: new Date(),
-        read: false
-      })
-      console.log('Message saved after signup:', messageDoc.id)
+      await sendMessage(
+        result.user.uid,
+        messageText.trim(),
+        seller.businessName || 'Seller',
+        result.user.displayName || 'Buyer'
+      )
+      console.log('Message sent')
       setMessageText('')
       setMessageProduct(null)
       setShowSignupSheet(false)
     }
   } catch (err) {
     console.error('Signup/message error:', err)
-    alert('Failed to sign in and send message')
+    alert('opps! something went wrong during signup or sending the message. Please try again.')
   }
 }
 
