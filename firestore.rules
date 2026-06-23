@@ -11,6 +11,12 @@ service cloud.firestore {
         allow create, update, delete: if request.auth.uid == sellerId;
       }
 
+      match /orders/{orderId} {
+        allow read: if request.auth.uid == sellerId;
+        allow create: if request.auth != null;
+        allow update: if request.auth.uid == sellerId;
+      }
+
       match /messages/{messageId} {
         allow create: if request.auth != null
           && request.resource.data.senderUid == request.auth.uid
@@ -21,12 +27,6 @@ service cloud.firestore {
           && (resource.data.senderUid == request.auth.uid
           || resource.data.receiverUid == request.auth.uid);
       }
-    }
-
-    match /orders/{orderId} {
-      allow read: if request.auth.uid != null;
-      allow create: if request.auth != null;
-      allow update: if request.auth != null;
     }
 
     match /users/{userId} {
