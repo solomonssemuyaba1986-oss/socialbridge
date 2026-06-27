@@ -61,7 +61,7 @@ function SignIn() {
   </button>
   <button onClick={handleGoogleSignIn}
     style={{ background: green, color: '#000', border: 'none', padding: '16px 32px', borderRadius: '10px', fontWeight: '800', cursor: 'pointer', fontSize: '16px' }}>
-    Claim Your Free Link →
+    Get In →
   </button>
 </div>
         <p style={{ color: '#444', fontSize: '13px', marginTop: '16px' }}>Start selling smarter in minutes.</p>
@@ -71,11 +71,12 @@ function SignIn() {
       <div style={{ background: '#0a0a0a', padding: '80px 20px', borderTop: '1px solid #1a1a1a' }}>
         <div style={{ maxWidth: '800px', margin: '0 auto', textAlign: 'center' }}>
           <h2 className="rt-title-md" style={{ fontSize: '42px', fontWeight: '900', margin: '0 0 16px', letterSpacing: '-1px' }}>
-            Customers don't stop messaging, they stop waiting<br />
-            <span style={{ color: '#ff4444' }}>Get everything done from Rachett.</span>
+            The shops you love. The people you trust. All in one place<br />
+            <span style={{ color: '#ff4444' }}>Get everything done with rachett.</span>
           </h2>
           <p style={{ color: '#666', fontSize: '16px', margin: '0 0 48px' }}>
-            Every missed DM, every slow reply, every order that got lost in a comment thread — leads to poor management.
+            Open today. 
+                   Sold out tomorrow.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
             {[
@@ -140,7 +141,7 @@ function SignIn() {
           <span style={{ color: green }}>from anywhere.</span>
         </h2>
         <p style={{ color: '#666', fontSize: '16px', margin: '0 0 40px' }}>
-          Never lose track of your customers again.
+          Never lose track of your customers.
         </p>
         <button onClick={handleGoogleSignIn}
           style={{ background: green, color: '#000', border: 'none', padding: '18px 40px', borderRadius: '10px', fontWeight: '800', cursor: 'pointer', fontSize: '18px' }}>
@@ -152,7 +153,7 @@ function SignIn() {
       {/* Footer */}
       <div style={{ borderTop: '1px solid #1a1a1a', padding: '24px', textAlign: 'center' }}>
         <p style={{ color: '#333', fontSize: '13px', margin: 0 }}>
-          © 2026 <span style={{ color: green, fontWeight: '700' }}>Rachett</span> — One inbox. Every customer. Every platform. <br />
+          © 2026 <span style={{ color: green, fontWeight: '700' }}>rachett</span> — All rights reserved. <br />
         </p>
       </div>
 
