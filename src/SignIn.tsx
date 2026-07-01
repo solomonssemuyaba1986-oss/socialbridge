@@ -1,9 +1,15 @@
-import { signInWithPopup, signInWithRedirect } from 'firebase/auth'
+import { useState } from 'react'
+import { signInWithPopup, signInWithRedirect, RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth'
 import { auth, googleProvider } from './firebase'
 import { useNavigate } from 'react-router-dom'
 
 function SignIn() {
   const navigate = useNavigate()
+  const [showPhoneInput, setShowPhoneInput] = useState(false)
+  const [phoneNumber, setPhoneNumber] = useState('')
+  const [otp, setOtp] = useState('')
+  const [confirmationResult, setConfirmationResult] = useState<any>(null)
+  const [phoneLoading, setPhoneLoading] = useState(false)
   const green = '#adff2f'
 
   const handleGoogleSignIn = async () => {
@@ -17,17 +23,49 @@ function SignIn() {
           await signInWithRedirect(auth, googleProvider)
         } catch (redirectError) {
           console.error('Redirect fallback failed:', redirectError)
-          alert('Opps! Sign in failed. Please allow popups or try again in a browser tab.')
+          alert('Oops! Sign in failed. Please allow popups or try again in a browser tab.')
         }
       } else {
-        alert('Opps!Try again.')
+        alert('Oops! Try again.')
       }
+    }
+  }
+
+  const handleSendOtp = async () => {
+    if (!phoneNumber.trim()) return alert('Enter your phone number')
+    setPhoneLoading(true)
+    try {
+      const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        size: 'invisible',
+        callback: () => {}
+      })
+      const result = await signInWithPhoneNumber(auth, phoneNumber, verifier)
+      setConfirmationResult(result)
+      alert('Code sent! Check your SMS.')
+    } catch (err: any) {
+      console.error('Phone sign-in error:', err)
+      alert('Failed to send code: ' + (err?.message || err))
+    } finally {
+      setPhoneLoading(false)
+    }
+  }
+
+  const handleVerifyOtp = async () => {
+    if (!otp.trim() || !confirmationResult) return alert('Enter the code')
+    setPhoneLoading(true)
+    try {
+      await confirmationResult.confirm(otp)
+      navigate('/onboarding')
+    } catch (err: any) {
+      console.error('OTP verify error:', err)
+      alert('Invalid code, try again')
+    } finally {
+      setPhoneLoading(false)
     }
   }
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
-
       {/* Navbar */}
       <nav className="rt-topnav" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 32px', borderBottom: '1px solid #1a1a1a' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -53,17 +91,44 @@ function SignIn() {
         <p style={{ fontSize: '18px', color: '#888', margin: '0 0 40px', maxWidth: '500px', marginInline: 'auto', lineHeight: '1.6' }}>
           Lost messages. Slow replies. Orders scattered across platforms. Rachett fixes all of it.
         </p>
-       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-  <button onClick={handleGoogleSignIn}
-    style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#fff', color: '#000', border: 'none', padding: '16px 32px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px' }}>
-    <img src="https://www.google.com/favicon.ico" width="20" />
-    Continue with Google
-  </button>
-  <button onClick={handleGoogleSignIn}
-    style={{ background: green, color: '#000', border: 'none', padding: '16px 32px', borderRadius: '10px', fontWeight: '800', cursor: 'pointer', fontSize: '16px' }}>
-    Get In →
-  </button>
-</div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+          <button onClick={handleGoogleSignIn}
+            style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#fff', color: '#000', border: 'none', padding: '16px 32px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px' }}>
+            <img src="https://www.google.com/favicon.ico" width="20" alt="Google" />
+            Continue with Google
+          </button>
+
+          <div id="recaptcha-container"></div>
+
+          {!showPhoneInput ? (
+            <button onClick={() => setShowPhoneInput(true)}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: 'transparent', color: '#fff', border: '1px solid #333', padding: '16px 32px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer' }}>
+              Continue with Phone
+            </button>
+          ) : !confirmationResult ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', maxWidth: '320px' }}>
+              <input type="tel" placeholder="+256700000000" value={phoneNumber}
+                onChange={e => setPhoneNumber(e.target.value)}
+                style={{ padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#1a1a1a', color: '#fff' }} />
+              <button onClick={handleSendOtp} disabled={phoneLoading}
+                style={{ background: green, color: '#000', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>
+                {phoneLoading ? 'Sending...' : 'Send Code'}
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', maxWidth: '320px' }}>
+              <input type="text" placeholder="Enter 6-digit code" value={otp}
+                onChange={e => setOtp(e.target.value)}
+                style={{ padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#1a1a1a', color: '#fff' }} />
+              <button onClick={handleVerifyOtp} disabled={phoneLoading}
+                style={{ background: green, color: '#000', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>
+                {phoneLoading ? 'Verifying...' : 'Verify & Continue'}
+              </button>
+            </div>
+          )}
+        </div>
+
         <p style={{ color: '#444', fontSize: '13px', marginTop: '16px' }}>Start selling smarter in minutes.</p>
       </div>
 
@@ -75,8 +140,7 @@ function SignIn() {
             <span style={{ color: '#ff4444' }}>Get everything done with rachett.</span>
           </h2>
           <p style={{ color: '#666', fontSize: '16px', margin: '0 0 48px' }}>
-            Open today. 
-                   Sold out tomorrow.
+            Open today. Sold out tomorrow.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
             {[
@@ -98,7 +162,7 @@ function SignIn() {
       <div style={{ padding: '80px 20px', maxWidth: '800px', margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: '48px' }}>
           <h2 className="rt-title-md" style={{ fontSize: '42px', fontWeight: '900', margin: '0 0 16px', letterSpacing: '-1px' }}>Get set up in minutes.</h2>
-          <p style={{ color: '#666', fontSize: '16px', margin: 0 }}> It's you, your audience, your business, and Rachett.</p>
+          <p style={{ color: '#666', fontSize: '16px', margin: 0 }}>It\'s you, your audience, your business, and Rachett.</p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
           {[
@@ -147,7 +211,7 @@ function SignIn() {
           style={{ background: green, color: '#000', border: 'none', padding: '18px 40px', borderRadius: '10px', fontWeight: '800', cursor: 'pointer', fontSize: '18px' }}>
           Sign up for free →
         </button>
-        <p style={{ color: '#444', fontSize: '13px', marginTop: '16px' }}> Your followers become your audience.</p>
+        <p style={{ color: '#444', fontSize: '13px', marginTop: '16px' }}>Your followers become your audience.</p>
       </div>
 
       {/* Footer */}
@@ -156,7 +220,6 @@ function SignIn() {
           © 2026 <span style={{ color: green, fontWeight: '700' }}>rachett</span> — All rights reserved. <br />
         </p>
       </div>
-
     </div>
   )
 }
