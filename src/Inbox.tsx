@@ -4,6 +4,7 @@ import { db } from './firebase'
 import { useNavigate } from 'react-router-dom'
 import { useSellerOrders, isUnread, type SellerOrder } from './useSellerOrders'
 import { useSellerMessages, isUnreadMessage, type SellerMessage } from './useSellerMessages'
+import ConversationPanel from './ConversationPanel'
 
 const green = '#adff2f'
 
@@ -34,7 +35,7 @@ function Inbox() {
   const [filter, setFilter] = useState<InboxFilter>('unread')
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null)
-  const [seller, setSeller] = useState<{ whatsapp?: string } | null>(null)
+  const [seller, setSeller] = useState<{ whatsapp?: string; businessName?: string } | null>(null)
 
   const loading = ordersLoading || messagesLoading
   const showingMessages = filter === 'messages'
@@ -71,13 +72,6 @@ function Inbox() {
   const openWhatsAppForOrder = (order: SellerOrder) => {
     if (seller?.whatsapp) {
       const text = `Hi ${order.buyerName}, following up on your order for ${order.productName} x${order.quantity}.`
-      window.open(`https://wa.me/${seller.whatsapp}?text=${encodeURIComponent(text)}`, '_blank')
-    }
-  }
-
-  const openWhatsAppForMessage = (message: SellerMessage) => {
-    if (seller?.whatsapp) {
-      const text = `Hi ${message.senderName}, thanks for your message about ${message.productName}. You wrote: "${message.text}"`
       window.open(`https://wa.me/${seller.whatsapp}?text=${encodeURIComponent(text)}`, '_blank')
     }
   }
@@ -253,14 +247,8 @@ function Inbox() {
                   </div>
 
                   {selected && selectedMessage && (
-                    <DetailPanel title="Message" action={<ActionButton label="💬 Reply on WhatsApp" onClick={() => openWhatsAppForMessage(m)} />}>
-                      <DetailRow label="From" value={m.senderName} />
-                      {m.senderEmail && <DetailRow label="Email" value={m.senderEmail} />}
-                      <DetailRow label="Product" value={m.productName} />
-                      <DetailRow label="Sent" value={formatDate(m.createdAt)} />
-                      <p style={{ margin: 0, padding: '12px', background: '#0a0a0a', borderRadius: '8px', color: '#ccc', fontSize: '14px', lineHeight: 1.5, textAlign: 'left' }}>
-                        {m.text}
-                      </p>
+                    <DetailPanel title="Conversation">
+                      <ConversationPanel sellerId={userId} buyerId={m.senderUid} sellerName={seller?.businessName} buyerName={m.senderName} />
                     </DetailPanel>
                   )}
                 </div>
