@@ -1,26 +1,23 @@
 import { useState } from 'react'
-import { signInWithPopup, signInWithRedirect, RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth'
-import { auth, googleProvider } from './firebase'
+import { signInWithPopup, signInWithRedirect } from 'firebase/auth'
+import { auth, googleProvider, facebookProvider, appleProvider } from './firebase'
 import { useNavigate } from 'react-router-dom'
 
 function SignIn() {
   const navigate = useNavigate()
-  const [showPhoneInput, setShowPhoneInput] = useState(false)
-  const [phoneNumber, setPhoneNumber] = useState('')
-  const [otp, setOtp] = useState('')
-  const [confirmationResult, setConfirmationResult] = useState<any>(null)
-  const [phoneLoading, setPhoneLoading] = useState(false)
+  const [authLoading, setAuthLoading] = useState(false)
   const green = '#adff2f'
 
-  const handleGoogleSignIn = async () => {
+  const handleSignInWithProvider = async (provider: any) => {
+    setAuthLoading(true)
     try {
-      await signInWithPopup(auth, googleProvider)
+      await signInWithPopup(auth, provider)
       navigate('/onboarding')
     } catch (error: any) {
-      console.error('Google sign-in error:', error)
+      console.error('Provider sign-in error:', error)
       if (error?.code === 'auth/popup-blocked' || error?.code === 'auth/operation-not-supported-in-this-environment') {
         try {
-          await signInWithRedirect(auth, googleProvider)
+          await signInWithRedirect(auth, provider)
         } catch (redirectError) {
           console.error('Redirect fallback failed:', redirectError)
           alert('Oops! Sign in failed. Please allow popups or try again in a browser tab.')
@@ -28,41 +25,14 @@ function SignIn() {
       } else {
         alert('Oops! Try again.')
       }
+    } finally {
+      setAuthLoading(false)
     }
   }
 
-  const handleSendOtp = async () => {
-    if (!phoneNumber.trim()) return alert('Enter your phone number')
-    setPhoneLoading(true)
-    try {
-      const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-        size: 'invisible',
-        callback: () => {}
-      })
-      const result = await signInWithPhoneNumber(auth, phoneNumber, verifier)
-      setConfirmationResult(result)
-      alert('Code sent! Check your SMS.')
-    } catch (err: any) {
-      console.error('Phone sign-in error:', err)
-      alert('Failed to send code: ' + (err?.message || err))
-    } finally {
-      setPhoneLoading(false)
-    }
-  }
-
-  const handleVerifyOtp = async () => {
-    if (!otp.trim() || !confirmationResult) return alert('Enter the code')
-    setPhoneLoading(true)
-    try {
-      await confirmationResult.confirm(otp)
-      navigate('/onboarding')
-    } catch (err: any) {
-      console.error('OTP verify error:', err)
-      alert('Invalid code, try again')
-    } finally {
-      setPhoneLoading(false)
-    }
-  }
+  const handleGoogleSignIn = () => handleSignInWithProvider(googleProvider)
+  const handleFacebookSignIn = () => handleSignInWithProvider(facebookProvider)
+  const handleAppleSignIn = () => handleSignInWithProvider(appleProvider)
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
@@ -99,34 +69,17 @@ function SignIn() {
             Continue with Google
           </button>
 
-          <div id="recaptcha-container"></div>
+          <button onClick={handleFacebookSignIn}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: '#4267B2', color: '#fff', border: 'none', padding: '16px 32px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px' }}>
+            <span style={{ fontSize: '18px' }}>f</span>
+            Continue with Facebook
+          </button>
 
-          {!showPhoneInput ? (
-            <button onClick={() => setShowPhoneInput(true)}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: 'transparent', color: '#fff', border: '1px solid #333', padding: '16px 32px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer' }}>
-              Continue with Phone
-            </button>
-          ) : !confirmationResult ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', maxWidth: '320px' }}>
-              <input type="tel" placeholder="+256700000000" value={phoneNumber}
-                onChange={e => setPhoneNumber(e.target.value)}
-                style={{ padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#1a1a1a', color: '#fff' }} />
-              <button onClick={handleSendOtp} disabled={phoneLoading}
-                style={{ background: green, color: '#000', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>
-                {phoneLoading ? 'Sending...' : 'Send Code'}
-              </button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', maxWidth: '320px' }}>
-              <input type="text" placeholder="Enter 6-digit code" value={otp}
-                onChange={e => setOtp(e.target.value)}
-                style={{ padding: '12px', borderRadius: '8px', border: '1px solid #333', background: '#1a1a1a', color: '#fff' }} />
-              <button onClick={handleVerifyOtp} disabled={phoneLoading}
-                style={{ background: green, color: '#000', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>
-                {phoneLoading ? 'Verifying...' : 'Verify & Continue'}
-              </button>
-            </div>
-          )}
+          <button onClick={handleAppleSignIn} disabled={authLoading}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: '#000', color: '#fff', border: 'none', padding: '16px 32px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px' }}>
+            <span style={{ fontSize: '18px' }}></span>
+            Continue with Apple
+          </button>
         </div>
 
         <p style={{ color: '#444', fontSize: '13px', marginTop: '16px' }}>Start selling smarter in minutes.</p>
