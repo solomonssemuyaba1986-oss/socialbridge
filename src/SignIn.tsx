@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { signInWithPopup, signInWithRedirect } from 'firebase/auth'
 import { auth, googleProvider, facebookProvider, appleProvider } from './firebase'
 import { useNavigate } from 'react-router-dom'
@@ -6,7 +6,12 @@ import { useNavigate } from 'react-router-dom'
 function SignIn() {
   const navigate = useNavigate()
   const [authLoading, setAuthLoading] = useState(false)
+  const providerSectionRef = useRef<HTMLDivElement | null>(null)
   const green = '#adff2f'
+
+  const handleScrollToProviders = () => {
+    providerSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   const handleSignInWithProvider = async (provider: any) => {
     setAuthLoading(true)
@@ -42,7 +47,7 @@ function SignIn() {
           <div style={{ background: green, width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '13px', color: '#000' }}>R</div>
           <span style={{ fontWeight: '800', fontSize: '18px' }}>Rachett</span>
         </div>
-        <button onClick={handleGoogleSignIn}
+        <button onClick={handleScrollToProviders}
           style={{ background: green, color: '#000', border: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '14px' }}>
           Get Started →
         </button>
@@ -63,23 +68,25 @@ function SignIn() {
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-          <button onClick={handleGoogleSignIn}
-            style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#fff', color: '#000', border: 'none', padding: '16px 32px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px' }}>
-            <img src="https://www.google.com/favicon.ico" width="20" alt="Google" />
-            Continue with Google
-          </button>
+          <div ref={providerSectionRef} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+            <button onClick={handleGoogleSignIn}
+              style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#fff', color: '#000', border: 'none', padding: '16px 32px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px' }}>
+              <img src="https://www.google.com/favicon.ico" width="20" alt="Google" />
+              Continue with Google
+            </button>
 
-          <button onClick={handleFacebookSignIn}
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: '#4267B2', color: '#fff', border: 'none', padding: '16px 32px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px' }}>
-            <span style={{ fontSize: '18px' }}>f</span>
-            Continue with Facebook
-          </button>
+            <button onClick={handleFacebookSignIn}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: '#4267B2', color: '#fff', border: 'none', padding: '16px 32px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px' }}>
+              <span style={{ fontSize: '18px' }}>f</span>
+              Continue with Facebook
+            </button>
 
-          <button onClick={handleAppleSignIn} disabled={authLoading}
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: '#000', color: '#fff', border: 'none', padding: '16px 32px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px' }}>
-            <span style={{ fontSize: '18px' }}></span>
-            Continue with Apple
-          </button>
+            <button onClick={handleAppleSignIn} disabled={authLoading}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: '#000', color: '#fff', border: 'none', padding: '16px 32px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px' }}>
+              <span style={{ fontSize: '18px' }}></span>
+              Continue with Apple
+            </button>
+          </div>
         </div>
 
         <p style={{ color: '#444', fontSize: '13px', marginTop: '16px' }}>Start selling smarter in minutes.</p>
@@ -160,7 +167,7 @@ function SignIn() {
         <p style={{ color: '#666', fontSize: '16px', margin: '0 0 40px' }}>
           Never lose track of your customers.
         </p>
-        <button onClick={handleGoogleSignIn}
+        <button onClick={handleScrollToProviders}
           style={{ background: green, color: '#000', border: 'none', padding: '18px 40px', borderRadius: '10px', fontWeight: '800', cursor: 'pointer', fontSize: '18px' }}>
           Sign up for free →
         </button>
