@@ -34,6 +34,30 @@ const green = '#adff2f'
 const CLOUD_NAME = 'dzudmmuxg'
 const UPLOAD_PRESET = 'p2z65zrv'
 
+function detectPlatform(searchParams: URLSearchParams) {
+  const rawSource = (searchParams.get('source') || searchParams.get('utm_source') || '').toLowerCase()
+  const referrer = typeof document !== 'undefined' ? document.referrer.toLowerCase() : ''
+
+  if (rawSource.includes('whatsapp')) return 'WhatsApp'
+  if (rawSource.includes('instagram')) return 'Instagram'
+  if (rawSource.includes('tiktok')) return 'TikTok'
+  if (rawSource.includes('telegram')) return 'Telegram'
+  if (rawSource.includes('twitter')) return 'Twitter'
+  if (rawSource.includes('facebook')) return 'Facebook'
+  if (rawSource.includes('email')) return 'Email'
+  if (rawSource.includes('web')) return 'Web'
+
+  if (referrer.includes('whatsapp') || referrer.includes('wa.me') || referrer.includes('api.whatsapp.com')) return 'WhatsApp'
+  if (referrer.includes('instagram.com')) return 'Instagram'
+  if (referrer.includes('tiktok.com')) return 'TikTok'
+  if (referrer.includes('telegram.me') || referrer.includes('t.me')) return 'Telegram'
+  if (referrer.includes('twitter.com')) return 'Twitter'
+  if (referrer.includes('facebook.com')) return 'Facebook'
+  if (referrer.includes('mail.google.com') || referrer.includes('outlook.live.com') || referrer.includes('mail.yahoo.com')) return 'Email'
+
+  return 'Web'
+}
+
 function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onRefresh }: any) {
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(p.name)
@@ -429,6 +453,8 @@ const handleOrder = async () => {
   if (!deliveryArea) return alert('Please enter your delivery area')
   if (!orderProduct || !seller) return
 
+  const sourcePlatform = detectPlatform(searchParams)
+
   const orderRef = await addDoc(collection(db, 'sellers', sellerId, 'orders'), {
     buyerName,
     productName: orderProduct.name,
@@ -437,6 +463,7 @@ const handleOrder = async () => {
     deliveryArea,
     status: 'pending',
     read: false,
+    sourcePlatform,
     createdAt: new Date()
   })
 
@@ -466,6 +493,7 @@ Price: UGX ${orderProduct.price}
 Quantity: ${quantity}
 Total: UGX ${Number(orderProduct.price.replace(/,/g, '')) * Number(quantity)}
 Delivery Area: ${deliveryArea}
+Platform: ${sourcePlatform}
 ${message ? `Message: ${message}
 ` : ''}
 Order ID: #${orderId}`
