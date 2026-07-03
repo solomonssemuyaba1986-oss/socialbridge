@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { doc, getDoc, collection, getDocs, updateDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
 import { onAuthStateChanged } from 'firebase/auth'
@@ -26,7 +26,20 @@ function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState<string>('')
   const navigate = useNavigate()
+  const location = useLocation()
   const green = '#adff2f'
+
+  const navItems = [
+    { label: 'Dashboard', path: '/dashboard', icon: '📊' },
+    { label: 'Products', path: '/dashboard', icon: '🛍️' },
+    { label: 'Orders', path: '/orders', icon: '📦' },
+    { label: 'Inbox', path: '/inbox', icon: '📩' },
+    { label: 'Analytics', path: '/dashboard', icon: '📈' },
+    { label: 'Marketing', path: '/dashboard', icon: '📣' },
+    { label: 'Payouts', path: '/dashboard', icon: '💸' },
+    { label: 'Settings', path: '/edit-store', icon: '⚙️' },
+    { label: 'Reviews', path: '/dashboard', icon: '⭐' },
+  ]
 
   const getProductUrl = (product: Product) => `${storeLink}?productId=${product.id}`
   const getCaption = (product: Product) =>
@@ -95,54 +108,55 @@ function Dashboard() {
   const pendingOrders = orders.filter(o => !['fulfilled', 'out_of_stock'].includes(o.status || ''))
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
-
-      {/* Top Nav */}
-      <div className="rt-topnav" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #1a1a1a' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ background: green, width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '14px', color: '#000' }}>R</div>
-          <span style={{ fontWeight: '700', fontSize: '16px' }}>Rachett</span>
-          <span className="rt-store-name" style={{ background: '#1a1a1a', padding: '4px 10px', borderRadius: '20px', fontSize: '13px', color: '#aaa', border: '1px solid #222' }}>{seller.businessName}</span>
+    <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', display: 'flex' }}>
+      <div style={{ position: 'fixed', left: 0, top: 0, bottom: 0, width: 260, background: '#070707', borderRight: '1px solid #111', padding: '28px 16px', display: 'flex', flexDirection: 'column', gap: '28px', zIndex: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
+          <div style={{ background: green, width: 34, height: 34, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16, color: '#000' }}>R</div>
+          <div>
+            <div style={{ fontWeight: 800, color: '#fff', fontSize: 16 }}>Rachett</div>
+            <div style={{ color: '#777', fontSize: 12 }}>{seller.businessName}</div>
+          </div>
         </div>
-        <div className="rt-topnav-actions" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+        <div style={{ display: 'grid', gap: '6px' }}>
+          {navItems.map(item => {
+            const active = location.pathname === item.path || (item.path === '/dashboard' && location.pathname === '/dashboard')
+            return (
+              <button key={item.path + item.label} onClick={() => navigate(item.path)}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderRadius: '14px', border: 'none', cursor: 'pointer', textAlign: 'left', background: active ? '#0f2910' : 'transparent', color: active ? '#fff' : '#aaa', fontWeight: active ? 700 : 600, fontSize: '14px'
+                }}>
+                <span>{item.icon}</span>
+                <span>{item.label}</span>
+              </button>
+            )
+          })}
+        </div>
+        <div style={{ marginTop: 'auto' }}>
           <button onClick={() => { navigator.clipboard.writeText(storeLink); alert('Link copied!') }}
-            style={{ background: green, color: '#000', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '700' }}>
-            Copy Link
-          </button>
-          <button onClick={() => navigate(`/store/${seller.slug}`)}
-            style={{ background: 'transparent', border: '1px solid #333', color: '#fff', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
-            View Store
-          </button>
-          <button
-            onClick={() => navigate('/inbox')}
-            style={{ background: unreadCount > 0 ? '#1a2a1a' : 'transparent', border: `1px solid ${unreadCount > 0 ? green : '#333'}`, color: '#fff', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', position: 'relative', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            📭 Inbox
-            {unreadCount > 0 && (
-              <span style={{
-                background: green,
-                color: '#000',
-                borderRadius: '50%',
-                minWidth: '22px',
-                height: '22px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '12px',
-                fontWeight: '800',
-                padding: '0 6px',
-              }}>
-                {unreadCount}
-              </span>
-            )}
-          </button>
-          <button onClick={() => { auth.signOut(); navigate('/') }}
-            style={{ background: 'transparent', border: '1px solid #333', color: '#aaa', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
-            Sign Out
+            style={{ width: '100%', padding: '12px', borderRadius: '14px', border: '1px solid #222', background: '#111', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>
+            Copy Store Link
           </button>
         </div>
       </div>
 
-      <div className="rt-container" style={{ maxWidth: '800px', margin: '0 auto', padding: '32px 20px' }}>
+      <div style={{ width: '100%', marginLeft: 260, padding: '32px 28px', minHeight: '100vh' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button
+              style={{ display: 'none', padding: '10px 12px', borderRadius: '12px', border: '1px solid #333', background: '#111', color: '#fff', cursor: 'pointer', fontSize: '16px' }}>
+              ☰
+            </button>
+            <div>
+              <div style={{ fontSize: '20px', fontWeight: 800 }}>Seller Dashboard</div>
+              <div style={{ fontSize: '13px', color: '#888' }}>Manage products, orders, inbox and growth.</div>
+            </div>
+          </div>
+          <button onClick={() => { auth.signOut(); navigate('/') }}
+            style={{ background: '#111', border: '1px solid #222', color: '#fff', borderRadius: '12px', padding: '10px 16px', cursor: 'pointer', fontSize: '13px' }}>
+            Sign Out
+          </button>
+        </div>
+        <div className="rt-container" style={{ maxWidth: '100%', margin: '0', padding: 0 }}>
 
         {unreadCount > 0 && (
           <div
@@ -289,6 +303,7 @@ function Dashboard() {
             ))}
           </div>
         )}
+        </div>
       </div>
     </div>
   )
