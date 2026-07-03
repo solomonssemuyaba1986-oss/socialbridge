@@ -13,6 +13,7 @@ export interface SellerOrder {
   orderId?: string
   status?: string
   message?: string
+  sourcePlatform?: string
   createdAt: { toDate?: () => Date } | null
   read?: boolean
 }
