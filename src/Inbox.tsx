@@ -28,6 +28,19 @@ function statusLabel(status?: string): { text: string; color: string; bg: string
   return { text: 'Pending', color: '#888', bg: '#222' }
 }
 
+function platformMeta(platform?: string) {
+  const key = (platform || 'web').toLowerCase()
+  if (key.includes('whatsapp')) return { icon: '💬', label: 'WhatsApp' }
+  if (key.includes('instagram')) return { icon: '📸', label: 'Instagram' }
+  if (key.includes('tiktok')) return { icon: '🎵', label: 'TikTok' }
+  if (key.includes('telegram')) return { icon: '✈️', label: 'Telegram' }
+  if (key.includes('twitter')) return { icon: '🐦', label: 'Twitter' }
+  if (key.includes('facebook')) return { icon: '📘', label: 'Facebook' }
+  if (key.includes('email')) return { icon: '✉️', label: 'Email' }
+  if (key.includes('web')) return { icon: '🌐', label: 'Web' }
+  return { icon: '🌐', label: platform || 'Web' }
+}
+
 function Inbox() {
   const navigate = useNavigate()
   const { orders, unreadCount: unreadOrders, loading: ordersLoading, userId } = useSellerOrders()
@@ -188,6 +201,12 @@ function Inbox() {
                         <div>
                           <p style={{ margin: '0 0 2px', fontWeight: '700', fontSize: '15px', color: '#fff' }}>{o.buyerName}</p>
                           <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>Order · {o.productName} × {o.quantity}</p>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', borderRadius: '999px', background: '#111', border: '1px solid #222', fontSize: '14px' }}>
+                              {platformMeta(o.sourcePlatform).icon}
+                            </span>
+                            <span style={{ color: '#666', fontSize: '12px' }}>{platformMeta(o.sourcePlatform).label}</span>
+                          </div>
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
@@ -207,6 +226,7 @@ function Inbox() {
                       <DetailRow label="Unit price" value={`UGX ${o.productPrice}`} />
                       <DetailRow label="Total" value={`UGX ${orderTotal(o.productPrice, o.quantity).toLocaleString()}`} highlight />
                       {o.deliveryArea && <DetailRow label="Delivery area" value={o.deliveryArea} />}
+                      <DetailRow label="Channel" value={`${platformMeta(o.sourcePlatform).icon} ${platformMeta(o.sourcePlatform).label}`} />
                       {o.orderId && <DetailRow label="Order ID" value={`#${o.orderId}`} />}
                       <DetailRow label="Placed" value={formatDate(o.createdAt)} />
                       <DetailRow label="Status" value={st.text} />
