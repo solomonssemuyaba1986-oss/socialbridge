@@ -52,7 +52,7 @@ export function useConversation(sellerId: string | null, buyerId: string | null)
     }
 
     await addDoc(collection(db, 'conversations', conversationId, 'messages'), {
-      senderId, text, createdAt: serverTimestamp()
+      senderId, text, status: 'sent', createdAt: serverTimestamp()
     })
   }
 
