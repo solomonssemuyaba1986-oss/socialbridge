@@ -326,12 +326,27 @@ function StorePage() {
   const [orderProduct, setOrderProduct] = useState<Product | null>(null)
   const [messageProduct, setMessageProduct] = useState<Product | null>(null)
   const [messageText, setMessageText] = useState('')
+  const [feedbackMessage, setFeedbackMessage] = useState('')
+  const [feedbackType, setFeedbackType] = useState<'success' | 'error' | 'info'>('success')
+  const [feedbackVisible, setFeedbackVisible] = useState(false)
   const {sendMessage} = useConversation(sellerId, auth.currentUser?.uid ?? null)
   const [showSignupSheet, setShowSignupSheet] = useState(false)
   const [buyerName, setBuyerName] = useState('')
   const [quantity, setQuantity] = useState('1')
   const [deliveryArea, setDeliveryArea] = useState('')
   const [message, setMessage] = useState('')
+
+  const showFeedback = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setFeedbackMessage(message)
+    setFeedbackType(type)
+    setFeedbackVisible(true)
+  }
+
+  useEffect(() => {
+    if (!feedbackVisible) return
+    const timeoutId = window.setTimeout(() => setFeedbackVisible(false), 4500)
+    return () => window.clearTimeout(timeoutId)
+  }, [feedbackVisible])
 
   useEffect(() => {
     const fetchSeller = async () => {
@@ -449,8 +464,14 @@ const handleImageUpload = async (file: File) => {
   }
 
 const handleOrder = async () => {
-  if (!buyerName) return alert('Please enter your name')
-  if (!deliveryArea) return alert('Please enter your delivery area')
+  if (!buyerName.trim()) {
+    showFeedback('Please enter your name — the seller needs it to confirm your order fast.', 'error')
+    return
+  }
+  if (!deliveryArea.trim()) {
+    showFeedback('Please add your delivery area so the seller can quote delivery quickly.', 'error')
+    return
+  }
   if (!orderProduct || !seller) return
 
   const sourcePlatform = detectPlatform(searchParams)
@@ -501,6 +522,7 @@ Order ID: #${orderId}`
 
   const whatsappNumber = seller.whatsapp || ''
   setOrderSuccess(true)
+  showFeedback('Great! Your order is on the way. Opening WhatsApp so the seller can confirm it quickly.', 'success')
   setTimeout(() => {
     window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappText)}`, '_blank')
     setBuyerName(''); setQuantity('1'); setDeliveryArea(''); setMessage('')
@@ -510,11 +532,18 @@ Order ID: #${orderId}`
 }
 
 const handleSendMessage = async () => {
-  if (!messageText.trim()) return alert('Please write a message')
-  if (!messageProduct || !seller) return
+  if (!messageText.trim()) {
+    showFeedback('Write a quick message so the seller can reply. Keep it short and clear.', 'error')
+    return
+  }
+  if (!messageProduct || !seller) {
+    showFeedback('Choose a product first, then send your question to the seller.', 'error')
+    return
+  }
 
   if (!auth.currentUser) {
     setShowSignupSheet(true)
+    showFeedback('Please sign in so your message reaches the seller. It only takes a moment.', 'info')
     return
   }
 
@@ -528,9 +557,10 @@ const handleSendMessage = async () => {
     console.log('Message sent')
     setMessageText('')
     setMessageProduct(null)
+    showFeedback('Message sent! The seller will see it soon and reply quickly.', 'success')
   } catch (err: any) {
     console.error('opps! something is not adding up:', err?.code, err?.message, err)
-    alert(`opps! something is not adding up: ${err?.code || 'error'} - ${err?.message || err}`)
+    showFeedback('Oops — we hit an error sending your message. Please try again.', 'error')
   }
 }
 
@@ -562,7 +592,7 @@ const handleSignupAndSendMessage = async () => {
     }
   } catch (err) {
     console.error('Signup/message error:', err)
-    alert('opps! something went wrong during signup or sending the message. Please try again.')
+    showFeedback('Signup failed for now. Please try again and your message will send.', 'error')
   }
 }
 
@@ -580,6 +610,11 @@ const handleSignupAndSendMessage = async () => {
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
+      {feedbackVisible && (
+        <div style={{ margin: '16px auto 0', maxWidth: '640px', padding: '14px 16px', borderRadius: '14px', border: `1px solid ${feedbackType === 'success' ? '#2f8' : feedbackType === 'error' ? '#f55' : '#55d'}`, background: feedbackType === 'success' ? '#122a0d' : feedbackType === 'error' ? '#2a0d0d' : '#0d122a', color: '#fff', fontSize: '14px', textAlign: 'center' }}>
+          {feedbackMessage}
+        </div>
+      )}
       {/* Back to Browse */}
        <div style={{ padding: '12px 20px', borderBottom: '1px solid #1a1a1a' }}>
           <button onClick={() => window.history.back()}
