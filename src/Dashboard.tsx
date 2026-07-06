@@ -31,7 +31,7 @@ function Dashboard() {
 
   const navItems = [
     { label: 'Dashboard', path: '/dashboard', icon: '📊' },
-    { label: 'Products', path: '/dashboard', icon: '🛍️' },
+    { label: 'Products', path: '/products', icon: '🛍️' },
     { label: 'Orders', path: '/orders', icon: '📦' },
     { label: 'Inbox', path: '/inbox', icon: '📩' },
     { label: 'Analytics', path: '/dashboard', icon: '📈' },
