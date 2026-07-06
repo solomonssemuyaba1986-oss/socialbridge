@@ -131,7 +131,7 @@ function Dashboard() {
                 <span>{item.icon}</span>
                 <span style={{ flex: 1 }}>{item.label}</span>
                 {showBadge > 0 ? (
-                  <span style={{ minWidth: '24px', height: '24px', borderRadius: '999px', background: '#ff4d4f', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 800, padding: '0 6px' }}>
+                  <span style={{ minWidth: '24px', height: '24px', borderRadius: '999px', background: green, color: '#000', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 900, padding: '0 6px', boxShadow: `0 0 0 2px rgba(173,255,47,0.2)` }}>
                     {showBadge}
                   </span>
                 ) : null}
