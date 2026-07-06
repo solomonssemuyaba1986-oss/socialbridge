@@ -8,7 +8,7 @@ import ConversationPanel from './ConversationPanel'
 
 const green = '#adff2f'
 
-type InboxFilter = 'all' | 'messages' | 'unread' | 'pending' | 'confirmed'
+type InboxFilter = 'all' | 'messages' | 'pending' | 'confirmed'
 
 function orderTotal(price: string, quantity: number | string): number {
   const unit = Number(String(price).replace(/,/g, '')) || 0
@@ -43,9 +43,9 @@ function platformMeta(platform?: string) {
 
 function Inbox() {
   const navigate = useNavigate()
-  const { orders, unreadCount: unreadOrders, loading: ordersLoading, userId } = useSellerOrders()
+  const { orders, loading: ordersLoading, userId } = useSellerOrders()
   const { messages, unreadCount: unreadMessages, loading: messagesLoading } = useSellerMessages()
-  const [filter, setFilter] = useState<InboxFilter>('unread')
+  const [filter, setFilter] = useState<InboxFilter>('messages')
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null)
   const [seller, setSeller] = useState<{ whatsapp?: string; businessName?: string } | null>(null)
@@ -90,7 +90,6 @@ function Inbox() {
   }
 
   const filteredOrders = orders.filter(o => {
-    if (filter === 'unread') return isUnread(o)
     if (filter === 'pending') return o.status === 'pending' || !o.status
     if (filter === 'confirmed') return o.status === 'fulfilled'
     if (filter === 'all') return true
@@ -104,7 +103,7 @@ function Inbox() {
   const selectedOrder = orders.find(o => o.id === selectedOrderId) ?? null
   const selectedMessage = messages.find(m => m.id === selectedMessageId) ?? null
 
-  const totalUnread = unreadOrders + unreadMessages
+  const totalUnread = unreadMessages
 
   if (loading) {
     return (
@@ -116,9 +115,7 @@ function Inbox() {
 
   const emptyCopy = filter === 'messages'
     ? 'No buyer messages yet'
-    : filter === 'unread'
-      ? 'No unread orders — you\'re all caught up'
-      : 'Nothing here yet'
+    : 'Nothing here yet'
 
   const listEmpty = showingMessages
     ? filteredMessages.length === 0
@@ -148,22 +145,21 @@ function Inbox() {
         {([
           { key: 'all' as const, count: orders.length + messages.length },
           { key: 'messages' as const, count: messages.length },
-          { key: 'unread' as const, count: unreadOrders },
           { key: 'pending' as const, count: orders.filter(o => o.status === 'pending' || !o.status).length },
           { key: 'confirmed' as const, count: orders.filter(o => o.status === 'fulfilled').length },
         ]).map(({ key, count }) => {
           const active = filter === key
-          const badgeCount = key === 'messages' ? unreadMessages : key === 'unread' ? unreadOrders : 0
+          const badgeCount = key === 'messages' ? unreadMessages : 0
           return (
             <button key={key} onClick={() => { setFilter(key); setSelectedOrderId(null); setSelectedMessageId(null) }}
               style={{ padding: '8px 16px', borderRadius: '20px', border: `1px solid ${active ? green : '#333'}`, background: active ? green : 'transparent', color: active ? '#000' : '#aaa', fontWeight: active ? '700' : '500', cursor: 'pointer', fontSize: '13px', whiteSpace: 'nowrap', textTransform: 'capitalize', display: 'flex', alignItems: 'center', gap: '6px' }}>
               {key}
-              {badgeCount > 0 && (key === 'messages' || key === 'unread') && (
+              {badgeCount > 0 && key === 'messages' && (
                 <span style={{ background: active ? '#000' : green, color: active ? green : '#000', borderRadius: '50%', minWidth: '20px', height: '20px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '800', padding: '0 5px' }}>
                   {badgeCount}
                 </span>
               )}
-              {key !== 'unread' && key !== 'messages' && count > 0 && (
+              {key !== 'messages' && count > 0 && (
                 <span style={{ color: active ? '#333' : '#555', fontSize: '11px' }}>({count})</span>
               )}
             </button>
