@@ -13,6 +13,7 @@ import BulkUpload from './BulkUpload.tsx'
 import Inbox from './Inbox.tsx'
 import OrderHistory from './OrderHistory.tsx'
 import EditStore from './EditStore.tsx'
+import ProductsPage from './ProductsPage.tsx'
 import TopNav from './TopNav.tsx'
 
 function BulkUploadWrapper() {
@@ -80,6 +81,7 @@ function App() {
       <Route path="/dashboard" element={signedIn ? <Dashboard /> : <Navigate to="/" />} />
       <Route path="/browse" element={<BrowsePage />} />
       <Route path="/bulk-upload" element={signedIn ? <BulkUploadWrapper /> : <Navigate to="/" />} />
+      <Route path="/products" element={signedIn ? <ProductsPage /> : <Navigate to="/" />} />
       <Route path="/inbox" element={signedIn ? <Inbox /> : <Navigate to="/" />} />
       <Route path="/orders" element={signedIn ? <OrderHistory /> : <Navigate to="/" />} />
       <Route path="/edit-store" element={signedIn ? <EditStore /> : <Navigate to="/" />} />
