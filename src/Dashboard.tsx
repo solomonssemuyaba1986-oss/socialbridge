@@ -4,6 +4,7 @@ import { doc, getDoc, collection, getDocs, updateDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 import { useSellerOrders } from './useSellerOrders'
+import { useSellerMessages } from './useSellerMessages'
 
 interface Seller {
   businessName: string
@@ -61,6 +62,7 @@ function Dashboard() {
   }, [])
 
   const { orders, unreadCount } = useSellerOrders(playNewOrderAlert)
+  const { unreadCount: unreadMessagesCount } = useSellerMessages()
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -120,13 +122,19 @@ function Dashboard() {
         <div style={{ display: 'grid', gap: '6px' }}>
           {navItems.map(item => {
             const active = location.pathname === item.path || (item.path === '/dashboard' && location.pathname === '/dashboard')
+            const showBadge = item.label === 'Orders' ? orders.filter(o => o.read !== true).length : item.label === 'Inbox' ? unreadMessagesCount : 0
             return (
               <button key={item.path + item.label} onClick={() => navigate(item.path)}
                 style={{
                   width: '100%', display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderRadius: '14px', border: 'none', cursor: 'pointer', textAlign: 'left', background: active ? '#0f2910' : 'transparent', color: active ? '#fff' : '#aaa', fontWeight: active ? 700 : 600, fontSize: '14px'
                 }}>
                 <span>{item.icon}</span>
-                <span>{item.label}</span>
+                <span style={{ flex: 1 }}>{item.label}</span>
+                {showBadge > 0 ? (
+                  <span style={{ minWidth: '24px', height: '24px', borderRadius: '999px', background: '#ff4d4f', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 800, padding: '0 6px' }}>
+                    {showBadge}
+                  </span>
+                ) : null}
               </button>
             )
           })}
