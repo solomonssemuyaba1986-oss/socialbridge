@@ -13,6 +13,7 @@ interface Product {
   colors: string[]
   sizes: string[]
   stock?: number
+  published?: boolean
 }
 
 interface ProductFormState {
@@ -23,6 +24,7 @@ interface ProductFormState {
   sizes: string
   stock: string
   imageUrls: string[]
+  published: boolean
 }
 
 const green = '#adff2f'
@@ -37,6 +39,7 @@ const emptyForm = (): ProductFormState => ({
   sizes: '',
   stock: '',
   imageUrls: [],
+  published: true,
 })
 
 function ProductsPage() {
@@ -108,6 +111,7 @@ function ProductsPage() {
       sizes: (product.sizes || []).join(', '),
       stock: product.stock?.toString() || '',
       imageUrls: initialImages,
+      published: product.published !== false,
     })
     setGalleryImages(initialImages)
     setActiveImageIndex(0)
@@ -162,6 +166,9 @@ function ProductsPage() {
         colors: form.colors.split(',').map((c) => c.trim()).filter(Boolean),
         sizes: form.sizes.split(',').map((s) => s.trim()).filter(Boolean),
         stock: Number(form.stock) || 0,
+        published: form.published,
+        updatedAt: new Date(),
+        ...(editingId ? {} : { createdAt: new Date() }),
       }
 
       if (editingId) {
@@ -262,9 +269,12 @@ function ProductsPage() {
                             {product.colors?.length ? product.colors.map((color) => <span key={color} style={{ padding: '4px 8px', borderRadius: '999px', background: '#222', color: '#ddd', fontSize: '12px' }}>{color}</span>) : null}
                             {product.sizes?.length ? product.sizes.map((size) => <span key={size} style={{ padding: '4px 8px', borderRadius: '999px', border: '1px solid #333', color: '#aaa', fontSize: '12px' }}>{size}</span>) : null}
                           </div>
-                          <div style={{ marginTop: '8px' }}>
+                          <div style={{ marginTop: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                             <span style={{ display: 'inline-flex', padding: '6px 10px', borderRadius: '999px', border: `1px solid ${badge.border}`, background: badge.background, color: badge.color, fontSize: '12px', fontWeight: 700 }}>
                               {badge.label}
+                            </span>
+                            <span style={{ display: 'inline-flex', padding: '6px 10px', borderRadius: '999px', border: '1px solid #333', background: product.published === false ? '#2b1616' : '#1a1a1a', color: product.published === false ? '#ff8a8a' : '#bbb', fontSize: '12px', fontWeight: 700 }}>
+                              {product.published === false ? 'Draft' : 'Live on store'}
                             </span>
                           </div>
                         </div>
@@ -319,6 +329,12 @@ function ProductsPage() {
                 </span>
               </div>
 
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#bbb', border: '1px solid #2a2a2a', borderRadius: '10px', padding: '10px 12px', background: '#171717' }}>
+                <input type="checkbox" checked={form.published} onChange={(e) => setForm({ ...form, published: e.target.checked })} />
+                Publish to store now
+              </label>
+              <p style={{ margin: '-2px 0 0', color: '#777', fontSize: '12px' }}>New products are live for buyers immediately when this is on.</p>
+
               <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px', color: '#bbb' }}>
                 Product photos
                 <input type="file" accept="image/*" multiple onChange={handleFileChange} style={{ color: '#fff' }} />
@@ -358,7 +374,7 @@ function ProductsPage() {
               ) : null}
 
               <button type="submit" disabled={saving} style={{ padding: '12px 14px', borderRadius: '10px', border: 'none', background: saving ? '#333' : green, color: '#000', fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', marginTop: '4px' }}>
-                {saving ? 'Saving...' : editingId ? 'Save changes' : 'Add product'}
+                {saving ? 'Saving...' : editingId ? 'Save changes' : 'Add to store'}
               </button>
             </form>
           </div>
