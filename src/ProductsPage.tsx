@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ChangeEvent, type CSSProperties, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { addDoc, collection, deleteDoc, doc, getDocs, updateDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
@@ -9,8 +9,10 @@ interface Product {
   price: string
   description: string
   imageUrl: string
+  images?: string[]
   colors: string[]
   sizes: string[]
+  stock?: number
 }
 
 interface ProductFormState {
@@ -19,7 +21,8 @@ interface ProductFormState {
   description: string
   colors: string
   sizes: string
-  imageUrl: string
+  stock: string
+  imageUrls: string[]
 }
 
 const green = '#adff2f'
@@ -32,7 +35,8 @@ const emptyForm = (): ProductFormState => ({
   description: '',
   colors: '',
   sizes: '',
-  imageUrl: '',
+  stock: '',
+  imageUrls: [],
 })
 
 function ProductsPage() {
@@ -42,8 +46,9 @@ function ProductsPage() {
   const [saving, setSaving] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<ProductFormState>(emptyForm())
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [previewUrl, setPreviewUrl] = useState('')
+  const [galleryImages, setGalleryImages] = useState<string[]>([])
+  const [activeImageIndex, setActiveImageIndex] = useState(0)
+  const [uploadingImages, setUploadingImages] = useState(false)
   const [sellerId, setSellerId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -88,11 +93,12 @@ function ProductsPage() {
   const resetForm = () => {
     setEditingId(null)
     setForm(emptyForm())
-    setSelectedFile(null)
-    setPreviewUrl('')
+    setGalleryImages([])
+    setActiveImageIndex(0)
   }
 
   const startEdit = (product: Product) => {
+    const initialImages = product.images?.length ? product.images : product.imageUrl ? [product.imageUrl] : []
     setEditingId(product.id)
     setForm({
       name: product.name,
@@ -100,20 +106,43 @@ function ProductsPage() {
       description: product.description || '',
       colors: (product.colors || []).join(', '),
       sizes: (product.sizes || []).join(', '),
-      imageUrl: product.imageUrl || '',
+      stock: product.stock?.toString() || '',
+      imageUrls: initialImages,
     })
-    setPreviewUrl(product.imageUrl || '')
-    setSelectedFile(null)
+    setGalleryImages(initialImages)
+    setActiveImageIndex(0)
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setSelectedFile(file)
-    setPreviewUrl(URL.createObjectURL(file))
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+
+    setUploadingImages(true)
+    try {
+      const addedUrls: string[] = []
+      for (const file of files) {
+        const url = await uploadImage(file)
+        addedUrls.push(url)
+      }
+      const nextIndex = galleryImages.length
+      setGalleryImages((prev) => [...prev, ...addedUrls])
+      setActiveImageIndex(nextIndex)
+      setForm((prev) => ({ ...prev, imageUrls: [...prev.imageUrls, ...addedUrls] }))
+    } catch (err) {
+      console.error('Upload product images failed', err)
+      alert('Could not upload one or more images. Please try again.')
+    } finally {
+      setUploadingImages(false)
+    }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const removeImage = (index: number) => {
+    setGalleryImages((prev) => prev.filter((_, i) => i !== index))
+    setForm((prev) => ({ ...prev, imageUrls: prev.imageUrls.filter((_, i) => i !== index) }))
+    setActiveImageIndex((prev) => (prev > index ? prev - 1 : Math.max(0, prev)))
+  }
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (!sellerId) return
 
@@ -124,18 +153,15 @@ function ProductsPage() {
 
     setSaving(true)
     try {
-      let imageUrl = form.imageUrl
-      if (selectedFile) {
-        imageUrl = await uploadImage(selectedFile)
-      }
-
       const payload = {
         name: form.name.trim(),
         price: form.price.trim(),
         description: form.description.trim(),
-        imageUrl,
+        imageUrl: galleryImages[0] || '',
+        images: galleryImages,
         colors: form.colors.split(',').map((c) => c.trim()).filter(Boolean),
         sizes: form.sizes.split(',').map((s) => s.trim()).filter(Boolean),
+        stock: Number(form.stock) || 0,
       }
 
       if (editingId) {
@@ -161,14 +187,30 @@ function ProductsPage() {
 
     try {
       await deleteDoc(doc(db, 'sellers', sellerId, 'products', productId))
-      setProducts(prev => prev.filter((p) => p.id !== productId))
+      setProducts((prev) => prev.filter((p) => p.id !== productId))
     } catch (err) {
       console.error('Delete product failed', err)
       alert('Could not delete the product.')
     }
   }
 
+  const stockBadge = (stock?: number) => {
+    const value = Number(stock || 0)
+    if (value <= 0) {
+      return { label: 'Out of stock', color: '#fff', background: '#3a1c1c', border: '#ff6b6b' }
+    }
+    if (value < 5) {
+      return { label: `${value} available`, color: '#fff', background: '#4a2a0d', border: '#ff9f43' }
+    }
+    if (value <= 15) {
+      return { label: `${value} available`, color: '#000', background: '#ffd84d', border: '#ffd84d' }
+    }
+    return { label: 'In stock', color: '#fff', background: '#1f1f1f', border: '#ffffff' }
+  }
+
   const productCount = useMemo(() => products.length, [products.length])
+  const currentImage = galleryImages[activeImageIndex] || ''
+  const stockPreview = stockBadge(Number(form.stock) || 0)
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', color: '#fff', fontFamily: 'sans-serif', padding: '24px 16px 48px' }}>
@@ -177,7 +219,7 @@ function ProductsPage() {
           <div>
             <p style={{ margin: 0, color: green, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: '12px' }}>Products</p>
             <h1 style={{ margin: '6px 0 4px', fontSize: '28px', fontWeight: 800 }}>Your product catalog</h1>
-            <p style={{ margin: 0, color: '#888', fontSize: '14px' }}>Manage every listing from one place — add new products, edit details, set colors and sizes, and remove anything you no longer sell.</p>
+            <p style={{ margin: 0, color: '#888', fontSize: '14px' }}>Manage every listing from one place — add new products, edit details, set colors, sizes, photos, and stock capacity.</p>
           </div>
           <button onClick={() => resetForm()} style={{ background: green, color: '#000', border: 'none', borderRadius: '10px', padding: '12px 16px', fontWeight: 800, cursor: 'pointer' }}>
             + Add Product
@@ -195,32 +237,40 @@ function ProductsPage() {
                 <p style={{ color: '#666', margin: 0 }}>Loading your products...</p>
               ) : products.length === 0 ? (
                 <div style={{ border: '1px dashed #333', borderRadius: '12px', padding: '24px', textAlign: 'center', color: '#666' }}>
-                  No products yet. Create your first listing with pictures, pricing, colors and sizes.
+                  No products yet. Create your first listing with pictures, pricing, colors, sizes and stock.
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {products.map((product) => (
-                    <div key={product.id} style={{ background: '#1a1a1a', border: '1px solid #222', borderRadius: '14px', padding: '12px', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                      <img src={product.imageUrl || 'https://placehold.co/220x220/111111/333333'} alt={product.name} style={{ width: '86px', height: '86px', objectFit: 'cover', borderRadius: '10px', flexShrink: 0 }} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                          <div>
-                            <p style={{ margin: '0 0 4px', fontWeight: 700, fontSize: '15px' }}>{product.name}</p>
-                            <p style={{ margin: 0, color: green, fontWeight: 800, fontSize: '14px' }}>UGX {product.price}</p>
+                  {products.map((product) => {
+                    const badge = stockBadge(product.stock)
+                    return (
+                      <div key={product.id} style={{ background: '#1a1a1a', border: '1px solid #222', borderRadius: '14px', padding: '12px', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                        <img src={product.images?.[0] || product.imageUrl || 'https://placehold.co/220x220/111111/333333'} alt={product.name} style={{ width: '86px', height: '86px', objectFit: 'cover', borderRadius: '10px', flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+                            <div>
+                              <p style={{ margin: '0 0 4px', fontWeight: 700, fontSize: '15px' }}>{product.name}</p>
+                              <p style={{ margin: 0, color: green, fontWeight: 800, fontSize: '14px' }}>UGX {product.price}</p>
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button onClick={() => startEdit(product)} style={{ background: '#222', color: '#fff', border: 'none', borderRadius: '8px', padding: '7px 10px', cursor: 'pointer' }}>Edit</button>
+                              <button onClick={() => handleDelete(product.id)} style={{ background: 'transparent', color: '#ff6b6b', border: '1px solid #ff6b6b', borderRadius: '8px', padding: '7px 10px', cursor: 'pointer' }}>Delete</button>
+                            </div>
                           </div>
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <button onClick={() => startEdit(product)} style={{ background: '#222', color: '#fff', border: 'none', borderRadius: '8px', padding: '7px 10px', cursor: 'pointer' }}>Edit</button>
-                            <button onClick={() => handleDelete(product.id)} style={{ background: 'transparent', color: '#ff6b6b', border: '1px solid #ff6b6b', borderRadius: '8px', padding: '7px 10px', cursor: 'pointer' }}>Delete</button>
+                          {product.description ? <p style={{ margin: '8px 0 6px', color: '#888', fontSize: '13px' }}>{product.description}</p> : null}
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '6px' }}>
+                            {product.colors?.length ? product.colors.map((color) => <span key={color} style={{ padding: '4px 8px', borderRadius: '999px', background: '#222', color: '#ddd', fontSize: '12px' }}>{color}</span>) : null}
+                            {product.sizes?.length ? product.sizes.map((size) => <span key={size} style={{ padding: '4px 8px', borderRadius: '999px', border: '1px solid #333', color: '#aaa', fontSize: '12px' }}>{size}</span>) : null}
                           </div>
-                        </div>
-                        {product.description ? <p style={{ margin: '8px 0 6px', color: '#888', fontSize: '13px' }}>{product.description}</p> : null}
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '6px' }}>
-                          {product.colors?.length ? product.colors.map((color) => <span key={color} style={{ padding: '4px 8px', borderRadius: '999px', background: '#222', color: '#ddd', fontSize: '12px' }}>{color}</span>) : null}
-                          {product.sizes?.length ? product.sizes.map((size) => <span key={size} style={{ padding: '4px 8px', borderRadius: '999px', border: '1px solid #333', color: '#aaa', fontSize: '12px' }}>{size}</span>) : null}
+                          <div style={{ marginTop: '8px' }}>
+                            <span style={{ display: 'inline-flex', padding: '6px 10px', borderRadius: '999px', border: `1px solid ${badge.border}`, background: badge.background, color: badge.color, fontSize: '12px', fontWeight: 700 }}>
+                              {badge.label}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -239,7 +289,7 @@ function ProductsPage() {
               </label>
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px', color: '#bbb' }}>
-                Price 
+                Price (UGX)
                 <input value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} style={inputStyle} placeholder="50000" />
               </label>
 
@@ -259,13 +309,53 @@ function ProductsPage() {
               </label>
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px', color: '#bbb' }}>
-                Product image
-                <input type="file" accept="image/*" onChange={handleFileChange} style={{ color: '#fff' }} />
+                Stock available (0–20)
+                <input type="number" min="0" max="20" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} style={inputStyle} placeholder="10" />
               </label>
 
-              {(previewUrl || form.imageUrl) && (
-                <img src={previewUrl || form.imageUrl} alt="Preview" style={{ width: '100%', height: '180px', objectFit: 'cover', borderRadius: '12px', border: '1px solid #2a2a2a' }} />
-              )}
+              <div style={{ padding: '8px 10px', borderRadius: '10px', background: '#1a1a1a', border: `1px solid ${stockPreview.border}`, display: 'inline-flex', alignSelf: 'flex-start' }}>
+                <span style={{ color: stockPreview.color, background: stockPreview.background, padding: '6px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: 700 }}>
+                  {stockPreview.label}
+                </span>
+              </div>
+
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px', color: '#bbb' }}>
+                Product photos
+                <input type="file" accept="image/*" multiple onChange={handleFileChange} style={{ color: '#fff' }} />
+              </label>
+
+              {uploadingImages ? <p style={{ margin: 0, color: '#aaa', fontSize: '13px' }}>Uploading photos...</p> : null}
+
+              {galleryImages.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ position: 'relative' }}>
+                    <img src={currentImage || 'https://placehold.co/600x360/111111/333333'} alt="Preview" style={{ width: '100%', height: '220px', objectFit: 'cover', borderRadius: '12px', border: '1px solid #2a2a2a' }} />
+                    {galleryImages.length > 1 ? (
+                      <>
+                        <button type="button" onClick={() => setActiveImageIndex((prev) => (prev === 0 ? galleryImages.length - 1 : prev - 1))} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', width: '30px', height: '30px', borderRadius: '999px', border: 'none', background: 'rgba(0,0,0,0.7)', color: '#fff', cursor: 'pointer' }}>
+                          ‹
+                        </button>
+                        <button type="button" onClick={() => setActiveImageIndex((prev) => (prev === galleryImages.length - 1 ? 0 : prev + 1))} style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', width: '30px', height: '30px', borderRadius: '999px', border: 'none', background: 'rgba(0,0,0,0.7)', color: '#fff', cursor: 'pointer' }}>
+                          ›
+                        </button>
+                      </>
+                    ) : null}
+                    <div style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '4px 8px', borderRadius: '999px', fontSize: '12px' }}>
+                      {activeImageIndex + 1}/{galleryImages.length}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {galleryImages.map((url, index) => (
+                      <div key={url + index} style={{ position: 'relative' }}>
+                        <img src={url} alt={`Image ${index + 1}`} style={{ width: '56px', height: '56px', objectFit: 'cover', borderRadius: '8px', border: index === activeImageIndex ? `2px solid ${green}` : '2px solid #333' }} />
+                        <button type="button" onClick={() => removeImage(index)} style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#ff6b6b', color: '#fff', border: 'none', borderRadius: '999px', width: '18px', height: '18px', cursor: 'pointer', fontSize: '10px' }}>
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               <button type="submit" disabled={saving} style={{ padding: '12px 14px', borderRadius: '10px', border: 'none', background: saving ? '#333' : green, color: '#000', fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', marginTop: '4px' }}>
                 {saving ? 'Saving...' : editingId ? 'Save changes' : 'Add product'}
@@ -278,7 +368,7 @@ function ProductsPage() {
   )
 }
 
-const inputStyle: React.CSSProperties = {
+const inputStyle: CSSProperties = {
   background: '#111',
   border: '1px solid #2d2d2d',
   color: '#fff',
