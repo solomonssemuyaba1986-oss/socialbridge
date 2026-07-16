@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { collection, getDocs, query } from 'firebase/firestore'
+import { collection, getDocs, query, addDoc, doc, updateDoc } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebase'
 import { useNavigate } from 'react-router-dom'
@@ -18,6 +18,8 @@ interface Product {
   subCategory?: string
   outOfStock?: boolean
   orderCount?: number
+  sellerId?: string
+  sellerWhatsapp?: string
 }
 
 const categories = ['All', ...getMainCategories()]
@@ -86,6 +88,95 @@ function BrowsePage() {
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       saveRecentSearch(search)
+    }
+  }
+
+  // Order modal state
+  const [orderProduct, setOrderProduct] = useState<Product | null>(null)
+  const [buyerName, setBuyerName] = useState('')
+  const [quantity, setQuantity] = useState('1')
+  const [deliveryArea, setDeliveryArea] = useState('')
+  const [message, setMessage] = useState('')
+  const [orderSuccess, setOrderSuccess] = useState(false)
+  const [feedbackMessage, setFeedbackMessage] = useState('')
+  const [feedbackType, setFeedbackType] = useState<'success' | 'error'>('success')
+  const [feedbackVisible, setFeedbackVisible] = useState(false)
+
+  const showFeedback = (msg: string, type: 'success' | 'error' = 'success') => {
+    setFeedbackMessage(msg)
+    setFeedbackType(type)
+    setFeedbackVisible(true)
+  }
+
+  useEffect(() => {
+    if (!feedbackVisible) return
+    const timeoutId = window.setTimeout(() => setFeedbackVisible(false), 4500)
+    return () => window.clearTimeout(timeoutId)
+  }, [feedbackVisible])
+
+  const handleOrder = async () => {
+    if (!buyerName.trim()) {
+      showFeedback('Please enter your name — the seller needs it to confirm your order fast.', 'error')
+      return
+    }
+    if (!deliveryArea.trim()) {
+      showFeedback('Please add your delivery area so the seller can quote delivery quickly.', 'error')
+      return
+    }
+    if (!orderProduct) return
+
+    const sellerId = orderProduct.sellerId
+    if (!sellerId) {
+      showFeedback('Seller info not available. Please try again.', 'error')
+      return
+    }
+
+    try {
+      const orderRef = await addDoc(collection(db, 'sellers', sellerId, 'orders'), {
+        buyerName,
+        productName: orderProduct.name,
+        productPrice: orderProduct.price,
+        quantity,
+        deliveryArea,
+        status: 'pending',
+        read: false,
+        sourcePlatform: 'Browse',
+        createdAt: new Date()
+      })
+
+      const orderId = `RT-${orderRef.id.slice(0, 6).toUpperCase()}`
+
+      await updateDoc(doc(db, 'sellers', sellerId, 'orders', orderRef.id), { orderId })
+
+      // Increment product orderCount
+      await updateDoc(doc(db, 'sellers', sellerId, 'products', orderProduct.id), { 
+        orderCount: (orderProduct.orderCount || 0) + 1 
+      })
+
+      const whatsappText =
+`🟢 NEW ORDER — Rachett
+
+Customer: ${buyerName}
+Product: ${orderProduct.name}
+Price: UGX ${orderProduct.price}
+Quantity: ${quantity}
+Total: UGX ${Number(String(orderProduct.price).replace(/,/g, '')) * Number(quantity)}
+Delivery Area: ${deliveryArea}
+${message ? `Message: ${message}\n` : ''}
+Order ID: #${orderId}`
+
+      const whatsappNumber = orderProduct.sellerWhatsapp || ''
+      setOrderSuccess(true)
+      showFeedback('Great! Your order is on the way. Opening WhatsApp so the seller can confirm it quickly.', 'success')
+      setTimeout(() => {
+        window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappText)}`, '_blank')
+        setBuyerName(''); setQuantity('1'); setDeliveryArea(''); setMessage('')
+        setOrderProduct(null)
+        setOrderSuccess(false)
+      }, 1500)
+    } catch (err) {
+      console.error('Order error:', err)
+      showFeedback('Failed to place order. Please try again.', 'error')
     }
   }
 
@@ -196,7 +287,9 @@ function BrowsePage() {
                 sellerSlug: sellerData.slug,
                 businessName: sellerData.businessName,
                 outOfStock: productData.outOfStock || false,
-                orderCount: productData.orderCount || 0
+                orderCount: productData.orderCount || 0,
+                sellerId: sellerDoc.id,
+                sellerWhatsapp: sellerData.whatsapp || ''
               })
             })
           } catch (err) {
@@ -470,16 +563,25 @@ function BrowsePage() {
             <p style={{ color: '#555', fontSize: '13px', marginBottom: '20px' }}>{filtered.length} products available</p>
             <div className="rt-products" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
               {filtered.map(p => (
-                <div key={p.id} onClick={() => navigate(`/store/${p.sellerSlug}`)}
-                  style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222', cursor: 'pointer', position: 'relative' }}>
-                  <img src={p.imageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
-                    style={{ width: '100%', height: '160px', objectFit: 'cover', opacity: p.outOfStock ? 0.5 : 1 }} />
-                  <div style={{ padding: '12px' }}>
-                    <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: '#fff' }}>{p.name}</p>
-                    <p style={{ margin: '0 0 8px', color: '#555', fontSize: '12px' }}>{p.businessName}</p>
-                    <p style={{ margin: 0, fontWeight: '800', color: green, fontSize: '14px' }}>UGX {p.price}</p>
+                <div key={p.id}
+                  style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222', position: 'relative' }}>
+                  <div onClick={() => navigate(`/store/${p.sellerSlug}`)} style={{ cursor: 'pointer' }}>
+                    <img src={p.imageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
+                      style={{ width: '100%', height: '160px', objectFit: 'cover', opacity: p.outOfStock ? 0.5 : 1 }} />
+                    <div style={{ padding: '12px' }}>
+                      <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: '#fff' }}>{p.name}</p>
+                      <p style={{ margin: '0 0 8px', color: '#555', fontSize: '12px' }}>{p.businessName}</p>
+                      <p style={{ margin: '0 0 10px', fontWeight: '800', color: green, fontSize: '14px' }}>UGX {p.price}</p>
+                    </div>
                   </div>
-                  {p.outOfStock && (
+                  {!p.outOfStock ? (
+                    <div style={{ padding: '0 12px 12px' }}>
+                      <button onClick={(e) => { e.stopPropagation(); setOrderProduct(p); }}
+                        style={{ width: '100%', padding: '10px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>
+                        Buy Now
+                      </button>
+                    </div>
+                  ) : (
                     <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '700', fontSize: '13px', textAlign: 'center', padding: '8px' }}>
                       Out of Stock
                     </div>
@@ -490,6 +592,59 @@ function BrowsePage() {
           </>
         )}
       </div>
+
+      {/* Feedback Toast */}
+      {feedbackVisible && (
+        <div style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 2000, maxWidth: '400px', width: '90%', padding: '14px 16px', borderRadius: '14px', border: `1px solid ${feedbackType === 'success' ? '#2f8' : '#f55'}`, background: feedbackType === 'success' ? '#122a0d' : '#2a0d0d', color: '#fff', fontSize: '14px', textAlign: 'center' }}>
+          {feedbackMessage}
+        </div>
+      )}
+
+      {/* Order Modal */}
+      {orderProduct && (
+        <div className="rt-modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div className="rt-modal-box" style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222', textAlign: 'center' }}>
+            {orderSuccess ? (
+              <div>
+                <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '28px', color: '#000', fontWeight: '800' }}>
+                  ✓
+                </div>
+                <h3 style={{ color: '#fff', fontWeight: '800', fontSize: '18px', margin: '0 0 8px' }}>Order Sent!</h3>
+                <p style={{ color: '#888', fontSize: '14px', margin: 0 }}>Opening WhatsApp...</p>
+              </div>
+            ) : (
+              <>
+                <h3 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: '800', color: '#fff', textAlign: 'left' }}>
+                  Order {orderProduct.name}
+                </h3>
+                <p style={{ margin: '0 0 24px', color: green, fontSize: '14px', fontWeight: '700', textAlign: 'left' }}>
+                  UGX {orderProduct.price} each — {orderProduct.businessName}
+                </p>
+                <input placeholder="Your name" value={buyerName} onChange={e => setBuyerName(e.target.value)}
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+                <input placeholder="Quantity" value={quantity} onChange={e => setQuantity(e.target.value)} type="number" min="1"
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '24px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+                <input placeholder="Delivery area e.g. Nakawa, Kampala" value={deliveryArea} onChange={e => setDeliveryArea(e.target.value)}
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '24px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+                <textarea placeholder="Write a message to the seller (optional)" value={message} onChange={e => setMessage(e.target.value)}
+                  style={{ width: '100%', minHeight: '100px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '24px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
+                <button onClick={handleOrder}
+                  style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
+                  Send Order on WhatsApp
+                </button>
+                <a href={`tel:+${orderProduct.sellerWhatsapp || ''}`}
+                  style={{ display: 'block', width: '100%', padding: '14px', background: 'transparent', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', marginBottom: '12px', textAlign: 'center', textDecoration: 'none', boxSizing: 'border-box' }}>
+                  📞 Call Seller
+                </a>
+                <button onClick={() => { setOrderProduct(null); setBuyerName(''); setQuantity('1'); setDeliveryArea(''); setMessage(''); }}
+                  style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
+                  Cancel
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
