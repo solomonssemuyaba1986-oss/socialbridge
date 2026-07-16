@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { collection, getDocs, query } from 'firebase/firestore'
-import { db } from './firebase'
+import { onAuthStateChanged } from 'firebase/auth'
+import { db, auth } from './firebase'
 import { useNavigate } from 'react-router-dom'
 import { getMainCategories } from './categories'
 import Fuse from 'fuse.js'
@@ -32,7 +33,139 @@ function BrowsePage() {
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 10000000])
   const [hideOutOfStock, setHideOutOfStock] = useState(true)
   const [errorMsg, setErrorMsg] = useState<string>('')
+  const [recentSearches, setRecentSearches] = useState<string[]>([])
+  const [userId, setUserId] = useState<string | null>(null)
   const navigate = useNavigate()
+  const RECENT_SEARCH_LIMIT = 6
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUserId(user ? user.uid : null)
+    })
+    return () => unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    const storageKey = `rachett_recent_searches_${userId || 'guest'}`
+    const raw = localStorage.getItem(storageKey)
+    if (raw) {
+      try {
+        setRecentSearches(JSON.parse(raw) as string[])
+      } catch {
+        setRecentSearches([])
+      }
+    } else {
+      setRecentSearches([])
+    }
+  }, [userId])
+
+  const getSearchStorageKey = (uid: string | null) => `rachett_recent_searches_${uid || 'guest'}`
+
+  const saveRecentSearch = (term: string) => {
+    const trimmed = term.trim()
+    if (!trimmed) return
+    const storageKey = getSearchStorageKey(userId)
+    setRecentSearches((prev) => {
+      const next = [trimmed, ...prev.filter(item => item.toLowerCase() !== trimmed.toLowerCase())].slice(0, RECENT_SEARCH_LIMIT)
+      localStorage.setItem(storageKey, JSON.stringify(next))
+      return next
+    })
+  }
+
+  const clearRecentSearches = () => {
+    const storageKey = getSearchStorageKey(userId)
+    localStorage.removeItem(storageKey)
+    setRecentSearches([])
+  }
+
+  const handleRecentSearchClick = (term: string) => {
+    setSearch(term)
+    saveRecentSearch(term)
+  }
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      saveRecentSearch(search)
+    }
+  }
+
+  const storeMatches = useMemo(() => {
+    const term = search.trim()
+    if (!term) return []
+
+    const storeMap = new Map<string, { sellerSlug: string; businessName: string; imageUrl: string; productCount: number; outOfStockCount: number }>()
+    products.forEach((p) => {
+      const existing = storeMap.get(
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        p.sellerSlug)
+      if (!existing) {
+        storeMap.set(p.sellerSlug, {
+          sellerSlug: p.sellerSlug,
+          businessName: p.businessName,
+          imageUrl: p.imageUrl,
+          productCount: 1,
+          outOfStockCount: p.outOfStock ? 1 : 0,
+        })
+      } else {
+        existing.productCount += 1
+        existing.outOfStockCount += p.outOfStock ? 1 : 0
+      }
+    })
+
+    const stores = Array.from(storeMap.values())
+    const fuse = new Fuse(stores, {
+      keys: ['businessName'],
+      threshold: 0.35,
+      includeScore: true,
+    })
+
+    return fuse.search(term).map((r) => r.item).slice(0, 6)
+  }, [products, search])
 
   // Popular products fallback (top 5 by order count)
   const popularProducts = useMemo(() => {
@@ -173,9 +306,24 @@ function BrowsePage() {
             placeholder="Search products, stores..."
             value={search}
             onChange={e => setSearch(e.target.value)}
+            onKeyDown={handleSearchKeyDown}
             style={{ width: '100%', padding: '14px 16px 14px 44px', borderRadius: '10px', border: '1px solid #333', background: '#1a1a1a', color: '#fff', fontSize: '15px', boxSizing: 'border-box', outline: 'none' }}
           />
         </div>
+        {recentSearches.length > 0 && (
+          <div style={{ maxWidth: '500px', margin: '12px auto 0', display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
+            {recentSearches.map(term => (
+              <button key={term} onClick={() => handleRecentSearchClick(term)}
+                style={{ border: '1px solid #333', borderRadius: '20px', background: '#111', color: '#fff', padding: '8px 14px', fontSize: '13px', cursor: 'pointer' }}>
+                {term}
+              </button>
+            ))}
+            <button onClick={clearRecentSearches}
+              style={{ border: '1px solid #333', borderRadius: '20px', background: '#111', color: '#999', padding: '8px 14px', fontSize: '13px', cursor: 'pointer' }}>
+              Clear recents
+            </button>
+          </div>
+        )}
       </div>
 
       {errorMsg && (
@@ -186,11 +334,41 @@ function BrowsePage() {
         </div>
       )}
 
+      {search.trim() && storeMatches.length > 0 && (
+        <div style={{ maxWidth: '900px', margin: '24px auto', padding: '16px', border: '1px solid #222', borderRadius: '16px', background: '#111' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <div>
+              <p style={{ margin: 0, color: '#888', textTransform: 'uppercase', fontSize: '12px', letterSpacing: '0.12em' }}>Matching stores</p>
+              <h2 style={{ margin: '6px 0 0', fontSize: '20px', fontWeight: '800', color: '#fff' }}>Search matched {storeMatches.length} store{storeMatches.length === 1 ? '' : 's'}</h2>
+            </div>
+            <p style={{ margin: 0, color: '#777', fontSize: '13px' }}>Tap a store to open its storefront</p>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px' }}>
+            {storeMatches.map(store => (
+              <div key={store.sellerSlug} onClick={() => navigate(`/store/${store.sellerSlug}`)}
+                style={{ background: '#151515', borderRadius: '14px', cursor: 'pointer', overflow: 'hidden', border: '1px solid #222', minHeight: '170px', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ backgroundImage: `url(${store.imageUrl || 'https://placehold.co/300x180/111111/555555'})`, backgroundSize: 'cover', backgroundPosition: 'center', height: '110px' }} />
+                <div style={{ padding: '12px' }}>
+                  <p style={{ margin: '0 0 6px', fontWeight: '800', color: '#fff', fontSize: '14px' }}>{store.businessName}</p>
+                  <p style={{ margin: 0, color: '#888', fontSize: '12px' }}>{store.productCount} product{store.productCount === 1 ? '' : 's'} • {store.outOfStockCount} unavailable</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Sort, Price Range, Out-of-Stock Controls */}
       <div style={{ padding: '16px 24px', borderBottom: '1px solid #1a1a1a', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', fontSize: '13px' }}>
         <select
           value={sortBy}
-          onChange={e => setSortBy(e.target.value as typeof sortBy)}
+          onChange={e => {
+            const validSorts = ['relevance', 'price-asc', 'price-desc', 'newest', 'popular'] as const
+            const val = e.target.value
+            if (validSorts.includes(val as typeof validSorts[number])) {
+              setSortBy(val as typeof sortBy)
+            }
+          }}
           style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #333', background: '#1a1a1a', color: '#fff', cursor: 'pointer', fontSize: '13px' }}>
           <option value="relevance">Sort: Relevance</option>
           <option value="price-asc">Sort: Price (Low → High)</option>
@@ -255,8 +433,8 @@ function BrowsePage() {
               <div style={{ marginBottom: '32px', paddingTop: '24px', borderTop: '1px solid #222' }}>
                 <p style={{ color: '#888', fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', marginBottom: '16px' }}>💡 Tips</p>
                 <ul style={{ color: '#666', fontSize: '13px', margin: 0, paddingLeft: '20px', textAlign: 'left', maxWidth: '300px', marginLeft: 'auto', marginRight: 'auto' }}>
-                  <li>Check spelling: "laptop" vs "lapto"</li>
-                  <li>Try broader terms: "laptop" instead of "gaming laptop"</li>
+                  <li>Check spelling:</li>
+                  <li>Try broader terms: </li>
                   <li>Browse by category instead</li>
                   <li>Check price & availability filters</li>
                 </ul>
