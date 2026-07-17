@@ -1,10 +1,11 @@
 import { useEffect, useState, useMemo } from 'react'
-import { collection, getDocs, query, addDoc, doc, updateDoc } from 'firebase/firestore'
+import { collection, getDocs, query, addDoc, doc, updateDoc, setDoc, getDoc } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebase'
 import { useNavigate } from 'react-router-dom'
 import { getMainCategories } from './categories'
 import Fuse from 'fuse.js'
+import { getConversationId } from './useConversation'
 
 interface Product {
   id: string
@@ -102,6 +103,11 @@ function BrowsePage() {
   const [feedbackType, setFeedbackType] = useState<'success' | 'error'>('success')
   const [feedbackVisible, setFeedbackVisible] = useState(false)
 
+  // Message modal state
+  const [messageProduct, setMessageProduct] = useState<Product | null>(null)
+  const [messageText, setMessageText] = useState('')
+  const [sendingMessage, setSendingMessage] = useState(false)
+
   const showFeedback = (msg: string, type: 'success' | 'error' = 'success') => {
     setFeedbackMessage(msg)
     setFeedbackType(type)
@@ -113,6 +119,70 @@ function BrowsePage() {
     const timeoutId = window.setTimeout(() => setFeedbackVisible(false), 4500)
     return () => window.clearTimeout(timeoutId)
   }, [feedbackVisible])
+
+  const handleSendMessage = async () => {
+    if (!messageText.trim()) {
+      showFeedback('Write a quick message so the seller can reply.', 'error')
+      return
+    }
+    if (!messageProduct) return
+    if (!auth.currentUser) {
+      showFeedback('Please sign in to send a message.', 'error')
+      return
+    }
+
+    const sellerId = messageProduct.sellerId
+    if (!sellerId) {
+      showFeedback('Seller info not available.', 'error')
+      return
+    }
+
+    setSendingMessage(true)
+    try {
+      const conversationId = getConversationId(sellerId, auth.currentUser.uid)
+      const convoRef = doc(db, 'conversations', conversationId)
+      const convoSnap = await getDoc(convoRef)
+
+      if (!convoSnap.exists()) {
+        await setDoc(convoRef, {
+          sellerId,
+          buyerId: auth.currentUser.uid,
+          sellerName: messageProduct.businessName,
+          buyerName: auth.currentUser.displayName || 'Buyer',
+          lastMessage: messageText.trim(),
+          lastMessageAt: new Date(),
+          unreadBySeller: true,
+          unreadByBuyer: false,
+          productName: messageProduct.name,
+          productPrice: messageProduct.price,
+          productImage: messageProduct.imageUrl,
+        })
+      } else {
+        await setDoc(convoRef, {
+          lastMessage: messageText.trim(),
+          lastMessageAt: new Date(),
+          unreadBySeller: true,
+          unreadByBuyer: false,
+        }, { merge: true })
+      }
+
+      await addDoc(collection(db, 'conversations', conversationId, 'messages'), {
+        senderId: auth.currentUser.uid,
+        text: messageText.trim(),
+        status: 'sent',
+        createdAt: new Date()
+      })
+
+      showFeedback('Message sent! The seller will see it soon.', 'success')
+      setMessageText('')
+      setMessageProduct(null)
+    } catch (err) {
+      console.error('Send message error:', err)
+      showFeedback('Failed to send message. Please try again.', 'error')
+    } finally {
+      setSendingMessage(false)
+    }
+  }
 
   const handleOrder = async () => {
     if (!buyerName.trim()) {
@@ -575,9 +645,13 @@ Order ID: #${orderId}`
                     </div>
                   </div>
                   {!p.outOfStock ? (
-                    <div style={{ padding: '0 12px 12px' }}>
+                    <div style={{ padding: '0 12px 12px', display: 'flex', gap: '8px' }}>
+                      <button onClick={(e) => { e.stopPropagation(); setMessageProduct(p); }}
+                        style={{ flex: 1, padding: '10px', background: 'transparent', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '12px' }}>
+                        💬 Message
+                      </button>
                       <button onClick={(e) => { e.stopPropagation(); setOrderProduct(p); }}
-                        style={{ width: '100%', padding: '10px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>
+                        style={{ flex: 1, padding: '10px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' }}>
                         Buy Now
                       </button>
                     </div>
@@ -597,6 +671,37 @@ Order ID: #${orderId}`
       {feedbackVisible && (
         <div style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 2000, maxWidth: '400px', width: '90%', padding: '14px 16px', borderRadius: '14px', border: `1px solid ${feedbackType === 'success' ? '#2f8' : '#f55'}`, background: feedbackType === 'success' ? '#122a0d' : '#2a0d0d', color: '#fff', fontSize: '14px', textAlign: 'center' }}>
           {feedbackMessage}
+        </div>
+      )}
+
+      {/* Message Modal */}
+      {messageProduct && (
+        <div className="rt-modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div className="rt-modal-box" style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222' }}>
+            <h3 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: '800', color: '#fff' }}>
+              Message {messageProduct.businessName}
+            </h3>
+            <p style={{ margin: '0 0 4px', color: '#888', fontSize: '14px' }}>
+              About: {messageProduct.name}
+            </p>
+            <p style={{ margin: '0 0 24px', color: green, fontSize: '14px', fontWeight: '700' }}>
+              UGX {messageProduct.price}
+            </p>
+            <textarea
+              placeholder="Hi, is this still available? I'd like to know more..."
+              value={messageText}
+              onChange={e => setMessageText(e.target.value)}
+              style={{ width: '100%', minHeight: '120px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '20px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }}
+            />
+            <button onClick={handleSendMessage} disabled={sendingMessage}
+              style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: sendingMessage ? 'not-allowed' : 'pointer', fontSize: '15px', marginBottom: '12px', opacity: sendingMessage ? 0.6 : 1 }}>
+              {sendingMessage ? 'Sending...' : 'Send Message'}
+            </button>
+            <button onClick={() => { setMessageProduct(null); setMessageText(''); }}
+              style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 
