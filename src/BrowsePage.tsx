@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { collection, getDocs, query, addDoc, doc, updateDoc, setDoc, getDoc } from 'firebase/firestore'
+import { collection, getDocs, query, addDoc, doc, updateDoc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebase'
 import { useNavigate } from 'react-router-dom'
@@ -150,7 +150,7 @@ function BrowsePage() {
           sellerName: messageProduct.businessName,
           buyerName: auth.currentUser.displayName || 'Buyer',
           lastMessage: messageText.trim(),
-          lastMessageAt: new Date(),
+          lastMessageAt: serverTimestamp(),
           unreadBySeller: true,
           unreadByBuyer: false,
           productName: messageProduct.name,
@@ -160,7 +160,7 @@ function BrowsePage() {
       } else {
         await setDoc(convoRef, {
           lastMessage: messageText.trim(),
-          lastMessageAt: new Date(),
+          lastMessageAt: serverTimestamp(),
           unreadBySeller: true,
           unreadByBuyer: false,
         }, { merge: true })
@@ -170,7 +170,7 @@ function BrowsePage() {
         senderId: auth.currentUser.uid,
         text: messageText.trim(),
         status: 'sent',
-        createdAt: new Date()
+        createdAt: serverTimestamp()
       })
 
       showFeedback('Message sent! The seller will see it soon.', 'success')
