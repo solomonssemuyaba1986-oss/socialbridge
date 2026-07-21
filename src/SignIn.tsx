@@ -1,11 +1,29 @@
 import { useState, useRef } from 'react'
 import { signInWithPopup, signInWithRedirect } from 'firebase/auth'
+import type { AuthProvider } from 'firebase/auth'
 import { auth, googleProvider, facebookProvider, appleProvider } from './firebase'
 import { useNavigate } from 'react-router-dom'
+
+interface SavedUser {
+  displayName: string | null
+  email: string | null
+  photoURL: string | null
+  uid: string
+}
+
+function getSavedUser(): SavedUser | null {
+  try {
+    const raw = localStorage.getItem('rachett_last_user')
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
 
 function SignIn() {
   const navigate = useNavigate()
   const [authLoading, setAuthLoading] = useState(false)
+  const [savedUser, setSavedUser] = useState<SavedUser | null>(getSavedUser)
   const providerSectionRef = useRef<HTMLDivElement | null>(null)
   const green = '#adff2f'
 
@@ -13,14 +31,15 @@ function SignIn() {
     providerSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
-  const handleSignInWithProvider = async (provider: any) => {
+  const handleSignInWithProvider = async (provider: AuthProvider) => {
     setAuthLoading(true)
     try {
       await signInWithPopup(auth, provider)
       navigate('/onboarding')
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Provider sign-in error:', error)
-      if (error?.code === 'auth/popup-blocked' || error?.code === 'auth/operation-not-supported-in-this-environment') {
+      const err = error as { code?: string }
+      if (err?.code === 'auth/popup-blocked' || err?.code === 'auth/operation-not-supported-in-this-environment') {
         try {
           await signInWithRedirect(auth, provider)
         } catch (redirectError) {
@@ -39,6 +58,25 @@ function SignIn() {
   const handleFacebookSignIn = () => handleSignInWithProvider(facebookProvider)
   const handleAppleSignIn = () => handleSignInWithProvider(appleProvider)
 
+  const handleContinueAsSaved = async () => {
+    // Re-authenticate with Google (the most common provider)
+    setAuthLoading(true)
+    try {
+      await signInWithPopup(auth, googleProvider)
+      navigate('/onboarding')
+    } catch (error: unknown) {
+      console.error('Re-auth error:', error)
+      alert('Could not sign you in automatically. Please sign in again.')
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleUseDifferentAccount = () => {
+    localStorage.removeItem('rachett_last_user')
+    setSavedUser(null)
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
       {/* Navbar */}
@@ -52,6 +90,45 @@ function SignIn() {
           Get Started →
         </button>
       </nav>
+
+      {/* Welcome Back Banner */}
+      {savedUser && (
+        <div style={{
+          background: '#0f2910',
+          borderBottom: `1px solid ${green}`,
+          padding: '24px 32px',
+          textAlign: 'center',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', flexWrap: 'wrap' }}>
+            {savedUser.photoURL ? (
+              <img src={savedUser.photoURL} alt=""
+                style={{ width: '48px', height: '48px', borderRadius: '50%', border: `2px solid ${green}` }} />
+            ) : (
+              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#222', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', border: `2px solid ${green}` }}>
+                👤
+              </div>
+            )}
+            <div>
+              <p style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: '800', color: '#fff' }}>
+                Hey{savedUser.displayName ? ` ${savedUser.displayName}` : ''}! 👋
+              </p>
+              <p style={{ margin: 0, color: '#888', fontSize: '14px' }}>
+                {savedUser.email ? `${savedUser.email} · ` : ''}You have an account. Want to continue?
+              </p>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '16px' }}>
+            <button onClick={handleContinueAsSaved} disabled={authLoading}
+              style={{ background: green, color: '#000', border: 'none', padding: '12px 28px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '15px' }}>
+              {authLoading ? 'Signing in...' : '✅ Yes, continue'}
+            </button>
+            <button onClick={handleUseDifferentAccount}
+              style={{ background: 'transparent', color: '#888', border: '1px solid #333', padding: '12px 28px', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px' }}>
+              ❌ No, use different account
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Hero */}
       <div className="rt-hero" style={{ textAlign: 'center', padding: '80px 20px 60px', maxWidth: '800px', margin: '0 auto' }}>
