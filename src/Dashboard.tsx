@@ -159,10 +159,16 @@ function Dashboard() {
               <div style={{ fontSize: '13px', color: '#888' }}>Manage products, orders, inbox and growth.</div>
             </div>
           </div>
-          <button onClick={() => { auth.signOut(); navigate('/') }}
-            style={{ background: '#111', border: '1px solid #222', color: '#fff', borderRadius: '12px', padding: '10px 16px', cursor: 'pointer', fontSize: '13px' }}>
-            Sign Out
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={() => navigate('/browse')}
+              style={{ background: green, border: 'none', color: '#000', borderRadius: '12px', padding: '10px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: '700' }}>
+              🏪 Market
+            </button>
+            <button onClick={() => { auth.signOut(); navigate('/') }}
+              style={{ background: '#111', border: '1px solid #222', color: '#fff', borderRadius: '12px', padding: '10px 16px', cursor: 'pointer', fontSize: '13px' }}>
+              Sign Out
+            </button>
+          </div>
         </div>
         <div className="rt-container" style={{ maxWidth: '100%', margin: '0', padding: 0 }}>
 
