@@ -164,7 +164,20 @@ function Dashboard() {
               style={{ background: green, border: 'none', color: '#000', borderRadius: '12px', padding: '10px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: '700' }}>
               🏪 Market
             </button>
-            <button onClick={() => { auth.signOut(); navigate('/') }}
+            <button onClick={() => {
+              // Save user info before signing out so we can welcome them back
+              const user = auth.currentUser
+              if (user) {
+                localStorage.setItem('rachett_last_user', JSON.stringify({
+                  displayName: user.displayName,
+                  email: user.email,
+                  photoURL: user.photoURL,
+                  uid: user.uid
+                }))
+              }
+              auth.signOut()
+              navigate('/')
+            }}
               style={{ background: '#111', border: '1px solid #222', color: '#fff', borderRadius: '12px', padding: '10px 16px', cursor: 'pointer', fontSize: '13px' }}>
               Sign Out
             </button>
