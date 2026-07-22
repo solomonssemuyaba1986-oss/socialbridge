@@ -11,9 +11,13 @@ export interface SellerMessage {
   receiverUid: string
   productId?: string
   productName: string
+  productPrice?: string
   text: string
   createdAt: { toDate?: () => Date } | null
   read?: boolean
+  verified?: boolean
+  senderPhone?: string
+  sourcePlatform?: string
 }
 
 export function isUnreadMessage(msg: SellerMessage): boolean {
