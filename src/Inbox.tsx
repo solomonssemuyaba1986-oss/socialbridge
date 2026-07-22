@@ -235,10 +235,11 @@ function Inbox() {
               )
             })}
 
-            {/* Old messages (buyer → seller via old system) */}
+            {/* Messages (buyer → seller) — includes verified guest messages */}
             {(showingMessages || filter === 'all') && filteredMessages.map(m => {
               const unread = isUnreadMessage(m)
               const selected = selectedMessageId === m.id
+              const isVerifiedGuest = m.verified && m.senderPhone
               return (
                 <div key={`msg-${m.id}`}>
                   <div
@@ -254,8 +255,18 @@ function Inbox() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
                         {unread && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: green, flexShrink: 0 }} />}
                         <div style={{ minWidth: 0 }}>
-                          <p style={{ margin: '0 0 2px', fontWeight: '700', fontSize: '15px', color: '#fff' }}>{m.senderName}</p>
+                          <p style={{ margin: '0 0 2px', fontWeight: '700', fontSize: '15px', color: '#fff' }}>
+                            {m.senderName}
+                            {isVerifiedGuest && (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginLeft: '8px', background: '#0d2a0d', color: green, fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '999px', border: `1px solid ${green}` }}>
+                                ✓ Verified
+                              </span>
+                            )}
+                          </p>
                           <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>Message · {m.productName}</p>
+                          {isVerifiedGuest && (
+                            <p style={{ margin: '4px 0 0', color: '#555', fontSize: '11px' }}>📱 {m.senderPhone}</p>
+                          )}
                         </div>
                       </div>
                       <p style={{ margin: 0, color: '#444', fontSize: '11px', flexShrink: 0, marginLeft: '8px' }}>{formatDate(m.createdAt)}</p>
@@ -268,7 +279,26 @@ function Inbox() {
 
                   {selected && selectedMessage && (
                     <DetailPanel title="Conversation">
-                      <ConversationPanel sellerId={userId} buyerId={m.senderUid} sellerName={seller?.businessName} buyerName={m.senderName} />
+                      {m.senderUid?.startsWith('guest_') ? (
+                        <div>
+                          <DetailRow label="Name" value={m.senderName} />
+                          <DetailRow label="Phone" value={m.senderPhone || 'N/A'} />
+                          <DetailRow label="Verified" value="✓ Yes" />
+                          <DetailRow label="Product" value={m.productName} />
+                          <DetailRow label="Message" value={m.text} />
+                          <DetailRow label="Channel" value={`${platformMeta(m.sourcePlatform).icon} ${platformMeta(m.sourcePlatform).label}`} />
+                          <DetailRow label="Sent" value={formatDate(m.createdAt)} />
+                          <div style={{ marginTop: '16px' }}>
+                            <a href={`https://wa.me/${m.senderPhone?.replace(/\D/g, '')}?text=Hi ${m.senderName}! Thanks for your message about ${m.productName}.`}
+                              target="_blank"
+                              style={{ display: 'block', width: '100%', padding: '12px', background: 'transparent', color: green, border: `1px solid ${green}`, borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '600', textAlign: 'center', textDecoration: 'none', boxSizing: 'border-box' }}>
+                              💬 Reply on WhatsApp
+                            </a>
+                          </div>
+                        </div>
+                      ) : (
+                        <ConversationPanel sellerId={userId} buyerId={m.senderUid} sellerName={seller?.businessName} buyerName={m.senderName} />
+                      )}
                     </DetailPanel>
                   )}
                 </div>
