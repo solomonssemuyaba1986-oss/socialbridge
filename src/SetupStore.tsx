@@ -14,6 +14,9 @@ interface SetupFormErrors {
 
 function SetupStore() {
   const [businessName, setBusinessName] = useState('')
+  const [storeHandle, setStoreHandle] = useState('')
+  const [handleAvailable, setHandleAvailable] = useState<boolean | null>(null)
+  const [handleChecking, setHandleChecking] = useState(false)
   const [bio, setBio] = useState('')
   const [whatsapp, setWhatsapp] = useState('')
   const [email, setEmail] = useState(auth.currentUser?.email || '')
@@ -30,23 +33,36 @@ function SetupStore() {
     return input.trim().slice(0, maxLength).replace(/<[^>]*>/g, '')
   }
 
-  const generateSlug = (name: string): string => {
-    return name.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 50)
+  const sanitizeHandle = (input: string): string => {
+    return input.toLowerCase().trim().replace(/[^a-z0-9_-]/g, '').replace(/-+/g, '-').replace(/_+/g, '_').slice(0, 30)
   }
 
-  const generateUniqueSlug = async (name: string): Promise<string> => {
-    const baseSlug = generateSlug(name)
-    let slug = baseSlug
-    let suffix = 1
-
-    while (true) {
-      const q = query(collection(db, 'sellers'), where('slug', '==', slug))
+  // Debounced handle availability check
+  let handleCheckTimer: ReturnType<typeof setTimeout> | null = null
+  const checkHandleAvailability = async (handle: string) => {
+    if (handle.length < 3) {
+      setHandleAvailable(null)
+      return
+    }
+    setHandleChecking(true)
+    try {
+      const q = query(collection(db, 'sellers'), where('slug', '==', handle))
       const snapshot = await getDocs(q)
-      if (snapshot.empty) {
-        return slug
-      }
-      slug = `${baseSlug}-${suffix}`
-      suffix += 1
+      setHandleAvailable(snapshot.empty)
+    } catch {
+      setHandleAvailable(null)
+    } finally {
+      setHandleChecking(false)
+    }
+  }
+
+  const handleHandleChange = (val: string) => {
+    const cleaned = sanitizeHandle(val)
+    setStoreHandle(cleaned)
+    setHandleAvailable(null)
+    if (handleCheckTimer) clearTimeout(handleCheckTimer)
+    if (cleaned.length >= 3) {
+      handleCheckTimer = setTimeout(() => checkHandleAvailability(cleaned), 500)
     }
   }
 
@@ -123,7 +139,18 @@ function SetupStore() {
       const cleanedEmail = email ? sanitizeInput(email) : ''
       const cleanedInstagram = instagram ? sanitizeInput(instagram, 50).replace(/^@+/, '') : ''
       const cleanedTiktok = tiktok ? sanitizeInput(tiktok, 50).replace(/^@+/, '') : ''
-      const slug = await generateUniqueSlug(cleanedName)
+      // Use the store handle as the slug (unique, chosen by seller)
+      if (!storeHandle || storeHandle.length < 3) {
+        setErrors({ submit: 'Please choose a store handle (at least 3 characters).' })
+        setLoading(false)
+        return
+      }
+      if (handleAvailable !== true) {
+        setErrors({ submit: 'This store handle is already taken. Please choose another.' })
+        setLoading(false)
+        return
+      }
+      const slug = storeHandle
       const fullNumber = `256${whatsapp}`
       let finalLogoUrl = user.photoURL || ''
       if (logoFile) {
@@ -203,6 +230,34 @@ function SetupStore() {
           style={{ width: '100%', padding: '12px', borderRadius: '8px', border: errors.businessName ? '2px solid #c33' : '1px solid #ddd', marginTop: '8px', marginBottom: '4px', fontSize: '15px', boxSizing: 'border-box' }} />
         {errors.businessName && <p style={{ color: '#c33', fontSize: '12px', margin: '4px 0 16px' }}>{errors.businessName}</p>}
         {!errors.businessName && <div style={{ marginBottom: '16px' }} />}
+
+        <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Store Handle</label>
+        <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>
+          Choose a unique handle — like Instagram/TikTok usernames. This is your store URL: rachett.com/store/<strong style={{ color: '#333' }}>{storeHandle || 'your-handle'}</strong>
+        </p>
+        <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #ddd', borderRadius: '8px', overflow: 'hidden', marginBottom: '4px' }}>
+          <div style={{ background: '#f5f5f5', padding: '12px 14px', fontSize: '14px', borderRight: '1px solid #ddd', color: '#888', whiteSpace: 'nowrap' }}>
+            rachett.com/store/
+          </div>
+          <input
+            value={storeHandle}
+            onChange={e => handleHandleChange(e.target.value)}
+            placeholder="your-store-name"
+            maxLength={30}
+            style={{ flex: 1, padding: '12px', border: 'none', outline: 'none', fontSize: '15px', background: '#fff' }}
+          />
+        </div>
+        {handleChecking && <p style={{ color: '#888', fontSize: '12px', margin: '4px 0 16px' }}>Checking availability...</p>}
+        {!handleChecking && handleAvailable === true && (
+          <p style={{ color: '#4a4', fontSize: '12px', margin: '4px 0 16px' }}>✓ Available! @{storeHandle}</p>
+        )}
+        {!handleChecking && handleAvailable === false && (
+          <p style={{ color: '#c33', fontSize: '12px', margin: '4px 0 16px' }}>✗ Sorry, @{storeHandle} is already taken. Try another.</p>
+        )}
+        {!handleChecking && handleAvailable === null && storeHandle.length >= 3 && (
+          <p style={{ color: '#888', fontSize: '12px', margin: '4px 0 16px' }}>Click "Create" to check availability</p>
+        )}
+        {storeHandle.length === 0 && <div style={{ marginBottom: '16px' }} />}
 
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Bio</label>
         <textarea value={bio} onChange={e => setBio(e.target.value)}
