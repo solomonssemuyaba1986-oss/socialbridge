@@ -6,6 +6,7 @@ import { suppressNextSellerOrderAlert } from './orderAlerts.ts'
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
 import { CATEGORIES, getSubcategories } from './categories'
 import { useConversation } from './useConversation.ts'
+import { useGuestOTP } from './useGuestOTP.ts'
 
 interface Seller {
   businessName: string
@@ -335,6 +336,18 @@ function StorePage() {
   const [quantity, setQuantity] = useState('1')
   const [deliveryArea, setDeliveryArea] = useState('')
   const [message, setMessage] = useState('')
+
+  // Guest OTP messaging
+  const {
+    state: otpState,
+    requestOTP,
+    verifyOTP,
+    reset: resetOTP,
+  } = useGuestOTP()
+  const [guestName, setGuestName] = useState('')
+  const [guestPhone, setGuestPhone] = useState('')
+  const [guestOtpInput, setGuestOtpInput] = useState('')
+  const [guestMessageSent, setGuestMessageSent] = useState(false)
 
   const showFeedback = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setFeedbackMessage(message)
@@ -818,18 +831,127 @@ const handleSignupAndSendMessage = async () => {
               <p style={{ margin: 0, color: green, fontSize: '13px', fontWeight: '700', textAlign: 'left' }}>UGX {messageProduct.price}</p>
             </div>
 
-            {/* Message Input */}
-            <textarea placeholder="Write your message..." value={messageText} onChange={e => setMessageText(e.target.value)}
-              style={{ width: '100%', minHeight: '100px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '20px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
+            {/* If user is signed in, show normal message input */}
+            {auth.currentUser ? (
+              <>
+                {/* Message Input */}
+                <textarea placeholder="Write your message..." value={messageText} onChange={e => setMessageText(e.target.value)}
+                  style={{ width: '100%', minHeight: '100px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '20px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
 
-            {/* Send Button */}
-            <button onClick={handleSendMessage}
-              style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
-              Send Message
-            </button>
+                {/* Send Button */}
+                <button onClick={handleSendMessage}
+                  style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
+                  Send Message
+                </button>
+              </>
+            ) : (
+              <>
+                {/* Guest OTP Flow */}
+                {otpState.step === 'idle' || otpState.step === 'error' ? (
+                  <>
+                    <p style={{ color: '#888', fontSize: '13px', marginBottom: '16px', textAlign: 'left' }}>
+                      No account needed. Just verify your phone to message the seller.
+                    </p>
+                    <input placeholder="Your name" value={guestName} onChange={e => setGuestName(e.target.value)}
+                      style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+                    <input placeholder="Phone number e.g. 0771234567" value={guestPhone} onChange={e => setGuestPhone(e.target.value)}
+                      style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+                    <textarea placeholder="Write your message..." value={messageText} onChange={e => setMessageText(e.target.value)}
+                      style={{ width: '100%', minHeight: '80px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '20px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
+
+                    {otpState.error && (
+                      <p style={{ color: '#ff4444', fontSize: '12px', marginBottom: '12px' }}>{otpState.error}</p>
+                    )}
+
+                    <button onClick={() => requestOTP(guestPhone)} disabled={otpState.loading || !guestName.trim() || !guestPhone.trim()}
+                      style={{ width: '100%', padding: '14px', background: (otpState.loading || !guestName.trim() || !guestPhone.trim()) ? '#333' : green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (otpState.loading || !guestName.trim() || !guestPhone.trim()) ? 'not-allowed' : 'pointer', fontSize: '15px', marginBottom: '12px' }}>
+                      {otpState.loading ? 'Sending code...' : 'Send Verification Code'}
+                    </button>
+                  </>
+                ) : otpState.step === 'otp' ? (
+                  <>
+                    <p style={{ color: '#888', fontSize: '13px', marginBottom: '16px', textAlign: 'left' }}>
+                      A 6-digit code was sent to <strong style={{ color: '#fff' }}>{otpState.phone}</strong>. Enter it below.
+                    </p>
+                    <input placeholder="Enter 6-digit code" value={guestOtpInput} onChange={e => setGuestOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '20px', background: '#111', color: '#fff', textAlign: 'center', letterSpacing: '8px' }} />
+
+                    {otpState.error && (
+                      <p style={{ color: '#ff4444', fontSize: '12px', marginBottom: '12px' }}>{otpState.error}</p>
+                    )}
+
+                    <button onClick={async () => {
+                      const verified = await verifyOTP(guestOtpInput, guestName)
+                      if (verified) {
+                        // Send the message as a guest
+                        try {
+                          const guestId = `guest_${otpState.phone.replace(/\D/g, '')}`
+                          const { addDoc, collection, serverTimestamp } = await import('firebase/firestore')
+                          await addDoc(collection(db, 'sellers', sellerId, 'messages'), {
+                            senderName: guestName,
+                            senderUid: guestId,
+                            senderPhone: otpState.phone,
+                            productName: messageProduct.name,
+                            productPrice: messageProduct.price,
+                            text: messageText.trim(),
+                            read: false,
+                            sourcePlatform: detectPlatform(searchParams),
+                            verified: true,
+                            createdAt: serverTimestamp(),
+                          })
+                          setGuestMessageSent(true)
+                          showFeedback('Message sent! The seller will reply soon.', 'success')
+                          setTimeout(() => {
+                            setMessageProduct(null)
+                            setMessageText('')
+                            setGuestName('')
+                            setGuestPhone('')
+                            setGuestOtpInput('')
+                            setGuestMessageSent(false)
+                            resetOTP()
+                          }, 1500)
+                        } catch (err) {
+                          console.error('Guest message error:', err)
+                          showFeedback('Failed to send message. Try again.', 'error')
+                        }
+                      }
+                    }} disabled={otpState.loading || guestOtpInput.length !== 6}
+                      style={{ width: '100%', padding: '14px', background: (otpState.loading || guestOtpInput.length !== 6) ? '#333' : green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (otpState.loading || guestOtpInput.length !== 6) ? 'not-allowed' : 'pointer', fontSize: '15px', marginBottom: '12px' }}>
+                      {otpState.loading ? 'Verifying...' : 'Verify & Send'}
+                    </button>
+
+                    <button onClick={() => resetOTP()}
+                      style={{ width: '100%', padding: '8px', background: 'transparent', color: '#888', border: 'none', cursor: 'pointer', fontSize: '13px', marginBottom: '12px' }}>
+                      ← Use a different number
+                    </button>
+                  </>
+                ) : otpState.step === 'verified' && guestMessageSent ? (
+                  <div>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: '24px', color: '#000', fontWeight: '800' }}>
+                      ✓
+                    </div>
+                    <p style={{ color: '#fff', fontSize: '15px', fontWeight: '700', margin: '0 0 4px' }}>Message Sent!</p>
+                    <p style={{ color: '#888', fontSize: '13px', margin: 0 }}>The seller will reply soon.</p>
+                  </div>
+                ) : null}
+
+                {/* Divider */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '16px 0' }}>
+                  <div style={{ flex: 1, height: '1px', background: '#222' }} />
+                  <span style={{ color: '#555', fontSize: '12px' }}>OR</span>
+                  <div style={{ flex: 1, height: '1px', background: '#222' }} />
+                </div>
+
+                {/* Sign in option */}
+                <button onClick={() => { setShowSignupSheet(true); setMessageProduct(null) }}
+                  style={{ width: '100%', padding: '12px', background: 'transparent', color: '#aaa', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', marginBottom: '12px' }}>
+                  Sign in with Google
+                </button>
+              </>
+            )}
 
             {/* Cancel Button */}
-            <button onClick={() => { setMessageProduct(null); setMessageText('') }}
+            <button onClick={() => { setMessageProduct(null); setMessageText(''); resetOTP(); setGuestName(''); setGuestPhone(''); setGuestOtpInput('') }}
               style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
               Cancel
             </button>
