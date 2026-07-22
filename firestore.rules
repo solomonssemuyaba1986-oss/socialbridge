@@ -18,11 +18,24 @@ service cloud.firestore {
       }
 
       match /messages/{messageId} {
-        allow create: if request.auth != null
+        allow create: if (request.auth != null
           && request.resource.data.senderUid == request.auth.uid
           && request.resource.data.receiverUid == sellerId
           && request.resource.data.text is string
-          && request.resource.data.text.size() > 0;
+          && request.resource.data.text.size() > 0)
+          ||
+          // Guest messages: verified phone, no auth required
+          (request.auth == null
+          && request.resource.data.senderUid is string
+          && request.resource.data.senderUid.matches('^guest_')
+          && request.resource.data.senderName is string
+          && request.resource.data.senderName.size() > 0
+          && request.resource.data.senderPhone is string
+          && request.resource.data.senderPhone.matches('^\\+256\\d{9}$')
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.verified == true
+          && request.resource.data.productName is string);
         allow read: if request.auth.uid == sellerId
           || (request.auth != null && resource.data.senderUid == request.auth.uid);
         allow update: if request.auth.uid == sellerId;
