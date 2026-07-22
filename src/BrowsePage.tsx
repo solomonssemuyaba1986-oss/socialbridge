@@ -35,6 +35,7 @@ function BrowsePage() {
   const [sortBy, setSortBy] = useState<'relevance' | 'price-asc' | 'price-desc' | 'newest' | 'popular'>('relevance')
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 10000000])
   const [hideOutOfStock, setHideOutOfStock] = useState(true)
+  const [showMyProducts, setShowMyProducts] = useState<'all' | 'mine' | 'others'>('all')
   const [errorMsg, setErrorMsg] = useState<string>('')
   const [recentSearches, setRecentSearches] = useState<string[]>([])
   const [userId, setUserId] = useState<string | null>(null)
@@ -415,6 +416,13 @@ Order ID: #${orderId}`
       result = searchResults.map(r => r.item)
     }
 
+    // Apply seller filter (only when user is signed in)
+    if (userId && showMyProducts === 'mine') {
+      result = result.filter(p => p.sellerId === userId)
+    } else if (userId && showMyProducts === 'others') {
+      result = result.filter(p => p.sellerId !== userId)
+    }
+
     // Apply sorting
     if (sortBy === 'price-asc') {
       result.sort((a, b) => {
@@ -436,7 +444,7 @@ Order ID: #${orderId}`
     }
 
     setFiltered(result)
-  }, [activeCategory, search, products, sortBy, priceRange, hideOutOfStock])
+  }, [activeCategory, search, products, sortBy, priceRange, hideOutOfStock, userId, showMyProducts])
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
@@ -568,6 +576,17 @@ Order ID: #${orderId}`
           />
           Hide out of stock
         </label>
+
+        {userId && (
+          <select
+            value={showMyProducts}
+            onChange={e => setShowMyProducts(e.target.value as 'all' | 'mine' | 'others')}
+            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #333', background: '#1a1a1a', color: '#fff', cursor: 'pointer', fontSize: '13px' }}>
+            <option value="all">All products</option>
+            <option value="mine">Mine only</option>
+            <option value="others">Hide mine</option>
+          </select>
+        )}
       </div>
 
       {/* Categories */}
@@ -635,7 +654,12 @@ Order ID: #${orderId}`
               {filtered.map(p => (
                 <div key={p.id}
                   style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222', position: 'relative' }}>
-                  <div onClick={() => navigate(`/store/${p.sellerSlug}`)} style={{ cursor: 'pointer' }}>
+                  <div onClick={() => navigate(`/store/${p.sellerSlug}`)} style={{ cursor: 'pointer', position: 'relative' }}>
+                    {userId && p.sellerId === userId && (
+                      <div style={{ position: 'absolute', top: '8px', left: '8px', background: green, color: '#000', fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '999px', zIndex: 2 }}>
+                        Yours
+                      </div>
+                    )}
                     <img src={p.imageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
                       style={{ width: '100%', height: '160px', objectFit: 'cover', opacity: p.outOfStock ? 0.5 : 1 }} />
                     <div style={{ padding: '12px' }}>
