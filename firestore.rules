@@ -11,6 +11,11 @@ service cloud.firestore {
         allow create, update, delete: if request.auth.uid == sellerId;
       }
 
+      match /stats/{statId} {
+        allow read: if true;
+        allow write: if request.auth.uid == sellerId;
+      }
+
       match /orders/{orderId} {
         allow read: if request.auth.uid == sellerId;
         allow create: if request.auth != null;
