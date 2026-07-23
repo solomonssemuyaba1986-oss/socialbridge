@@ -7,6 +7,7 @@ import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from 'firebas
 import { CATEGORIES, getSubcategories } from './categories'
 import { useConversation } from './useConversation.ts'
 import { useGuestOTP } from './useGuestOTP.ts'
+import { useSellerStats, getSalesLabel, formatRating, renderStars } from './useSellerStats.ts'
 
 interface Seller {
   businessName: string
@@ -349,6 +350,9 @@ function StorePage() {
   const [guestOtpInput, setGuestOtpInput] = useState('')
   const [guestMessageSent, setGuestMessageSent] = useState(false)
 
+  // Seller stats for trust signals
+  const { stats: sellerStats } = useSellerStats(sellerId)
+
   const showFeedback = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setFeedbackMessage(message)
     setFeedbackType(type)
@@ -677,6 +681,66 @@ const handleSignupAndSendMessage = async () => {
             Log out
           </button>
         )}
+      </div>
+
+      {/* Trust Bar */}
+      <div style={{ maxWidth: '640px', margin: '0 auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {/* Verified Seller Badge */}
+        {sellerStats.verifiedSeller && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+            <span style={{ background: green, color: '#000', fontSize: '11px', fontWeight: '800', padding: '4px 12px', borderRadius: '999px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              ✅ Verified Seller
+            </span>
+          </div>
+        )}
+
+        {/* Rating */}
+        {sellerStats.reviewCount > 0 && (
+          <div style={{ textAlign: 'center' }}>
+            <span style={{ color: '#ffd700', fontSize: '16px', letterSpacing: '2px' }}>{renderStars(sellerStats.avgRating)}</span>
+            <span style={{ color: '#fff', fontWeight: '700', fontSize: '15px', marginLeft: '8px' }}>{formatRating(sellerStats.avgRating)}</span>
+            <span style={{ color: '#888', fontSize: '13px', marginLeft: '4px' }}>({sellerStats.reviewCount} review{sellerStats.reviewCount === 1 ? '' : 's'})</span>
+          </div>
+        )}
+
+        {/* Stats Row */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '16px', fontSize: '13px' }}>
+          {/* Sales */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#aaa' }}>
+            <span>📦</span>
+            <span>{getSalesLabel(sellerStats.totalSales)}</span>
+          </div>
+
+          {/* Store Age */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#aaa' }}>
+            <span>⏱️</span>
+            <span>{sellerStats.storeAge}</span>
+          </div>
+
+          {/* Response Time */}
+          {sellerStats.responseTime !== '—' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#aaa' }}>
+              <span>📈</span>
+              <span>{sellerStats.responseTime}</span>
+            </div>
+          )}
+
+          {/* Delivery Success */}
+          {sellerStats.deliverySuccess > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#aaa' }}>
+              <span>✅</span>
+              <span>{sellerStats.deliverySuccess}% delivered</span>
+            </div>
+          )}
+
+          {/* Repeat Buyers */}
+          {sellerStats.repeatBuyers > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#aaa' }}>
+              <span>🔄</span>
+              <span>{sellerStats.repeatBuyers} repeat buyer{sellerStats.repeatBuyers === 1 ? '' : 's'}</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Products */}
