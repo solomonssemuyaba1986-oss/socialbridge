@@ -33,12 +33,13 @@ function SignIn() {
 
   // Scroll to sign-up buttons when coming from "Sign up" clicks
   useEffect(() => {
-    if (location.hash === '#signup' && providerSectionRef.current) {
-      setTimeout(() => {
-        providerSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }, 300)
+    const state = location.state as { scrollToProviders?: boolean } | null
+    if (state?.scrollToProviders && providerSectionRef.current) {
+      providerSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      // Clean up the state so it doesn't re-scroll on remounts
+      window.history.replaceState({}, document.title)
     }
-  }, [location.hash])
+  }, [location.state])
 
   // Phone auth state
   const [phoneNumber, setPhoneNumber] = useState('')
