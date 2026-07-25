@@ -26,8 +26,7 @@ function TopNav() {
   }
 
   const handleSignUpClick = () => {
-    // Navigate to sign-in page with hash — SignIn will scroll to auth buttons
-    navigate('/#signup')
+    navigate('/', { state: { scrollToProviders: true } })
   }
 
   return (
@@ -117,7 +116,7 @@ function TopNav() {
 
             <p style={{ margin: '16px 0 0', color: '#555', fontSize: 13 }}>
               Don't have an account?{' '}
-              <span onClick={() => { setShowLoginModal(false); navigate('/#signup') }}
+              <span onClick={() => { setShowLoginModal(false); navigate('/', { state: { scrollToProviders: true } }) }}
                 style={{ color: green, cursor: 'pointer', fontWeight: 600, textDecoration: 'underline' }}>
                 Sign up
               </span>
