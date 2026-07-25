@@ -1,8 +1,8 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { signInWithPopup, signInWithRedirect, signInWithPhoneNumber } from 'firebase/auth'
 import type { AuthProvider, ConfirmationResult } from 'firebase/auth'
 import { auth, db, googleProvider, facebookProvider, appleProvider, createRecaptchaVerifier } from './firebase'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore'
 
 const OTP_SERVER_URL = import.meta.env.VITE_OTP_SERVER_URL || 'http://localhost:3001'
@@ -25,10 +25,20 @@ function getSavedUser(): SavedUser | null {
 
 function SignIn() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [authLoading, setAuthLoading] = useState(false)
   const [savedUser, setSavedUser] = useState<SavedUser | null>(getSavedUser)
   const providerSectionRef = useRef<HTMLDivElement | null>(null)
   const green = '#adff2f'
+
+  // Scroll to sign-up buttons when coming from "Sign up" clicks
+  useEffect(() => {
+    if (location.hash === '#signup' && providerSectionRef.current) {
+      setTimeout(() => {
+        providerSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 300)
+    }
+  }, [location.hash])
 
   // Phone auth state
   const [phoneNumber, setPhoneNumber] = useState('')
