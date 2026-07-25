@@ -7,7 +7,7 @@ import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from 'firebas
 import { CATEGORIES, getSubcategories } from './categories'
 import { useConversation } from './useConversation.ts'
 import { useGuestOTP } from './useGuestOTP.ts'
-import { useSellerStats, getSalesLabel, formatRating, renderStars } from './useSellerStats.ts'
+import { useSellerStats, getSalesLabel, formatRating, renderStars, getBadgeStatusLabel } from './useSellerStats.ts'
 
 interface Seller {
   businessName: string
@@ -493,8 +493,10 @@ const handleOrder = async () => {
 
   const sourcePlatform = detectPlatform(searchParams)
 
+  const buyerUid = auth.currentUser?.uid || null
   const orderRef = await addDoc(collection(db, 'sellers', sellerId, 'orders'), {
     buyerName,
+    buyerUid,
     productName: orderProduct.name,
     productPrice: orderProduct.price,
     quantity,
@@ -690,14 +692,25 @@ const handleSignupAndSendMessage = async () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
             {/* 🟢 Real Seller Badge */}
             {sellerStats.realSellerBadge && (
-              <span style={{ background: '#adff2f', color: '#000', fontSize: '11px', fontWeight: '800', padding: '4px 12px', borderRadius: '999px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                🟢 Real Seller
+              <span title={sellerStats.realSellerBadgeStatus === 'grace' ? 'This seller\'s verification is being renewed' : 'Identity verified by Rachett'}
+                style={{ 
+                  background: sellerStats.realSellerBadgeStatus === 'grace' ? '#666' : '#adff2f', 
+                  color: sellerStats.realSellerBadgeStatus === 'grace' ? '#fff' : '#000', 
+                  fontSize: '11px', fontWeight: '800', padding: '4px 12px', borderRadius: '999px', 
+                  display: 'inline-flex', alignItems: 'center', gap: '4px', opacity: sellerStats.realSellerBadgeStatus === 'grace' ? 0.7 : 1,
+                }}>
+                🟢 {getBadgeStatusLabel(sellerStats.realSellerBadgeStatus, 'Real Seller')}
               </span>
             )}
             {/* 🔵 Active Seller Badge */}
             {sellerStats.activeSellerBadge && (
-              <span style={{ background: '#2196F3', color: '#fff', fontSize: '11px', fontWeight: '800', padding: '4px 12px', borderRadius: '999px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                🔵 Active Seller
+              <span title={sellerStats.activeSellerBadgeStatus === 'grace' ? 'This seller\'s active status is being renewed' : 'Consistently delivers on Rachett'}
+                style={{ 
+                  background: sellerStats.activeSellerBadgeStatus === 'grace' ? '#555' : '#2196F3', 
+                  color: '#fff', fontSize: '11px', fontWeight: '800', padding: '4px 12px', borderRadius: '999px', 
+                  display: 'inline-flex', alignItems: 'center', gap: '4px', opacity: sellerStats.activeSellerBadgeStatus === 'grace' ? 0.6 : 1,
+                }}>
+                🔵 {getBadgeStatusLabel(sellerStats.activeSellerBadgeStatus, 'Active Seller')}
               </span>
             )}
           </div>
