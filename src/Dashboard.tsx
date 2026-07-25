@@ -6,11 +6,17 @@ import { onAuthStateChanged } from 'firebase/auth'
 import { useSellerOrders } from './useSellerOrders'
 import { useSellerMessages } from './useSellerMessages'
 
+import { sendEmailVerification } from 'firebase/auth'
+
 interface Seller {
   businessName: string
   bio: string
   slug: string
   whatsapp?: string
+  recoveryEmail?: string
+  recoveryEmailVerified?: boolean
+  recoveryEmailPromptCount?: number
+  recoveryEmailLastPrompted?: any
 }
 
 interface Product {
@@ -29,6 +35,47 @@ function Dashboard() {
   const navigate = useNavigate()
   const location = useLocation()
   const green = '#adff2f'
+
+  // Recovery email
+  const [recoveryEmailInput, setRecoveryEmailInput] = useState('')
+  const [recoverySending, setRecoverySending] = useState(false)
+  const [recoverySent, setRecoverySent] = useState(false)
+  const [bannerDismissed, setBannerDismissed] = useState(false)
+
+  const needsRecoveryEmail = seller?.recoveryEmail !== undefined 
+    && seller.recoveryEmail === '' 
+    && !seller.recoveryEmailVerified
+
+  const handleAddRecoveryEmail = async () => {
+    if (!recoveryEmailInput || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recoveryEmailInput)) return
+    setRecoverySending(true)
+    try {
+      // Save email to seller doc
+      await updateDoc(doc(db, 'sellers', userId), {
+        recoveryEmail: recoveryEmailInput.toLowerCase().trim(),
+        recoveryEmailPromptCount: (seller?.recoveryEmailPromptCount || 0) + 1,
+        recoveryEmailLastPrompted: new Date(),
+      })
+      // If user is signed in with email auth, send verification
+      const user = auth.currentUser
+      if (user && user.email === recoveryEmailInput.toLowerCase().trim()) {
+        // Email matches auth email — auto-verified
+        await updateDoc(doc(db, 'sellers', userId), { recoveryEmailVerified: true })
+        setRecoverySent(true)
+        setBannerDismissed(true)
+      } else {
+        // Different email — send Firebase verification
+        if (user) {
+          await sendEmailVerification(user)
+        }
+        setRecoverySent(true)
+      }
+    } catch (err) {
+      console.error('Recovery email error:', err)
+    } finally {
+      setRecoverySending(false)
+    }
+  }
 
   const navItems = [
     { label: 'Dashboard', path: '/dashboard', icon: '📊' },
@@ -208,6 +255,56 @@ function Dashboard() {
               </p>
             </div>
             <span style={{ color: green, fontSize: '20px' }}>→</span>
+          </div>
+        )}
+
+        {/* Recovery Email Banner */}
+        {needsRecoveryEmail && !bannerDismissed && (
+          <div style={{
+            background: '#1a1a2e', border: '1px solid #3333aa', borderRadius: '12px',
+            padding: '16px 20px', marginBottom: '24px',
+          }}>
+            {!recoverySent ? (
+              <>
+                <p style={{ margin: '0 0 4px', color: '#88aaff', fontWeight: '800', fontSize: '14px' }}>
+                  🔐 Add a recovery email
+                </p>
+                <p style={{ margin: '0 0 12px', color: '#888', fontSize: '13px' }}>
+                  If you lose access to your phone number, we'll use this email to help you recover your store.
+                </p>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    value={recoveryEmailInput}
+                    onChange={e => setRecoveryEmailInput(e.target.value)}
+                    placeholder="you@example.com"
+                    style={{ flex: 1, padding: '10px 12px', borderRadius: '8px', border: '1px solid #3333aa', background: '#111', color: '#fff', fontSize: '14px', boxSizing: 'border-box' }}
+                  />
+                  <button onClick={handleAddRecoveryEmail} disabled={recoverySending || !recoveryEmailInput}
+                    style={{ padding: '10px 18px', background: recoverySending || !recoveryEmailInput ? '#333' : '#4466cc', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: recoverySending || !recoveryEmailInput ? 'not-allowed' : 'pointer', fontSize: '13px', whiteSpace: 'nowrap' }}>
+                    {recoverySending ? 'Saving...' : 'Add Email'}
+                  </button>
+                </div>
+                <button onClick={() => {
+                  setBannerDismissed(true)
+                  updateDoc(doc(db, 'sellers', userId), {
+                    recoveryEmailLastPrompted: new Date(),
+                    recoveryEmailPromptCount: (seller.recoveryEmailPromptCount || 0) + 1,
+                  })
+                }}
+                  style={{ marginTop: '8px', background: 'transparent', color: '#666', border: 'none', cursor: 'pointer', fontSize: '12px', padding: 0 }}>
+                  Remind me later
+                </button>
+              </>
+            ) : (
+              <>
+                <p style={{ margin: '0 0 4px', color: green, fontWeight: '800', fontSize: '14px' }}>
+                  ✅ Recovery email saved!
+                </p>
+                <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>
+                  {recoveryEmailInput} — check your inbox to verify it.
+                </p>
+              </>
+            )}
           </div>
         )}
 
