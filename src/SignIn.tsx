@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
-import { signInWithPopup, signInWithRedirect } from 'firebase/auth'
-import type { AuthProvider } from 'firebase/auth'
-import { auth, googleProvider, facebookProvider, appleProvider } from './firebase'
+import { signInWithPopup, signInWithRedirect, signInWithPhoneNumber } from 'firebase/auth'
+import type { AuthProvider, ConfirmationResult } from 'firebase/auth'
+import { auth, googleProvider, facebookProvider, appleProvider, createRecaptchaVerifier } from './firebase'
 import { useNavigate } from 'react-router-dom'
 
 interface SavedUser {
@@ -26,6 +26,14 @@ function SignIn() {
   const [savedUser, setSavedUser] = useState<SavedUser | null>(getSavedUser)
   const providerSectionRef = useRef<HTMLDivElement | null>(null)
   const green = '#adff2f'
+
+  // Phone auth state
+  const [phoneNumber, setPhoneNumber] = useState('')
+  const [phoneOtpSent, setPhoneOtpSent] = useState(false)
+  const [phoneOtp, setPhoneOtp] = useState('')
+  const [phoneOtpLoading, setPhoneOtpLoading] = useState(false)
+  const [phoneOtpError, setPhoneOtpError] = useState('')
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null)
 
   const handleScrollToProviders = () => {
     providerSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -59,7 +67,6 @@ function SignIn() {
   const handleAppleSignIn = () => handleSignInWithProvider(appleProvider)
 
   const handleContinueAsSaved = async () => {
-    // Re-authenticate with Google (the most common provider)
     setAuthLoading(true)
     try {
       await signInWithPopup(auth, googleProvider)
@@ -75,6 +82,79 @@ function SignIn() {
   const handleUseDifferentAccount = () => {
     localStorage.removeItem('rachett_last_user')
     setSavedUser(null)
+  }
+
+  // -- Phone Auth handlers --
+  const handlePhoneChange = (val: string) => {
+    const digits = val.replace(/\D/g, '').slice(0, 9)
+    setPhoneNumber(digits)
+    setPhoneOtpError('')
+    // Reset OTP state when number changes
+    if (digits !== phoneNumber) {
+      setPhoneOtpSent(false)
+      setPhoneOtp('')
+      setConfirmationResult(null)
+    }
+  }
+
+  const handleSendPhoneOtp = async () => {
+    if (phoneNumber.length !== 9 || !/^7\d{8}$/.test(phoneNumber)) {
+      setPhoneOtpError('Enter a valid Uganda number starting with 7')
+      return
+    }
+    setPhoneOtpLoading(true)
+    setPhoneOtpError('')
+    const fullNumber = `+256${phoneNumber}`
+    try {
+      const recaptchaVerifier = createRecaptchaVerifier('phone-recaptcha-container')
+      const result = await signInWithPhoneNumber(auth, fullNumber, recaptchaVerifier)
+      setConfirmationResult(result)
+      setPhoneOtpSent(true)
+      console.log(`[Phone Auth] OTP sent to ${fullNumber}`)
+    } catch (err: any) {
+      console.error('Phone OTP send error:', err)
+      if (err?.code === 'auth/too-many-requests') {
+        setPhoneOtpError('Too many attempts. Wait a moment and try again.')
+      } else if (err?.code === 'auth/invalid-phone-number') {
+        setPhoneOtpError('Invalid phone number format.')
+      } else {
+        setPhoneOtpError('Failed to send code. Check your number and try again.')
+      }
+    } finally {
+      setPhoneOtpLoading(false)
+    }
+  }
+
+  const handleVerifyPhoneOtp = async () => {
+    if (!phoneOtp || phoneOtp.length < 6) {
+      setPhoneOtpError('Enter the 6-digit code')
+      return
+    }
+    if (!confirmationResult) {
+      setPhoneOtpError('Session expired. Request a new code.')
+      setPhoneOtpSent(false)
+      return
+    }
+    setPhoneOtpLoading(true)
+    setPhoneOtpError('')
+    try {
+      await confirmationResult.confirm(phoneOtp)
+      // Firebase Phone Auth succeeded — user is now signed in
+      navigate('/onboarding')
+    } catch (err: any) {
+      console.error('Phone OTP verify error:', err)
+      if (err?.code === 'auth/invalid-verification-code') {
+        setPhoneOtpError('Wrong code. Check and try again.')
+      } else if (err?.code === 'auth/code-expired') {
+        setPhoneOtpError('Code expired. Request a new one.')
+        setPhoneOtpSent(false)
+        setConfirmationResult(null)
+      } else {
+        setPhoneOtpError('Verification failed. Try again.')
+      }
+    } finally {
+      setPhoneOtpLoading(false)
+    }
   }
 
   return (
@@ -145,24 +225,111 @@ function SignIn() {
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-          <div ref={providerSectionRef} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+          <div ref={providerSectionRef} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', width: '100%', maxWidth: '360px' }}>
+            {/* Google */}
             <button onClick={handleGoogleSignIn}
-              style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#fff', color: '#000', border: 'none', padding: '16px 32px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px' }}>
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: '#fff', color: '#000', border: 'none', padding: '16px 32px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px' }}>
               <img src="https://www.google.com/favicon.ico" width="20" alt="Google" />
               Continue with Google
             </button>
 
+            {/* Facebook */}
             <button onClick={handleFacebookSignIn}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: '#4267B2', color: '#fff', border: 'none', padding: '16px 32px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px' }}>
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: '#4267B2', color: '#fff', border: 'none', padding: '16px 32px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px' }}>
               <span style={{ fontSize: '18px' }}>f</span>
               Continue with Facebook
             </button>
 
+            {/* Apple */}
             <button onClick={handleAppleSignIn} disabled={authLoading}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: '#000', color: '#fff', border: 'none', padding: '16px 32px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px' }}>
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: '#000', color: '#fff', border: 'none', padding: '16px 32px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px' }}>
               <span style={{ fontSize: '18px' }}></span>
               Continue with Apple
             </button>
+
+            {/* Divider */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%', margin: '4px 0' }}>
+              <div style={{ flex: 1, height: '1px', background: '#222' }} />
+              <span style={{ color: '#555', fontSize: '13px' }}>OR</span>
+              <div style={{ flex: 1, height: '1px', background: '#222' }} />
+            </div>
+
+            {/* Phone Sign-In */}
+            <div style={{ width: '100%', background: '#1a1a1a', borderRadius: '10px', padding: '20px', border: '1px solid #222' }}>
+              <p style={{ color: '#fff', fontWeight: '700', fontSize: '14px', margin: '0 0 12px', textAlign: 'left' }}>
+                📱 Sign in with phone number
+              </p>
+
+              {!phoneOtpSent ? (
+                <>
+                  {/* Phone input */}
+                  <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #333', borderRadius: '8px', overflow: 'hidden', marginBottom: '8px' }}>
+                    <div style={{ background: '#111', padding: '12px 14px', fontSize: '14px', borderRight: '1px solid #333', color: '#aaa', whiteSpace: 'nowrap', fontWeight: '600' }}>
+                      🇺🇬 +256
+                    </div>
+                    <input
+                      value={phoneNumber}
+                      onChange={e => handlePhoneChange(e.target.value)}
+                      placeholder="771234567"
+                      maxLength={9}
+                      style={{ flex: 1, padding: '12px', border: 'none', outline: 'none', fontSize: '15px', background: '#111', color: '#fff' }}
+                    />
+                  </div>
+
+                  {phoneOtpError && (
+                    <p style={{ color: '#ff4444', fontSize: '12px', margin: '4px 0 8px' }}>{phoneOtpError}</p>
+                  )}
+
+                  <button onClick={handleSendPhoneOtp} disabled={phoneOtpLoading || phoneNumber.length !== 9}
+                    style={{
+                      width: '100%', padding: '12px', background: (phoneOtpLoading || phoneNumber.length !== 9) ? '#333' : green,
+                      color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (phoneOtpLoading || phoneNumber.length !== 9) ? 'not-allowed' : 'pointer', fontSize: '15px',
+                    }}>
+                    {phoneOtpLoading ? 'Sending code...' : 'Send Verification Code'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p style={{ color: '#888', fontSize: '13px', margin: '0 0 10px', textAlign: 'left' }}>
+                    A 6-digit code was sent to <strong style={{ color: '#fff' }}>+256{phoneNumber}</strong>
+                  </p>
+                  <input
+                    value={phoneOtp}
+                    onChange={e => setPhoneOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="000000"
+                    style={{
+                      width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333',
+                      marginBottom: '10px', fontSize: '20px', textAlign: 'center', letterSpacing: '8px',
+                      boxSizing: 'border-box', background: '#111', color: '#fff',
+                    }}
+                  />
+
+                  {phoneOtpError && (
+                    <p style={{ color: '#ff4444', fontSize: '12px', margin: '4px 0 8px' }}>{phoneOtpError}</p>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={handleVerifyPhoneOtp} disabled={phoneOtpLoading || phoneOtp.length < 6}
+                      style={{
+                        flex: 1, padding: '12px', background: (phoneOtpLoading || phoneOtp.length < 6) ? '#333' : green,
+                        color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700',
+                        cursor: (phoneOtpLoading || phoneOtp.length < 6) ? 'not-allowed' : 'pointer', fontSize: '15px',
+                      }}>
+                      {phoneOtpLoading ? 'Verifying...' : 'Verify & Sign In'}
+                    </button>
+                    <button onClick={() => { setPhoneOtpSent(false); setPhoneOtp(''); setConfirmationResult(null); setPhoneOtpError('') }}
+                      style={{
+                        padding: '12px 16px', background: 'transparent', color: '#888', border: '1px solid #333',
+                        borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
+                      }}>
+                      Back
+                    </button>
+                  </div>
+                </>
+              )}
+              {/* reCAPTCHA container (invisible) */}
+              <div id="phone-recaptcha-container" />
+            </div>
           </div>
         </div>
 
@@ -199,7 +366,7 @@ function SignIn() {
       <div style={{ padding: '80px 20px', maxWidth: '800px', margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: '48px' }}>
           <h2 className="rt-title-md" style={{ fontSize: '42px', fontWeight: '900', margin: '0 0 16px', letterSpacing: '-1px' }}>Get set up in minutes.</h2>
-          <p style={{ color: '#666', fontSize: '16px', margin: 0 }}>It\'s you, your audience, your business, and Rachett.</p>
+          <p style={{ color: '#666', fontSize: '16px', margin: 0 }}>It's you, your audience, your business, and Rachett.</p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
           {[
