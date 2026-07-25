@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
-import { getAuth, GoogleAuthProvider, FacebookAuthProvider, OAuthProvider, setPersistence, browserLocalPersistence } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, FacebookAuthProvider, OAuthProvider, PhoneAuthProvider, RecaptchaVerifier, setPersistence, browserLocalPersistence } from "firebase/auth";
+import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -26,3 +27,15 @@ setPersistence(auth, browserLocalPersistence).catch((err) => {
 export const googleProvider = new GoogleAuthProvider();
 export const facebookProvider = new FacebookAuthProvider();
 export const appleProvider = new OAuthProvider('apple.com');
+export const phoneProvider = new PhoneAuthProvider(auth);
+export const storage = getStorage(app);
+
+// Helper to create a new reCAPTCHA verifier instance (call once per sign-in attempt)
+export function createRecaptchaVerifier(containerId: string) {
+  return new RecaptchaVerifier(auth, containerId, {
+    size: 'invisible',
+    callback: () => {
+      // reCAPTCHA solved — allow signInWithPhoneNumber
+    },
+  });
+}
