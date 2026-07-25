@@ -1,14 +1,19 @@
 import { useState } from 'react'
-import { auth, db } from './firebase'
+import { auth, db, storage } from './firebase'
 import { collection, doc, getDocs, query, setDoc, where } from 'firebase/firestore'
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
 import { useNavigate } from 'react-router-dom'
-import { getStorage, ref, getDownloadURL } from 'firebase/storage'
+import { COUNTRIES } from './countries'
+
+const OTP_SERVER_URL = import.meta.env.VITE_OTP_SERVER_URL || 'http://localhost:3001'
 
 interface SetupFormErrors {
   businessName?: string
   bio?: string
   whatsapp?: string
   email?: string
+  nationality?: string
+  idDocument?: string
   submit?: string
 }
 
@@ -18,15 +23,37 @@ function SetupStore() {
   const [handleAvailable, setHandleAvailable] = useState<boolean | null>(null)
   const [handleChecking, setHandleChecking] = useState(false)
   const [bio, setBio] = useState('')
-  const [whatsapp, setWhatsapp] = useState('')
+  const [whatsapp, setWhatsapp] = useState(
+    // Pre-fill from Firebase Phone Auth if available
+    auth.currentUser?.phoneNumber 
+      ? auth.currentUser.phoneNumber.replace(/^\+256/, '') 
+      : ''
+  )
   const [email, setEmail] = useState(auth.currentUser?.email || '')
   const [instagram, setInstagram] = useState('')
   const [tiktok, setTiktok] = useState('')
+  const [nationality, setNationality] = useState('')
+  const [nationalitySearch, setNationalitySearch] = useState('')
+  const [showCountryDropdown, setShowCountryDropdown] = useState(false)
   const [errors, setErrors] = useState<SetupFormErrors>({})
   const [loading, setLoading] = useState(false)
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [logoPreview, setLogoPreview] = useState('')
   const [uploadingLogo, setUploadingLogo] = useState(false)
+
+  // National ID upload
+  const [idFile, setIdFile] = useState<File | null>(null)
+  const [idFileName, setIdFileName] = useState('')
+  const [uploadingId, setUploadingId] = useState(false)
+
+  // Phone OTP verification
+  // If user signed in via Firebase Phone Auth, phone is already verified
+  const [phoneVerified, setPhoneVerified] = useState(!!auth.currentUser?.phoneNumber)
+  const [phoneOtpSent, setPhoneOtpSent] = useState(false)
+  const [phoneOtpInput, setPhoneOtpInput] = useState('')
+  const [phoneOtpLoading, setPhoneOtpLoading] = useState(false)
+  const [phoneOtpError, setPhoneOtpError] = useState('')
+
   const navigate = useNavigate()
 
   const sanitizeInput = (input: string, maxLength: number = 100): string => {
@@ -92,6 +119,87 @@ function SetupStore() {
     })
   }
 
+  // -- Phone OTP verification --
+  const sendPhoneOtp = async () => {
+    if (!whatsapp || whatsapp.length !== 9) {
+      setPhoneOtpError('Enter a valid phone number first')
+      return
+    }
+    setPhoneOtpLoading(true)
+    setPhoneOtpError('')
+    const normalized = `+256${whatsapp}`
+    try {
+      const res = await fetch(`${OTP_SERVER_URL}/api/otp/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: normalized }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setPhoneOtpError(data.error || 'Failed to send OTP')
+      } else {
+        setPhoneOtpSent(true)
+        if (data.debugOtp) {
+          console.log(`[OTP Debug] Seller verification code: ${data.debugOtp}`)
+        }
+      }
+    } catch {
+      setPhoneOtpError('Network error. Check your connection.')
+    } finally {
+      setPhoneOtpLoading(false)
+    }
+  }
+
+  const verifyPhoneOtp = async () => {
+    if (!phoneOtpInput || phoneOtpInput.length < 6) {
+      setPhoneOtpError('Enter the 6-digit code')
+      return
+    }
+    const normalized = `+256${whatsapp}`
+    setPhoneOtpLoading(true)
+    setPhoneOtpError('')
+    try {
+      const res = await fetch(`${OTP_SERVER_URL}/api/otp/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: normalized, otp: phoneOtpInput }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setPhoneOtpError(data.error || 'Invalid code')
+      } else {
+        setPhoneVerified(true)
+      }
+    } catch {
+      setPhoneOtpError('Network error. Try again.')
+    } finally {
+      setPhoneOtpLoading(false)
+    }
+  }
+
+  // -- National ID upload --
+  const handleIdFileChange = (file: File | null) => {
+    if (!file) {
+      setIdFile(null)
+      setIdFileName('')
+      setErrors(e => ({ ...e, idDocument: undefined }))
+      return
+    }
+    // Accept images and PDFs
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+    if (!allowedTypes.includes(file.type)) {
+      setErrors(e => ({ ...e, idDocument: 'Please upload a JPG, PNG, or PDF file' }))
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setErrors(e => ({ ...e, idDocument: 'File must be under 10MB' }))
+      return
+    }
+    setIdFile(file)
+    setIdFileName(file.name)
+    setErrors(e => ({ ...e, idDocument: undefined }))
+  }
+
   const validateForm = (): boolean => {
     const newErrors: SetupFormErrors = {}
     const cleanedName = sanitizeInput(businessName)
@@ -112,6 +220,15 @@ function SetupStore() {
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sanitizeInput(email))) {
       newErrors.email = 'Enter a valid email address'
     }
+    if (!nationality) {
+      newErrors.nationality = 'Please select your nationality'
+    }
+    if (!idFile && !idFileName) {
+      newErrors.idDocument = 'Please upload your National ID'
+    }
+    if (!phoneVerified) {
+      newErrors.submit = 'Please verify your phone number before creating your store'
+    }
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -119,10 +236,20 @@ function SetupStore() {
   const handleWhatsappChange = (val: string) => {
     const digits = val.replace(/\D/g, '').slice(0, 9)
     setWhatsapp(digits)
-    if (digits.length === 9) {
-      setErrors(e => ({ ...e, whatsapp: undefined }))
+    setErrors(e => ({ ...e, whatsapp: undefined }))
+    // Reset OTP state when number changes
+    if (digits !== whatsapp) {
+      setPhoneOtpSent(false)
+      setPhoneVerified(false)
+      setPhoneOtpInput('')
+      setPhoneOtpError('')
     }
   }
+
+  // Filter countries for dropdown
+  const filteredCountries = nationalitySearch
+    ? COUNTRIES.filter(c => c.toLowerCase().includes(nationalitySearch.toLowerCase()))
+    : COUNTRIES
 
   const handleSubmit = async () => {
     if (!validateForm()) return
@@ -139,7 +266,6 @@ function SetupStore() {
       const cleanedEmail = email ? sanitizeInput(email) : ''
       const cleanedInstagram = instagram ? sanitizeInput(instagram, 50).replace(/^@+/, '') : ''
       const cleanedTiktok = tiktok ? sanitizeInput(tiktok, 50).replace(/^@+/, '') : ''
-      // Use the store handle as the slug (unique, chosen by seller)
       if (!storeHandle || storeHandle.length < 3) {
         setErrors({ submit: 'Please choose a store handle (at least 3 characters).' })
         setLoading(false)
@@ -152,20 +278,19 @@ function SetupStore() {
       }
       const slug = storeHandle
       const fullNumber = `256${whatsapp}`
+
+      // Upload logo (optional)
       let finalLogoUrl = user.photoURL || ''
       if (logoFile) {
         try {
           setUploadingLogo(true)
           const processedBlob = await resizeImage(logoFile, 1024, 0.8)
           const processedFile = new File([processedBlob], 'logo.jpg', { type: 'image/jpeg' })
-          const storage = getStorage()
           const storageRef = ref(storage, `sellers/${user.uid}/logo.jpg`)
-          const uploadTask = (await import('firebase/storage')).uploadBytesResumable(storageRef, processedFile)
+          const uploadTask = uploadBytesResumable(storageRef, processedFile)
 
           await new Promise<void>((resolve, reject) => {
-            uploadTask.on('state_changed', () => {
-              // progress available if needed
-            }, (error: any) => {
+            uploadTask.on('state_changed', () => {}, (error: any) => {
               console.error('Upload error', error)
               setUploadingLogo(false)
               reject(error)
@@ -187,6 +312,27 @@ function SetupStore() {
         }
       }
 
+      // Upload National ID to Firebase Storage (private)
+      let idDocumentPath = ''
+      if (idFile) {
+        setUploadingId(true)
+        const ext = idFile.name.split('.').pop() || 'jpg'
+        const storageRef = ref(storage, `sellers/${user.uid}/private/national-id.${ext}`)
+        const uploadTask = uploadBytesResumable(storageRef, idFile)
+
+        await new Promise<void>((resolve, reject) => {
+          uploadTask.on('state_changed', () => {}, (error: any) => {
+            console.error('ID upload error', error)
+            setUploadingId(false)
+            reject(error)
+          }, async () => {
+            idDocumentPath = uploadTask.snapshot.ref.fullPath
+            setUploadingId(false)
+            resolve()
+          })
+        })
+      }
+
       await setDoc(doc(db, 'sellers', user.uid), {
         businessName: cleanedName,
         bio: cleanedBio,
@@ -196,6 +342,9 @@ function SetupStore() {
         email: cleanedEmail || user.email || '',
         instagram: cleanedInstagram,
         tiktok: cleanedTiktok,
+        nationality,
+        phoneVerified,
+        idDocumentPath,
         createdAt: new Date(),
       })
       navigate('/dashboard')
@@ -212,6 +361,8 @@ function SetupStore() {
     }
   }
 
+  const isFormReady = businessName && bio && whatsapp.length === 9 && phoneVerified && nationality && (idFile || idFileName)
+
   return (
     <div style={{ minHeight: '100vh', background: '#f9f9f9', fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
       <h1 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '8px' }}>Set up your store</h1>
@@ -223,7 +374,7 @@ function SetupStore() {
             {errors.submit}
           </div>
         )}
-        
+
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Business Name</label>
         <input value={businessName} onChange={e => setBusinessName(e.target.value)}
           placeholder="e.g. Zara Cosmetics"
@@ -267,9 +418,10 @@ function SetupStore() {
         {errors.bio && <p style={{ color: '#c33', fontSize: '12px', margin: '4px 0 16px' }}>{errors.bio}</p>}
         {!errors.bio && <div style={{ marginBottom: '16px' }} />}
 
+        {/* Phone OTP Verification */}
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>WhatsApp Number</label>
-        <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>Uganda number — we add 256 automatically</p>
-        
+        <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>Uganda number — we add 256 automatically. You must verify this number.</p>
+
         <div style={{ display: 'flex', alignItems: 'center', border: errors.whatsapp ? '2px solid #c33' : '1px solid #ddd', borderRadius: '8px', overflow: 'hidden', marginBottom: '4px' }}>
           <div style={{ background: '#f5f5f5', padding: '12px 14px', fontSize: '15px', borderRight: errors.whatsapp ? '2px solid #c33' : '1px solid #ddd', color: '#333', fontWeight: '600', whiteSpace: 'nowrap' }}>
             🇺🇬 +256
@@ -282,12 +434,132 @@ function SetupStore() {
             style={{ flex: 1, padding: '12px', border: 'none', outline: 'none', fontSize: '15px', background: '#fff' }}
           />
         </div>
-        
-        {errors.whatsapp && <p style={{ color: '#c33', fontSize: '12px', margin: '4px 0 16px' }}>{errors.whatsapp}</p>}
-        {!errors.whatsapp && whatsapp.length === 9 && (
-          <p style={{ color: '#4a4', fontSize: '12px', margin: '4px 0 16px' }}>✓ Number looks good</p>
+
+        {errors.whatsapp && <p style={{ color: '#c33', fontSize: '12px', margin: '4px 0 8px' }}>{errors.whatsapp}</p>}
+
+        {/* OTP Verification UI */}
+        {whatsapp.length === 9 && !phoneVerified && (
+          <div style={{ marginBottom: '16px', padding: '12px', background: '#f8f8f8', borderRadius: '8px', border: '1px solid #eee' }}>
+            {!phoneOtpSent ? (
+              <>
+                <p style={{ fontSize: '13px', color: '#666', margin: '0 0 8px' }}>Verify your phone number to continue</p>
+                <button onClick={sendPhoneOtp} disabled={phoneOtpLoading}
+                  style={{ width: '100%', padding: '10px', background: phoneOtpLoading ? '#ccc' : '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: phoneOtpLoading ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
+                  {phoneOtpLoading ? 'Sending...' : 'Send Verification Code'}
+                </button>
+              </>
+            ) : (
+              <>
+                <p style={{ fontSize: '13px', color: '#666', margin: '0 0 8px' }}>A 6-digit code was sent to <strong>+256{whatsapp}</strong></p>
+                <input
+                  value={phoneOtpInput}
+                  onChange={e => setPhoneOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="000000"
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', marginBottom: '8px', fontSize: '18px', textAlign: 'center', letterSpacing: '8px', boxSizing: 'border-box' }}
+                />
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button onClick={verifyPhoneOtp} disabled={phoneOtpLoading || phoneOtpInput.length < 6}
+                    style={{ flex: 1, padding: '10px', background: (phoneOtpLoading || phoneOtpInput.length < 6) ? '#ccc' : '#4CAF50', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: (phoneOtpLoading || phoneOtpInput.length < 6) ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
+                    {phoneOtpLoading ? 'Verifying...' : 'Verify Code'}
+                  </button>
+                  <button onClick={() => { setPhoneOtpSent(false); setPhoneOtpInput(''); setPhoneOtpError('') }}
+                    style={{ padding: '10px 16px', background: 'transparent', color: '#888', border: '1px solid #ddd', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                    Resend
+                  </button>
+                </div>
+              </>
+            )}
+            {phoneOtpError && <p style={{ color: '#c33', fontSize: '12px', margin: '8px 0 0' }}>{phoneOtpError}</p>}
+          </div>
         )}
-        {!errors.whatsapp && whatsapp.length === 0 && <div style={{ marginBottom: '8px' }} />}
+
+        {phoneVerified && (
+          <div style={{ marginBottom: '16px', padding: '10px 12px', background: '#e8f5e9', borderRadius: '8px', border: '1px solid #c8e6c9', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ color: '#2e7d32', fontSize: '16px' }}>✓</span>
+            <span style={{ color: '#2e7d32', fontSize: '13px', fontWeight: '600' }}>Phone verified — +256{whatsapp}</span>
+          </div>
+        )}
+
+        {/* Nationality Dropdown */}
+        <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Nationality</label>
+        <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>Select your country of citizenship</p>
+        <div style={{ position: 'relative', marginBottom: '4px' }}>
+          <div
+            onClick={() => setShowCountryDropdown(!showCountryDropdown)}
+            style={{ width: '100%', padding: '12px', borderRadius: '8px', border: errors.nationality ? '2px solid #c33' : '1px solid #ddd', fontSize: '15px', boxSizing: 'border-box', background: '#fff', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: nationality ? '#333' : '#999' }}>{nationality || 'Select your country'}</span>
+            <span style={{ color: '#999', fontSize: '12px' }}>{showCountryDropdown ? '▲' : '▼'}</span>
+          </div>
+          {showCountryDropdown && (
+            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #ddd', borderRadius: '8px', maxHeight: '240px', overflow: 'hidden', zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+              <input
+                value={nationalitySearch}
+                onChange={e => setNationalitySearch(e.target.value)}
+                placeholder="Search countries..."
+                autoFocus
+                style={{ width: '100%', padding: '10px 12px', border: 'none', borderBottom: '1px solid #eee', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }}
+              />
+              <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                {filteredCountries.map(country => (
+                  <div
+                    key={country}
+                    onClick={() => {
+                      setNationality(country)
+                      setNationalitySearch('')
+                      setShowCountryDropdown(false)
+                      setErrors(e => ({ ...e, nationality: undefined }))
+                    }}
+                    style={{
+                      padding: '10px 12px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      color: '#333',
+                      background: nationality === country ? '#f0f0f0' : '#fff',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#f5f5f5')}
+                    onMouseLeave={e => (e.currentTarget.style.background = nationality === country ? '#f0f0f0' : '#fff')}
+                  >
+                    {country}
+                  </div>
+                ))}
+                {filteredCountries.length === 0 && (
+                  <div style={{ padding: '12px', color: '#999', fontSize: '14px', textAlign: 'center' }}>No countries found</div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+        {errors.nationality && <p style={{ color: '#c33', fontSize: '12px', margin: '4px 0 16px' }}>{errors.nationality}</p>}
+        {!errors.nationality && <div style={{ marginBottom: '16px' }} />}
+
+        {/* National ID Upload */}
+        <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>National ID</label>
+        <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>
+          Upload a photo or scan of your National ID card. This is <strong>private</strong> — only you can see it.
+        </p>
+        <div style={{ marginBottom: '4px' }}>
+          {!idFileName ? (
+            <label style={{ display: 'block', width: '100%', padding: '40px 20px', border: errors.idDocument ? '2px dashed #c33' : '2px dashed #ddd', borderRadius: '8px', textAlign: 'center', cursor: 'pointer', background: '#fafafa' }}>
+              <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e => handleIdFileChange(e.target.files?.[0] || null)} style={{ display: 'none' }} />
+              <div style={{ fontSize: '32px', marginBottom: '8px', color: '#ccc' }}>📄</div>
+              <p style={{ fontSize: '13px', color: '#999', margin: 0 }}>Click to upload your National ID</p>
+              <p style={{ fontSize: '11px', color: '#bbb', margin: '4px 0 0' }}>JPG, PNG, or PDF — max 10MB</p>
+            </label>
+          ) : (
+            <div style={{ padding: '12px', background: '#f0f8f0', borderRadius: '8px', border: '1px solid #c8e6c9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '20px' }}>📎</span>
+                <span style={{ fontSize: '13px', color: '#2e7d32', fontWeight: '600' }}>{idFileName}</span>
+              </div>
+              <button onClick={() => handleIdFileChange(null)}
+                style={{ background: 'transparent', border: 'none', color: '#999', cursor: 'pointer', fontSize: '16px', padding: '0 4px' }}>
+                ✕
+              </button>
+            </div>
+          )}
+        </div>
+        {errors.idDocument && <p style={{ color: '#c33', fontSize: '12px', margin: '4px 0 16px' }}>{errors.idDocument}</p>}
+        {!errors.idDocument && <div style={{ marginBottom: '16px' }} />}
 
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Email</label>
         <input value={email} onChange={e => setEmail(e.target.value)}
@@ -314,9 +586,9 @@ function SetupStore() {
         </div>
         {logoPreview && <div style={{ marginBottom: '12px' }}><img src={logoPreview} alt="logo preview" style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 8 }} /></div>}
 
-        <button onClick={handleSubmit} disabled={loading || uploadingLogo}
-          style={{ width: '100%', padding: '14px', background: loading ? '#999' : '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer', marginTop: '8px' }}>
-          {loading || uploadingLogo ? 'Creating...' : 'Create My Store'}
+        <button onClick={handleSubmit} disabled={loading || uploadingLogo || uploadingId || !isFormReady}
+          style={{ width: '100%', padding: '14px', background: loading || uploadingLogo || uploadingId || !isFormReady ? '#ccc' : '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: loading || uploadingLogo || uploadingId || !isFormReady ? 'not-allowed' : 'pointer', marginTop: '8px' }}>
+          {loading || uploadingLogo || uploadingId ? 'Creating...' : 'Create My Store'}
         </button>
       </div>
     </div>
