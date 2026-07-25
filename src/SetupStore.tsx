@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { auth, db, storage } from './firebase'
 import { collection, doc, getDocs, query, setDoc, where } from 'firebase/firestore'
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { ref, uploadBytes } from 'firebase/storage'
 import { useNavigate } from 'react-router-dom'
 import { COUNTRIES } from './countries'
 
