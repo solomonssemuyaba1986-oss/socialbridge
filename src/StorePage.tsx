@@ -685,12 +685,21 @@ const handleSignupAndSendMessage = async () => {
 
       {/* Trust Bar */}
       <div style={{ maxWidth: '640px', margin: '0 auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        {/* Verified Seller Badge */}
-        {sellerStats.verifiedSeller && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
-            <span style={{ background: green, color: '#000', fontSize: '11px', fontWeight: '800', padding: '4px 12px', borderRadius: '999px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-              ✅ Verified Seller
-            </span>
+        {/* Badges Row */}
+        {(sellerStats.realSellerBadge || sellerStats.activeSellerBadge) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            {/* 🟢 Real Seller Badge */}
+            {sellerStats.realSellerBadge && (
+              <span style={{ background: '#adff2f', color: '#000', fontSize: '11px', fontWeight: '800', padding: '4px 12px', borderRadius: '999px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                🟢 Real Seller
+              </span>
+            )}
+            {/* 🔵 Active Seller Badge */}
+            {sellerStats.activeSellerBadge && (
+              <span style={{ background: '#2196F3', color: '#fff', fontSize: '11px', fontWeight: '800', padding: '4px 12px', borderRadius: '999px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                🔵 Active Seller
+              </span>
+            )}
           </div>
         )}
 
