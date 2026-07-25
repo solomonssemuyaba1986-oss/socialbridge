@@ -26,12 +26,8 @@ function TopNav() {
   }
 
   const handleSignUpClick = () => {
-    // Navigate to sign-in page and scroll to the auth buttons
-    navigate('/')
-    setTimeout(() => {
-      const section = document.querySelector('.rt-signup-section')
-      if (section) section.scrollIntoView({ behavior: 'smooth' })
-    }, 100)
+    // Navigate to sign-in page with hash — SignIn will scroll to auth buttons
+    navigate('/#signup')
   }
 
   return (
@@ -121,7 +117,7 @@ function TopNav() {
 
             <p style={{ margin: '16px 0 0', color: '#555', fontSize: 13 }}>
               Don't have an account?{' '}
-              <span onClick={() => { setShowLoginModal(false); handleSignUpClick() }}
+              <span onClick={() => { setShowLoginModal(false); navigate('/#signup') }}
                 style={{ color: green, cursor: 'pointer', fontWeight: 600, textDecoration: 'underline' }}>
                 Sign up
               </span>
