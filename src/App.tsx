@@ -76,7 +76,7 @@ function App() {
         slug ? <Navigate to="/dashboard" /> :
         <Navigate to="/onboarding" />
       } />
-      <Route path="/onboarding" element={signedIn ? <Onboarding /> : <Navigate to="/" />} />
+      <Route path="/onboarding" element={<Onboarding />} />
       <Route path="/setup" element={signedIn ? <SetupStore /> : <Navigate to="/" />} />
       <Route path="/store/:slug" element={<StorePage />} />
       <Route path="/dashboard" element={signedIn ? <Dashboard /> : <Navigate to="/" />} />
