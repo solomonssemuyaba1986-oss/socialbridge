@@ -331,9 +331,12 @@ function SetupStore() {
           setUploadingLogo(true)
           const processedBlob = await resizeImage(logoFile, 1024, 0.8)
           const processedFile = new File([processedBlob], 'logo.jpg', { type: 'image/jpeg' })
-           const logoStorageRef = ref(storage, `sellers/${user.uid}/logo.jpg`)
-           const logoSnap = await uploadBytes(logoStorageRef, processedFile)
-           finalLogoUrl = await getDownloadURL(logoSnap.ref)
+           const formData = new FormData()
+           formData.append('file', processedFile)
+           formData.append('upload_preset', 'p2z65zrv')
+           const res = await fetch('https://api.cloudinary.com/v1_1/dzudmmuxg/image/upload', { method: 'POST', body: formData })
+           const cloudData = await res.json()
+           finalLogoUrl = cloudData.secure_url
            setUploadingLogo(false)
         } catch (err) {
           console.error('Logo upload failed', err)
