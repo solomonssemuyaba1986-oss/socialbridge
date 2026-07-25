@@ -35,6 +35,8 @@ function SetupStore() {
   const [nationality, setNationality] = useState('')
   const [nationalitySearch, setNationalitySearch] = useState('')
   const [showCountryDropdown, setShowCountryDropdown] = useState(false)
+  const [location, setLocation] = useState('')
+  const [locationLoading, setLocationLoading] = useState(false)
   const [errors, setErrors] = useState<SetupFormErrors>({})
   const [loading, setLoading] = useState(false)
   const [logoFile, setLogoFile] = useState<File | null>(null)
@@ -243,6 +245,52 @@ function SetupStore() {
     }
   }
 
+  // -- Geolocation --
+  const handleUseMyLocation = () => {
+    if (!navigator.geolocation) {
+      setErrors(e => ({ ...e, submit: 'Geolocation not supported in your browser.' }))
+      return
+    }
+    setLocationLoading(true)
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords
+        try {
+          // Reverse geocode with OpenStreetMap Nominatim (free, no key required)
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+          )
+          const data = await res.json()
+          if (data && data.display_name) {
+            // Extract city/district + country from the display name
+            const city = data.address?.city || data.address?.town || data.address?.county || data.address?.state_district || ''
+            const country = data.address?.country || ''
+            const fallback = data.display_name.split(',')[0]?.trim() || ''
+            const result = [city, country].filter(Boolean).join(', ')
+            setLocation(result || fallback)
+          } else {
+            setLocation(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`)
+          }
+        } catch {
+          // Fall back to coordinates if reverse geocoding fails
+          setLocation(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`)
+        } finally {
+          setLocationLoading(false)
+        }
+      },
+      (err) => {
+        console.error('Geolocation error:', err)
+        setLocationLoading(false)
+        if (err.code === 1) {
+          setErrors(e => ({ ...e, submit: 'Location access denied. Please enter your location manually.' }))
+        } else {
+          setErrors(e => ({ ...e, submit: 'Could not get location. Please enter manually.' }))
+        }
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
+    )
+  }
+
   // Filter countries for dropdown
   const filteredCountries = nationalitySearch
     ? COUNTRIES.filter(c => c.toLowerCase().includes(nationalitySearch.toLowerCase()))
@@ -340,6 +388,7 @@ function SetupStore() {
         instagram: cleanedInstagram,
         tiktok: cleanedTiktok,
         nationality,
+        location: location.trim(),
         phoneVerified,
         idDocumentPath,
         idStatus: 'pending',
@@ -529,6 +578,22 @@ function SetupStore() {
         </div>
         {errors.nationality && <p style={{ color: '#c33', fontSize: '12px', margin: '4px 0 16px' }}>{errors.nationality}</p>}
         {!errors.nationality && <div style={{ marginBottom: '16px' }} />}
+
+        {/* Location */}
+        <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Location</label>
+        <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>Your city or district — helps buyers find you. Type manually or use auto-detect.</p>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '4px' }}>
+          <input value={location} onChange={e => setLocation(e.target.value)}
+            placeholder="e.g. Kampala, Uganda"
+            style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '15px', boxSizing: 'border-box' }} />
+          <button onClick={handleUseMyLocation} disabled={locationLoading}
+            title="Use my current location"
+            style={{ padding: '12px 16px', background: locationLoading ? '#eee' : '#f0f0f0', color: '#333', border: '1px solid #ddd', borderRadius: '8px', cursor: locationLoading ? 'not-allowed' : 'pointer', fontSize: '16px', whiteSpace: 'nowrap' }}>
+            {locationLoading ? '⏳' : '📍'}
+          </button>
+        </div>
+        {locationLoading && <p style={{ color: '#888', fontSize: '12px', margin: '4px 0 16px' }}>Detecting your location...</p>}
+        {!locationLoading && <div style={{ marginBottom: '16px' }} />}
 
         {/* National ID Upload */}
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>National ID <span style={{ color: '#888', fontWeight: '400', fontSize: '12px' }}>(optional for now)</span></label>
