@@ -1,8 +1,11 @@
 import { useState, useRef } from 'react'
 import { signInWithPopup, signInWithRedirect, signInWithPhoneNumber } from 'firebase/auth'
 import type { AuthProvider, ConfirmationResult } from 'firebase/auth'
-import { auth, googleProvider, facebookProvider, appleProvider, createRecaptchaVerifier } from './firebase'
+import { auth, db, googleProvider, facebookProvider, appleProvider, createRecaptchaVerifier } from './firebase'
 import { useNavigate } from 'react-router-dom'
+import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore'
+
+const OTP_SERVER_URL = import.meta.env.VITE_OTP_SERVER_URL || 'http://localhost:3001'
 
 interface SavedUser {
   displayName: string | null
@@ -34,6 +37,17 @@ function SignIn() {
   const [phoneOtpLoading, setPhoneOtpLoading] = useState(false)
   const [phoneOtpError, setPhoneOtpError] = useState('')
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null)
+
+  // Recovery modal state
+  const [showRecoveryModal, setShowRecoveryModal] = useState(false)
+  const [recoveryEmailInput, setRecoveryEmailInput] = useState('')
+  const [recoveryStep, setRecoveryStep] = useState<'email' | 'found' | 'newPhone' | 'otp' | 'done'>('email')
+  const [recoverySellerId, setRecoverySellerId] = useState('')
+  const [recoveryBusinessName, setRecoveryBusinessName] = useState('')
+  const [recoveryNewPhone, setRecoveryNewPhone] = useState('')
+  const [recoveryOtp, setRecoveryOtp] = useState('')
+  const [recoveryLoading, setRecoveryLoading] = useState(false)
+  const [recoveryError, setRecoveryError] = useState('')
 
   const handleScrollToProviders = () => {
     providerSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -139,7 +153,6 @@ function SignIn() {
     setPhoneOtpError('')
     try {
       await confirmationResult.confirm(phoneOtp)
-      // Firebase Phone Auth succeeded — user is now signed in
       navigate('/onboarding')
     } catch (err: any) {
       console.error('Phone OTP verify error:', err)
@@ -155,6 +168,103 @@ function SignIn() {
     } finally {
       setPhoneOtpLoading(false)
     }
+  }
+
+  // -- Recovery flow handlers --
+  const handleRecoveryLookup = async () => {
+    if (!recoveryEmailInput || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recoveryEmailInput)) {
+      setRecoveryError('Enter a valid email address')
+      return
+    }
+    setRecoveryLoading(true)
+    setRecoveryError('')
+    try {
+      const q = query(collection(db, 'sellers'), where('recoveryEmail', '==', recoveryEmailInput.toLowerCase().trim()))
+      const snapshot = await getDocs(q)
+      if (snapshot.empty) {
+        setRecoveryError('No account found with that recovery email.')
+      } else {
+        const sellerData = snapshot.docs[0]
+        setRecoverySellerId(sellerData.id)
+        setRecoveryBusinessName(sellerData.data().businessName || 'Your store')
+        setRecoveryStep('found')
+      }
+    } catch (err) {
+      console.error('Recovery lookup error:', err)
+      setRecoveryError('Something went wrong. Try again.')
+    } finally {
+      setRecoveryLoading(false)
+    }
+  }
+
+  const handleRecoverySendOtp = async () => {
+    if (recoveryNewPhone.length !== 9 || !/^7\d{8}$/.test(recoveryNewPhone)) {
+      setRecoveryError('Enter a valid Uganda number')
+      return
+    }
+    setRecoveryLoading(true)
+    setRecoveryError('')
+    const normalized = `+256${recoveryNewPhone}`
+    try {
+      const res = await fetch(`${OTP_SERVER_URL}/api/otp/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: normalized }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setRecoveryError(data.error || 'Failed to send code')
+      } else {
+        setRecoveryStep('otp')
+      }
+    } catch {
+      setRecoveryError('Network error. Check your connection.')
+    } finally {
+      setRecoveryLoading(false)
+    }
+  }
+
+  const handleRecoveryVerifyOtp = async () => {
+    if (!recoveryOtp || recoveryOtp.length < 6) {
+      setRecoveryError('Enter the 6-digit code')
+      return
+    }
+    const normalized = `+256${recoveryNewPhone}`
+    setRecoveryLoading(true)
+    setRecoveryError('')
+    try {
+      const res = await fetch(`${OTP_SERVER_URL}/api/otp/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: normalized, otp: recoveryOtp }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setRecoveryError(data.error || 'Invalid code')
+      } else {
+        // Update the seller's phone number
+        const fullNumber = `256${recoveryNewPhone}`
+        await updateDoc(doc(db, 'sellers', recoverySellerId), {
+          whatsapp: fullNumber,
+          phoneVerified: true,
+        })
+        setRecoveryStep('done')
+      }
+    } catch (err) {
+      console.error('Recovery verify error:', err)
+      setRecoveryError('Verification failed. Try again.')
+    } finally {
+      setRecoveryLoading(false)
+    }
+  }
+
+  const closeRecoveryModal = () => {
+    setShowRecoveryModal(false)
+    setRecoveryStep('email')
+    setRecoveryEmailInput('')
+    setRecoveryError('')
+    setRecoveryNewPhone('')
+    setRecoveryOtp('')
   }
 
   return (
@@ -344,12 +454,7 @@ function SignIn() {
             {/* Need help link */}
             <p style={{ margin: '8px 0 0', color: '#555', fontSize: '13px' }}>
               Lost access to your phone?{' '}
-              <span onClick={() => {
-                const email = prompt('Enter your recovery email to regain access to your store.')
-                if (email) {
-                  alert(`We'll send a recovery link to ${email}. Check your inbox.`)
-                }
-              }}
+              <span onClick={() => setShowRecoveryModal(true)}
                 style={{ color: '#88aaff', cursor: 'pointer', textDecoration: 'underline' }}>
                 Need help?
               </span>
@@ -359,6 +464,79 @@ function SignIn() {
 
         <p style={{ color: '#444', fontSize: '13px', marginTop: '16px' }}>Start selling smarter in minutes.</p>
       </div>
+
+      {/* Recovery Modal */}
+      {showRecoveryModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222', color: '#fff' }}>
+            <button onClick={closeRecoveryModal} style={{ position: 'absolute', top: '12px', right: '12px', background: 'transparent', border: 'none', color: '#555', cursor: 'pointer', fontSize: '18px' }}>✕</button>
+
+            {recoveryStep === 'email' && (
+              <>
+                <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: '800' }}>Recover your store</h3>
+                <p style={{ margin: '0 0 16px', color: '#888', fontSize: '14px' }}>Enter the recovery email you added to your store.</p>
+                <input value={recoveryEmailInput} onChange={e => setRecoveryEmailInput(e.target.value)} placeholder="you@example.com"
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+                {recoveryError && <p style={{ color: '#ff4444', fontSize: '12px', marginBottom: '12px' }}>{recoveryError}</p>}
+                <button onClick={handleRecoveryLookup} disabled={recoveryLoading}
+                  style={{ width: '100%', padding: '12px', background: recoveryLoading ? '#333' : green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: recoveryLoading ? 'not-allowed' : 'pointer', fontSize: '15px' }}>
+                  {recoveryLoading ? 'Searching...' : 'Find My Account'}
+                </button>
+              </>
+            )}
+
+            {recoveryStep === 'found' && (
+              <>
+                <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: '800' }}>✅ Account found</h3>
+                <p style={{ margin: '0 0 16px', color: '#888', fontSize: '14px' }}>
+                  <strong style={{ color: '#fff' }}>{recoveryEmailInput}</strong> is linked to <strong style={{ color: green }}>{recoveryBusinessName}</strong>.
+                </p>
+                <p style={{ margin: '0 0 16px', color: '#888', fontSize: '14px' }}>Enter your new phone number to recover your store.</p>
+                <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #333', borderRadius: '8px', overflow: 'hidden', marginBottom: '12px' }}>
+                  <div style={{ background: '#111', padding: '12px 14px', fontSize: '14px', borderRight: '1px solid #333', color: '#aaa', fontWeight: '600' }}>🇺🇬 +256</div>
+                  <input value={recoveryNewPhone} onChange={e => setRecoveryNewPhone(e.target.value.replace(/\D/g, '').slice(0, 9))} placeholder="771234567" maxLength={9}
+                    style={{ flex: 1, padding: '12px', border: 'none', outline: 'none', fontSize: '15px', background: '#111', color: '#fff' }} />
+                </div>
+                {recoveryError && <p style={{ color: '#ff4444', fontSize: '12px', marginBottom: '12px' }}>{recoveryError}</p>}
+                <button onClick={handleRecoverySendOtp} disabled={recoveryLoading || recoveryNewPhone.length !== 9}
+                  style={{ width: '100%', padding: '12px', background: (recoveryLoading || recoveryNewPhone.length !== 9) ? '#333' : green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (recoveryLoading || recoveryNewPhone.length !== 9) ? 'not-allowed' : 'pointer', fontSize: '15px' }}>
+                  {recoveryLoading ? 'Sending...' : 'Send Verification Code'}
+                </button>
+              </>
+            )}
+
+            {recoveryStep === 'otp' && (
+              <>
+                <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: '800' }}>Verify new number</h3>
+                <p style={{ margin: '0 0 16px', color: '#888', fontSize: '14px' }}>A 6-digit code was sent to <strong style={{ color: '#fff' }}>+256{recoveryNewPhone}</strong></p>
+                <input value={recoveryOtp} onChange={e => setRecoveryOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000"
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', fontSize: '20px', textAlign: 'center', letterSpacing: '8px', boxSizing: 'border-box', background: '#111', color: '#fff' }} />
+                {recoveryError && <p style={{ color: '#ff4444', fontSize: '12px', marginBottom: '12px' }}>{recoveryError}</p>}
+                <button onClick={handleRecoveryVerifyOtp} disabled={recoveryLoading || recoveryOtp.length < 6}
+                  style={{ width: '100%', padding: '12px', background: (recoveryLoading || recoveryOtp.length < 6) ? '#333' : green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (recoveryLoading || recoveryOtp.length < 6) ? 'not-allowed' : 'pointer', fontSize: '15px' }}>
+                  {recoveryLoading ? 'Verifying...' : 'Verify & Recover'}
+                </button>
+              </>
+            )}
+
+            {recoveryStep === 'done' && (
+              <>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '24px', color: '#000', fontWeight: '800' }}>✓</div>
+                  <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: '800', color: '#fff' }}>Store recovered!</h3>
+                  <p style={{ margin: '0 0 16px', color: '#888', fontSize: '14px' }}>
+                    Your phone number has been updated to <strong style={{ color: '#fff' }}>+256{recoveryNewPhone}</strong>.
+                  </p>
+                  <button onClick={() => { closeRecoveryModal(); navigate('/onboarding') }}
+                    style={{ width: '100%', padding: '12px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px' }}>
+                    Go to Onboarding
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Problem Section */}
       <div style={{ background: '#0a0a0a', padding: '80px 20px', borderTop: '1px solid #1a1a1a' }}>
