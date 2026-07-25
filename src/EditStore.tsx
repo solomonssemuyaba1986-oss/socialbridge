@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { auth, db, storage } from './firebase'
 import { doc, getDoc, updateDoc } from 'firebase/firestore'
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { COUNTRIES } from './countries'
 
 function EditStore() {
@@ -172,19 +172,8 @@ function EditStore() {
           const processedBlob = await resizeImage(logoFile, 1024, 0.8)
           const processedFile = new File([processedBlob], 'logo.jpg', { type: 'image/jpeg' })
           const storageRef = ref(storage, `sellers/${user.uid}/logo.jpg`)
-          const uploadTask = uploadBytesResumable(storageRef, processedFile)
-
-          await new Promise<void>((resolve, reject) => {
-            uploadTask.on('state_changed', () => {}, (error) => {
-              console.error('Upload failed', error)
-              reject(error)
-            }, async () => {
-              try {
-                finalLogoUrl = await getDownloadURL(uploadTask.snapshot.ref)
-                resolve()
-              } catch (e) { reject(e) }
-            })
-          })
+          const snapshot = await uploadBytes(storageRef, processedFile)
+          finalLogoUrl = await getDownloadURL(snapshot.ref)
         } catch (err) {
           console.error('Logo upload failed', err)
         }
@@ -194,21 +183,16 @@ function EditStore() {
       let idDocumentPath: string | undefined
       if (idFile) {
         setUploadingId(true)
-        const ext = idFile.name.split('.').pop() || 'jpg'
-        const storageRef = ref(storage, `sellers/${user.uid}/private/national-id.${ext}`)
-        const uploadTask = uploadBytesResumable(storageRef, idFile)
-
-        await new Promise<void>((resolve, reject) => {
-          uploadTask.on('state_changed', () => {}, (error: any) => {
-            console.error('ID upload error', error)
-            setUploadingId(false)
-            reject(error)
-          }, async () => {
-            idDocumentPath = uploadTask.snapshot.ref.fullPath
-            setUploadingId(false)
-            resolve()
-          })
-        })
+        try {
+          const ext = idFile.name.split('.').pop() || 'jpg'
+          const storageRef = ref(storage, `sellers/${user.uid}/private/national-id.${ext}`)
+          const snapshot = await uploadBytes(storageRef, idFile)
+          idDocumentPath = snapshot.ref.fullPath
+        } catch (err) {
+          console.error('ID upload error', err)
+        } finally {
+          setUploadingId(false)
+        }
       }
 
       const fullNumber = whatsapp ? `256${whatsapp}` : ''
