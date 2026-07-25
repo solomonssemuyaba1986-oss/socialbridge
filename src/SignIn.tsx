@@ -429,6 +429,7 @@ function SignIn() {
       {/* CTA */}
       <div style={{ padding: '80px 20px', textAlign: 'center' }}>
         <h2 className="rt-title-md" style={{ fontSize: '42px', fontWeight: '900', margin: '0 0 16px', letterSpacing: '-1px' }}>
+          It doesn't matter where you are, or your customers
           Manage your business<br />
           <span style={{ color: green }}>from anywhere.</span>
         </h2>
