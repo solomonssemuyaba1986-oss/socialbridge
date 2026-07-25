@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { auth, db, storage } from './firebase'
 import { collection, doc, getDocs, query, setDoc, where } from 'firebase/firestore'
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { useNavigate } from 'react-router-dom'
 import { COUNTRIES } from './countries'
 
@@ -331,25 +331,10 @@ function SetupStore() {
           setUploadingLogo(true)
           const processedBlob = await resizeImage(logoFile, 1024, 0.8)
           const processedFile = new File([processedBlob], 'logo.jpg', { type: 'image/jpeg' })
-          const storageRef = ref(storage, `sellers/${user.uid}/logo.jpg`)
-          const uploadTask = uploadBytesResumable(storageRef, processedFile)
-
-          await new Promise<void>((resolve, reject) => {
-            uploadTask.on('state_changed', () => {}, (error: any) => {
-              console.error('Upload error', error)
-              setUploadingLogo(false)
-              reject(error)
-            }, async () => {
-              try {
-                finalLogoUrl = await getDownloadURL(uploadTask.snapshot.ref)
-                resolve()
-              } catch (e) {
-                reject(e)
-              } finally {
-                setUploadingLogo(false)
-              }
-            })
-          })
+           const logoStorageRef = ref(storage, `sellers/${user.uid}/logo.jpg`)
+           const logoSnap = await uploadBytes(logoStorageRef, processedFile)
+           finalLogoUrl = await getDownloadURL(logoSnap.ref)
+           setUploadingLogo(false)
         } catch (err) {
           console.error('Logo upload failed', err)
         } finally {
@@ -362,20 +347,10 @@ function SetupStore() {
       if (idFile) {
         setUploadingId(true)
         const ext = idFile.name.split('.').pop() || 'jpg'
-        const storageRef = ref(storage, `sellers/${user.uid}/private/national-id.${ext}`)
-        const uploadTask = uploadBytesResumable(storageRef, idFile)
-
-        await new Promise<void>((resolve, reject) => {
-          uploadTask.on('state_changed', () => {}, (error: any) => {
-            console.error('ID upload error', error)
-            setUploadingId(false)
-            reject(error)
-          }, async () => {
-            idDocumentPath = uploadTask.snapshot.ref.fullPath
-            setUploadingId(false)
-            resolve()
-          })
-        })
+        const idStorageRef = ref(storage, `sellers/${user.uid}/private/national-id.${ext}`)
+        const idSnap = await uploadBytes(idStorageRef, idFile)
+        idDocumentPath = idSnap.ref.fullPath
+        setUploadingId(false)
       }
 
       // Phone-only sign-in (no email): prompt for recovery email later
