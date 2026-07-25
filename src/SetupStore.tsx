@@ -345,6 +345,7 @@ function SetupStore() {
         nationality,
         phoneVerified,
         idDocumentPath,
+        idStatus: 'pending',
         createdAt: new Date(),
       })
       navigate('/dashboard')
