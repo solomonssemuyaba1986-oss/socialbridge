@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { doc, onSnapshot, collection, query, getDocs } from 'firebase/firestore'
 import { db } from './firebase'
 
+export type BadgeStatus = 'none' | 'active' | 'grace'
+
 export interface SellerStats {
   totalSales: number
   avgRating: number
@@ -15,10 +17,14 @@ export interface SellerStats {
   deliverySuccess: number
   verifiedSeller: boolean
   realSellerBadge: boolean
+  realSellerBadgeStatus: BadgeStatus
   activeSellerBadge: boolean
+  activeSellerBadgeStatus: BadgeStatus
   productCount: number
   productWithImageCount: number
+  productQualityCount: number
   fulfilledOrders: number
+  totalOrdersProcessed: number
 }
 
 function computeStoreAge(createdAt: any): { label: string; days: number } {
@@ -60,10 +66,10 @@ function computeResponseTimeLabel(avgResponseMinutes: number | null): string {
 }
 
 /**
- * Real Seller Badge (🟢): Auto-awarded when all conditions are met:
+ * Real Seller Badge (🟢):
  * - Phone verified via OTP
  * - Nationality filled in
- * - National ID uploaded
+ * - National ID uploaded AND reviewed (idStatus === 'verified')
  * - Business name + bio filled
  * - 1+ product added
  */
@@ -71,6 +77,7 @@ function computeRealSellerBadge(
   phoneVerified: boolean,
   nationality: string | undefined,
   idDocumentPath: string | undefined,
+  idStatus: string | undefined,
   businessName: string | undefined,
   bio: string | undefined,
   productCount: number,
@@ -79,6 +86,7 @@ function computeRealSellerBadge(
     phoneVerified &&
     nationality &&
     idDocumentPath &&
+    idStatus === 'verified' &&
     businessName &&
     bio &&
     productCount >= 1,
@@ -86,26 +94,58 @@ function computeRealSellerBadge(
 }
 
 /**
- * Active Seller Badge (🔵): Auto-awarded when ALL conditions are met (no exceptions):
- * - 30+ days on Rachett
- * - 15+ fulfilled orders
- * - 40%+ delivery success rate
- * - Responds in < 12 hours (avg response < 720 minutes)
- * - 7+ products with images
+ * Active Seller Badge (🔵):
+ * - Must already be a Real Seller
+ * - 14+ days on Rachett
+ * - 10+ fulfilled orders
+ * - 60%+ delivery success (computed only when 10+ orders processed)
+ * - Responds in < 24 hours (avg response < 1440 minutes)
+ * - 3+ quality products (name 5+ chars, description 20+ chars, has image)
  */
 function computeActiveSellerBadge(
+  realSellerBadge: boolean,
   storeAgeDays: number,
   fulfilledOrders: number,
   deliverySuccess: number,
+  totalOrdersProcessed: number,
   avgResponseMinutes: number | null,
-  productWithImageCount: number,
+  productQualityCount: number,
 ): boolean {
-  if (storeAgeDays < 30) return false
-  if (fulfilledOrders < 15) return false
-  if (deliverySuccess < 40) return false
-  if (avgResponseMinutes === null || avgResponseMinutes >= 720) return false
-  if (productWithImageCount < 7) return false
+  if (!realSellerBadge) return false
+  if (storeAgeDays < 14) return false
+  if (fulfilledOrders < 10) return false
+  // Only evaluate delivery success when we have enough data
+  if (totalOrdersProcessed >= 10 && deliverySuccess < 60) return false
+  if (avgResponseMinutes === null || avgResponseMinutes >= 1440) return false
+  if (productQualityCount < 3) return false
   return true
+}
+
+/**
+ * Compute badge status with grace period.
+ * - badgeEarnedAt: timestamp (millis) when badge was first earned
+ * - graceUntil: timestamp (millis) when grace period expires
+ * - conditionsMet: are all conditions currently passing?
+ */
+function computeBadgeStatus(
+  conditionsMet: boolean,
+  earnedAt: number | undefined,
+  graceUntil: number | undefined,
+): { visible: boolean; status: BadgeStatus } {
+  const now = Date.now()
+
+  if (conditionsMet) {
+    // All conditions pass — badge is active
+    return { visible: true, status: 'active' }
+  }
+
+  if (earnedAt && graceUntil && now < graceUntil) {
+    // Conditions failed but still within grace period
+    return { visible: true, status: 'grace' }
+  }
+
+  // Never earned, or grace expired — no badge
+  return { visible: false, status: 'none' }
 }
 
 export function useSellerStats(sellerId: string | null) {
@@ -122,10 +162,14 @@ export function useSellerStats(sellerId: string | null) {
     deliverySuccess: 0,
     verifiedSeller: false,
     realSellerBadge: false,
+    realSellerBadgeStatus: 'none',
     activeSellerBadge: false,
+    activeSellerBadgeStatus: 'none',
     productCount: 0,
     productWithImageCount: 0,
+    productQualityCount: 0,
     fulfilledOrders: 0,
+    totalOrdersProcessed: 0,
   })
   const [loading, setLoading] = useState(true)
 
@@ -134,8 +178,13 @@ export function useSellerStats(sellerId: string | null) {
     phoneVerified?: boolean
     nationality?: string
     idDocumentPath?: string
+    idStatus?: string
     businessName?: string
     bio?: string
+    realSellerBadgeEarnedAt?: number
+    realSellerBadgeGraceUntil?: number
+    activeSellerBadgeEarnedAt?: number
+    activeSellerBadgeGraceUntil?: number
   }>({})
 
   useEffect(() => {
@@ -155,8 +204,13 @@ export function useSellerStats(sellerId: string | null) {
         phoneVerified: data.phoneVerified || false,
         nationality: data.nationality || undefined,
         idDocumentPath: data.idDocumentPath || undefined,
+        idStatus: data.idStatus || undefined,
         businessName: data.businessName || undefined,
         bio: data.bio || undefined,
+        realSellerBadgeEarnedAt: data.realSellerBadgeEarnedAt || undefined,
+        realSellerBadgeGraceUntil: data.realSellerBadgeGraceUntil || undefined,
+        activeSellerBadgeEarnedAt: data.activeSellerBadgeEarnedAt || undefined,
+        activeSellerBadgeGraceUntil: data.activeSellerBadgeGraceUntil || undefined,
       })
 
       setStats(prev => ({
@@ -186,8 +240,10 @@ export function useSellerStats(sellerId: string | null) {
         repeatBuyers: data.repeatBuyers || 0,
         deliverySuccess: data.deliverySuccess || 0,
         fulfilledOrders: data.fulfilledOrders || 0,
+        totalOrdersProcessed: data.totalOrdersProcessed || 0,
         productCount: data.productCount || 0,
         productWithImageCount: data.productWithImageCount || 0,
+        productQualityCount: data.productQualityCount || 0,
       }))
       setLoading(false)
     })
@@ -216,7 +272,7 @@ export function useSellerStats(sellerId: string | null) {
       const buyerNames = new Set(fulfilledOrdersArr.map(d => d.data().buyerName?.toLowerCase()).filter(Boolean))
       const repeatBuyers = fulfilledOrders > buyerNames.size ? fulfilledOrders - buyerNames.size : 0
 
-      // Delivery success: fulfilled vs cancelled
+      // Delivery success: fulfilled vs cancelled (all processed)
       const cancelledOrders = ordersSnap.docs.filter(d => d.data().status === 'cancelled').length
       const totalProcessed = fulfilledOrders + cancelledOrders
       const deliverySuccess = totalProcessed > 0 ? Math.round((fulfilledOrders / totalProcessed) * 100) : 0
@@ -228,6 +284,14 @@ export function useSellerStats(sellerId: string | null) {
         const data = d.data()
         return data.imageUrl || (data.images && data.images.length > 0)
       }).length
+      // Quality products: name 5+ chars, description 20+ chars, has image
+      const productQualityCount = productsSnap.docs.filter(d => {
+        const data = d.data()
+        const hasName = typeof data.name === 'string' && data.name.trim().length >= 5
+        const hasDesc = typeof data.description === 'string' && data.description.trim().length >= 20
+        const hasImage = data.imageUrl || (data.images && data.images.length > 0)
+        return hasName && hasDesc && hasImage
+      }).length
 
       setStats(prev => ({
         ...prev,
@@ -235,8 +299,10 @@ export function useSellerStats(sellerId: string | null) {
         repeatBuyers,
         deliverySuccess,
         fulfilledOrders,
+        totalOrdersProcessed: totalProcessed,
         productCount,
         productWithImageCount,
+        productQualityCount,
       }))
       setLoading(false)
     } catch (err) {
@@ -245,29 +311,47 @@ export function useSellerStats(sellerId: string | null) {
     }
   }
 
-  // Recompute badges whenever stats + seller fields change
-  const realSellerBadge = computeRealSellerBadge(
+  // Recompute raw badge conditions
+  const realSellerConditionsMet = computeRealSellerBadge(
     sellerFields.phoneVerified ?? false,
     sellerFields.nationality,
     sellerFields.idDocumentPath,
+    sellerFields.idStatus,
     sellerFields.businessName,
     sellerFields.bio,
     stats.productCount,
   )
 
-  const activeSellerBadge = computeActiveSellerBadge(
+  const activeSellerConditionsMet = computeActiveSellerBadge(
+    realSellerConditionsMet,
     stats.storeAgeDays,
     stats.fulfilledOrders,
     stats.deliverySuccess,
+    stats.totalOrdersProcessed,
     stats.avgResponseMinutes,
-    stats.productWithImageCount,
+    stats.productQualityCount,
+  )
+
+  // Apply grace period rules
+  const realBadge = computeBadgeStatus(
+    realSellerConditionsMet,
+    sellerFields.realSellerBadgeEarnedAt,
+    sellerFields.realSellerBadgeGraceUntil,
+  )
+
+  const activeBadge = computeBadgeStatus(
+    activeSellerConditionsMet,
+    sellerFields.activeSellerBadgeEarnedAt,
+    sellerFields.activeSellerBadgeGraceUntil,
   )
 
   return {
     stats: {
       ...stats,
-      realSellerBadge,
-      activeSellerBadge,
+      realSellerBadge: realBadge.visible,
+      realSellerBadgeStatus: realBadge.status,
+      activeSellerBadge: activeBadge.visible,
+      activeSellerBadgeStatus: activeBadge.status,
     },
     loading,
   }
@@ -289,4 +373,13 @@ export function renderStars(rating: number): string {
   const half = rating - full >= 0.5 ? 1 : 0
   const empty = 5 - full - half
   return '★'.repeat(full) + (half ? '½' : '') + '☆'.repeat(empty)
+}
+
+// Helper to get a human-readable label for badge status
+export function getBadgeStatusLabel(status: BadgeStatus, badgeName: string): string {
+  switch (status) {
+    case 'active': return badgeName
+    case 'grace': return `${badgeName} (renewing)`
+    case 'none': return ''
+  }
 }
