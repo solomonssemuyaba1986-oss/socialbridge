@@ -6,8 +6,6 @@ import { onAuthStateChanged } from 'firebase/auth'
 import { useSellerOrders } from './useSellerOrders'
 import { useSellerMessages } from './useSellerMessages'
 
-import { sendEmailVerification } from 'firebase/auth'
-
 interface Seller {
   businessName: string
   bio: string
@@ -56,20 +54,9 @@ function Dashboard() {
         recoveryEmailPromptCount: (seller?.recoveryEmailPromptCount || 0) + 1,
         recoveryEmailLastPrompted: new Date(),
       })
-      // If user is signed in with email auth, send verification
-      const user = auth.currentUser
-      if (user && user.email === recoveryEmailInput.toLowerCase().trim()) {
-        // Email matches auth email — auto-verified
-        await updateDoc(doc(db, 'sellers', userId), { recoveryEmailVerified: true })
-        setRecoverySent(true)
-        setBannerDismissed(true)
-      } else {
-        // Different email — send Firebase verification
-        if (user) {
-          await sendEmailVerification(user)
-        }
-        setRecoverySent(true)
-      }
+      // Save email to Firestore — email delivery will be added in future (Resend/SendGrid)
+      setRecoverySent(true)
+      setBannerDismissed(true)
     } catch (err) {
       console.error('Recovery email error:', err)
     } finally {
@@ -301,7 +288,7 @@ function Dashboard() {
                   ✅ Recovery email saved!
                 </p>
                 <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>
-                  {recoveryEmailInput} — check your inbox to verify it.
+                  {recoveryEmailInput} — we'll use this to help you recover your store if needed.
                 </p>
               </>
             )}
