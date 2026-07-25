@@ -340,6 +340,20 @@ function SignIn() {
               }}>
               Continue as guest →
             </button>
+
+            {/* Need help link */}
+            <p style={{ margin: '8px 0 0', color: '#555', fontSize: '13px' }}>
+              Lost access to your phone?{' '}
+              <span onClick={() => {
+                const email = prompt('Enter your recovery email to regain access to your store.')
+                if (email) {
+                  alert(`We'll send a recovery link to ${email}. Check your inbox.`)
+                }
+              }}
+                style={{ color: '#88aaff', cursor: 'pointer', textDecoration: 'underline' }}>
+                Need help?
+              </span>
+            </p>
           </div>
         </div>
 
