@@ -66,18 +66,15 @@ function computeResponseTimeLabel(avgResponseMinutes: number | null): string {
 }
 
 /**
- * Real Seller Badge (🟢):
+ * Real Seller Badge (🟢): auto-awarded when all 5 conditions pass:
  * - Phone verified via OTP
  * - Nationality filled in
- * - National ID uploaded AND reviewed (idStatus === 'verified')
  * - Business name + bio filled
  * - 1+ product added
  */
 function computeRealSellerBadge(
   phoneVerified: boolean,
   nationality: string | undefined,
-  idDocumentPath: string | undefined,
-  idStatus: string | undefined,
   businessName: string | undefined,
   bio: string | undefined,
   productCount: number,
@@ -85,8 +82,6 @@ function computeRealSellerBadge(
   return Boolean(
     phoneVerified &&
     nationality &&
-    idDocumentPath &&
-    idStatus === 'verified' &&
     businessName &&
     bio &&
     productCount >= 1,
@@ -315,8 +310,6 @@ export function useSellerStats(sellerId: string | null) {
   const realSellerConditionsMet = computeRealSellerBadge(
     sellerFields.phoneVerified ?? false,
     sellerFields.nationality,
-    sellerFields.idDocumentPath,
-    sellerFields.idStatus,
     sellerFields.businessName,
     sellerFields.bio,
     stats.productCount,
