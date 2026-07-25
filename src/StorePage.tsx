@@ -20,6 +20,14 @@ interface Seller {
   tiktok?: string
 }
 
+function maskEmail(email: string): string {
+  const [name, domain] = email.split('@')
+  if (!name || !domain) return email
+  const visible = name.slice(0, 4)
+  const masked = visible + '*'.repeat(Math.max(0, name.length - 4))
+  return `${masked}@${domain}`
+}
+
 interface Product {
   id: string
   name: string
@@ -660,10 +668,17 @@ const handleSignupAndSendMessage = async () => {
             </p>
           </div>
         )}
+        <p style={{ color: '#666', fontSize: '12px', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>Contact</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '10px', marginBottom: '16px' }}>
           {seller.email && (
-            <a href={`mailto:${seller.email}`} style={{ color: '#fff', fontSize: '13px', textDecoration: 'none', background: '#111', padding: '8px 12px', borderRadius: '999px', border: '1px solid #333' }}>
-              ✉️ {seller.email}
+            <a href={`mailto:${seller.email}`} title={isOwner ? seller.email : 'Click to email'}
+              style={{ color: '#fff', fontSize: '13px', textDecoration: 'none', background: '#111', padding: '8px 12px', borderRadius: '999px', border: '1px solid #333' }}>
+              ✉️ {isOwner ? seller.email : maskEmail(seller.email)}
+            </a>
+          )}
+          {seller.whatsapp && (
+            <a href={`https://wa.me/${seller.whatsapp}`} target="_blank" rel="noreferrer" style={{ color: '#fff', fontSize: '13px', textDecoration: 'none', background: '#111', padding: '8px 12px', borderRadius: '999px', border: '1px solid #333' }}>
+              💬 WhatsApp
             </a>
           )}
           {seller.instagram && (
