@@ -16,6 +16,10 @@ function EditStore() {
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
 
+  // Location
+  const [location, setLocation] = useState('')
+  const [locationLoading, setLocationLoading] = useState(false)
+
   // Nationality
   const [nationality, setNationality] = useState('')
   const [nationalitySearch, setNationalitySearch] = useState('')
@@ -45,6 +49,7 @@ function EditStore() {
           setTiktok((data.tiktok || '').replace(/^@+/, ''))
           setLogoUrl(data.logoUrl || '')
           setNationality(data.nationality || '')
+          setLocation(data.location || '')
           if (data.idDocumentPath) {
             // Extract filename from path
             const parts = data.idDocumentPath.split('/')
@@ -82,6 +87,47 @@ function EditStore() {
     }
     setIdFile(file)
     setIdFileName(file.name)
+  }
+
+  // -- Geolocation --
+  const handleUseMyLocation = () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation not supported in your browser.')
+      return
+    }
+    setLocationLoading(true)
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+          )
+          const data = await res.json()
+          if (data && data.display_name) {
+            const city = data.address?.city || data.address?.town || data.address?.county || data.address?.state_district || ''
+            const country = data.address?.country || ''
+            const fallback = data.display_name.split(',')[0]?.trim() || ''
+            const result = [city, country].filter(Boolean).join(', ')
+            setLocation(result || fallback)
+          } else {
+            setLocation(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`)
+          }
+        } catch {
+          setLocation(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`)
+        } finally {
+          setLocationLoading(false)
+        }
+      },
+      (err) => {
+        console.error('Geolocation error:', err)
+        setLocationLoading(false)
+        alert(err.code === 1
+          ? 'Location access denied. Please enter your location manually.'
+          : 'Could not get location. Please enter manually.')
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
+    )
   }
 
   // Filter countries for dropdown
@@ -175,6 +221,7 @@ function EditStore() {
         tiktok: tiktok.trim().replace(/^@+/, ''),
         logoUrl: finalLogoUrl,
         nationality: nationality.trim(),
+        location: location.trim(),
       }
       if (idDocumentPath) {
         updates.idDocumentPath = idDocumentPath
@@ -258,6 +305,19 @@ function EditStore() {
               </div>
             </div>
           )}
+        </div>
+
+        {/* Location */}
+        <label>Location</label>
+        <p style={{ fontSize: '12px', color: '#666', margin: '4px 0 4px' }}>Your city or district — helps buyers find you. Type manually or use auto-detect.</p>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+          <input value={location} onChange={e => setLocation(e.target.value)}
+            placeholder="e.g. Kampala, Uganda"
+            style={{ flex: 1, padding: '10px 12px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '14px', boxSizing: 'border-box' }} />
+          <button onClick={handleUseMyLocation} disabled={locationLoading}
+            style={{ padding: '10px 14px', background: locationLoading ? '#eee' : '#f0f0f0', color: '#333', border: '1px solid #ddd', borderRadius: '6px', cursor: locationLoading ? 'not-allowed' : 'pointer', fontSize: '14px', whiteSpace: 'nowrap' }}>
+            {locationLoading ? '⏳' : '📍 Detect'}
+          </button>
         </div>
 
         {/* National ID Upload */}
