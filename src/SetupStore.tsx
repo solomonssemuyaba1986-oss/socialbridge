@@ -378,6 +378,10 @@ function SetupStore() {
         })
       }
 
+      // Phone-only sign-in (no email): prompt for recovery email later
+      const isPhoneSignIn = !!user.phoneNumber && !user.email
+      const recoveryEmail = isPhoneSignIn ? '' : (cleanedEmail || user.email || '')
+
       await setDoc(doc(db, 'sellers', user.uid), {
         businessName: cleanedName,
         bio: cleanedBio,
@@ -392,6 +396,10 @@ function SetupStore() {
         phoneVerified,
         idDocumentPath,
         idStatus: 'pending',
+        recoveryEmail,
+        recoveryEmailVerified: !isPhoneSignIn,
+        recoveryEmailPromptCount: isPhoneSignIn ? 0 : -1,
+        recoveryEmailLastPrompted: isPhoneSignIn ? null : null,
         createdAt: new Date(),
       })
       navigate('/dashboard')
