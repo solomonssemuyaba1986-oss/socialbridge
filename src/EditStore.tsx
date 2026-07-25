@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { auth, db } from './firebase'
+import { auth, db, storage } from './firebase'
 import { doc, getDoc, updateDoc } from 'firebase/firestore'
-import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
+import { COUNTRIES } from './countries'
 
 function EditStore() {
   const [businessName, setBusinessName] = useState('')
@@ -14,6 +15,17 @@ function EditStore() {
   const [logoUrl, setLogoUrl] = useState('')
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // Nationality
+  const [nationality, setNationality] = useState('')
+  const [nationalitySearch, setNationalitySearch] = useState('')
+  const [showCountryDropdown, setShowCountryDropdown] = useState(false)
+
+  // National ID
+  const [idFileName, setIdFileName] = useState('')
+  const [idFile, setIdFile] = useState<File | null>(null)
+  const [uploadingId, setUploadingId] = useState(false)
+
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -32,6 +44,12 @@ function EditStore() {
           setInstagram((data.instagram || '').replace(/^@+/, ''))
           setTiktok((data.tiktok || '').replace(/^@+/, ''))
           setLogoUrl(data.logoUrl || '')
+          setNationality(data.nationality || '')
+          if (data.idDocumentPath) {
+            // Extract filename from path
+            const parts = data.idDocumentPath.split('/')
+            setIdFileName(parts[parts.length - 1] || 'national-id')
+          }
         }
       } catch (err) {
         console.error('Load store failed', err)
@@ -46,6 +64,31 @@ function EditStore() {
     setLogoUrl(URL.createObjectURL(f))
   }
 
+  // -- National ID upload --
+  const handleIdFileChange = (file: File | null) => {
+    if (!file) {
+      setIdFile(null)
+      setIdFileName('')
+      return
+    }
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+    if (!allowedTypes.includes(file.type)) {
+      alert('Please upload a JPG, PNG, or PDF file')
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File must be under 10MB')
+      return
+    }
+    setIdFile(file)
+    setIdFileName(file.name)
+  }
+
+  // Filter countries for dropdown
+  const filteredCountries = nationalitySearch
+    ? COUNTRIES.filter(c => c.toLowerCase().includes(nationalitySearch.toLowerCase()))
+    : COUNTRIES
+
   const handleSave = async () => {
     const user = auth.currentUser
     if (!user) { navigate('/'); return }
@@ -54,7 +97,6 @@ function EditStore() {
       let finalLogoUrl = logoUrl || ''
       if (logoFile) {
         try {
-          // resize before upload
           const resizeImage = (file: File, maxWidth = 1024, quality = 0.8): Promise<Blob> => {
             return new Promise((resolve, reject) => {
               const img = new Image()
@@ -83,14 +125,11 @@ function EditStore() {
 
           const processedBlob = await resizeImage(logoFile, 1024, 0.8)
           const processedFile = new File([processedBlob], 'logo.jpg', { type: 'image/jpeg' })
-          const storage = getStorage()
           const storageRef = ref(storage, `sellers/${user.uid}/logo.jpg`)
           const uploadTask = uploadBytesResumable(storageRef, processedFile)
 
           await new Promise<void>((resolve, reject) => {
-            uploadTask.on('state_changed', () => {
-              // could update progress UI here
-            }, (error) => {
+            uploadTask.on('state_changed', () => {}, (error) => {
               console.error('Upload failed', error)
               reject(error)
             }, async () => {
@@ -105,8 +144,29 @@ function EditStore() {
         }
       }
 
+      // Upload National ID to Firebase Storage (private)
+      let idDocumentPath: string | undefined
+      if (idFile) {
+        setUploadingId(true)
+        const ext = idFile.name.split('.').pop() || 'jpg'
+        const storageRef = ref(storage, `sellers/${user.uid}/private/national-id.${ext}`)
+        const uploadTask = uploadBytesResumable(storageRef, idFile)
+
+        await new Promise<void>((resolve, reject) => {
+          uploadTask.on('state_changed', () => {}, (error: any) => {
+            console.error('ID upload error', error)
+            setUploadingId(false)
+            reject(error)
+          }, async () => {
+            idDocumentPath = uploadTask.snapshot.ref.fullPath
+            setUploadingId(false)
+            resolve()
+          })
+        })
+      }
+
       const fullNumber = whatsapp ? `256${whatsapp}` : ''
-      await updateDoc(doc(db, 'sellers', user.uid), {
+      const updates: Record<string, any> = {
         businessName: businessName.trim(),
         bio: bio.trim(),
         whatsapp: fullNumber,
@@ -114,7 +174,13 @@ function EditStore() {
         instagram: instagram.trim().replace(/^@+/, ''),
         tiktok: tiktok.trim().replace(/^@+/, ''),
         logoUrl: finalLogoUrl,
-      })
+        nationality: nationality.trim(),
+      }
+      if (idDocumentPath) {
+        updates.idDocumentPath = idDocumentPath
+      }
+
+      await updateDoc(doc(db, 'sellers', user.uid), updates)
       navigate('/dashboard')
     } catch (err) {
       console.error('Save failed', err)
@@ -145,6 +211,80 @@ function EditStore() {
         <label>TikTok username</label>
         <input value={tiktok} onChange={e => setTiktok(e.target.value.replace(/^@+/, ''))} placeholder="yourhandle" style={{ width: '100%', padding: 8, marginBottom: 8 }} />
 
+        {/* Nationality Dropdown */}
+        <label>Nationality</label>
+        <p style={{ fontSize: '12px', color: '#666', margin: '4px 0 4px' }}>Your country of citizenship</p>
+        <div style={{ position: 'relative', marginBottom: '8px' }}>
+          <div
+            onClick={() => setShowCountryDropdown(!showCountryDropdown)}
+            style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '14px', boxSizing: 'border-box', background: '#fff', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: nationality ? '#333' : '#999' }}>{nationality || 'Select your country'}</span>
+            <span style={{ color: '#999', fontSize: '12px' }}>{showCountryDropdown ? '▲' : '▼'}</span>
+          </div>
+          {showCountryDropdown && (
+            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #ddd', borderRadius: '6px', maxHeight: '200px', overflow: 'hidden', zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+              <input
+                value={nationalitySearch}
+                onChange={e => setNationalitySearch(e.target.value)}
+                placeholder="Search countries..."
+                autoFocus
+                style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: '1px solid #eee', fontSize: '13px', boxSizing: 'border-box', outline: 'none' }}
+              />
+              <div style={{ maxHeight: '160px', overflowY: 'auto' }}>
+                {filteredCountries.map(country => (
+                  <div
+                    key={country}
+                    onClick={() => {
+                      setNationality(country)
+                      setNationalitySearch('')
+                      setShowCountryDropdown(false)
+                    }}
+                    style={{
+                      padding: '8px 10px',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      color: '#333',
+                      background: nationality === country ? '#f0f0f0' : '#fff',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#f5f5f5')}
+                    onMouseLeave={e => (e.currentTarget.style.background = nationality === country ? '#f0f0f0' : '#fff')}
+                  >
+                    {country}
+                  </div>
+                ))}
+                {filteredCountries.length === 0 && (
+                  <div style={{ padding: '10px', color: '#999', fontSize: '13px', textAlign: 'center' }}>No countries found</div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* National ID Upload */}
+        <label>National ID</label>
+        <p style={{ fontSize: '12px', color: '#666', margin: '4px 0 4px' }}>
+          Photo or scan of your ID. This is <strong>private</strong> — only you can see it. JPG, PNG, or PDF — max 10MB.
+        </p>
+        <div style={{ marginBottom: '8px' }}>
+          {!idFileName ? (
+            <label style={{ display: 'block', padding: '30px 16px', border: '2px dashed #ddd', borderRadius: '6px', textAlign: 'center', cursor: 'pointer', background: '#fafafa' }}>
+              <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e => handleIdFileChange(e.target.files?.[0] || null)} style={{ display: 'none' }} />
+              <span style={{ fontSize: '13px', color: '#999' }}>Click to upload your National ID</span>
+            </label>
+          ) : (
+            <div style={{ padding: '10px 12px', background: '#f0f8f0', borderRadius: '6px', border: '1px solid #c8e6c9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '18px' }}>📎</span>
+                <span style={{ fontSize: '13px', color: '#2e7d32', fontWeight: '600' }}>{idFileName}</span>
+              </div>
+              <button onClick={() => handleIdFileChange(null)}
+                style={{ background: 'transparent', border: 'none', color: '#999', cursor: 'pointer', fontSize: '16px' }}>
+                ✕
+              </button>
+            </div>
+          )}
+        </div>
+
         <label>Logo (optional)</label>
         <div style={{ marginBottom: 8 }}>
           <input type="file" accept="image/*" onChange={e => { if (e.target.files && e.target.files[0]) handleFile(e.target.files[0]) }} />
@@ -155,7 +295,9 @@ function EditStore() {
           </div>
         )}
 
-        <button onClick={handleSave} disabled={loading} style={{ padding: 10 }}>{loading ? 'Saving...' : 'Save'}</button>
+        <button onClick={handleSave} disabled={loading || uploadingId} style={{ padding: 10 }}>
+          {loading || uploadingId ? 'Saving...' : 'Save'}
+        </button>
       </div>
     </div>
   )
