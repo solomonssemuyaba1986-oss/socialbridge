@@ -66,15 +66,17 @@ function computeResponseTimeLabel(avgResponseMinutes: number | null): string {
 }
 
 /**
- * Real Seller Badge (🟢): auto-awarded when all 5 conditions pass:
+ * Real Seller Badge (🟢): auto-awarded when all 6 conditions pass:
  * - Phone verified via OTP
  * - Nationality filled in
+ * - Location filled in
  * - Business name + bio filled
  * - 1+ product added
  */
 function computeRealSellerBadge(
   phoneVerified: boolean,
   nationality: string | undefined,
+  location: string | undefined,
   businessName: string | undefined,
   bio: string | undefined,
   productCount: number,
@@ -82,6 +84,7 @@ function computeRealSellerBadge(
   return Boolean(
     phoneVerified &&
     nationality &&
+    location &&
     businessName &&
     bio &&
     productCount >= 1,
@@ -109,19 +112,12 @@ function computeActiveSellerBadge(
   if (!realSellerBadge) return false
   if (storeAgeDays < 14) return false
   if (fulfilledOrders < 10) return false
-  // Only evaluate delivery success when we have enough data
   if (totalOrdersProcessed >= 10 && deliverySuccess < 60) return false
   if (avgResponseMinutes === null || avgResponseMinutes >= 1440) return false
   if (productQualityCount < 3) return false
   return true
 }
 
-/**
- * Compute badge status with grace period.
- * - badgeEarnedAt: timestamp (millis) when badge was first earned
- * - graceUntil: timestamp (millis) when grace period expires
- * - conditionsMet: are all conditions currently passing?
- */
 function computeBadgeStatus(
   conditionsMet: boolean,
   earnedAt: number | undefined,
@@ -130,16 +126,13 @@ function computeBadgeStatus(
   const now = Date.now()
 
   if (conditionsMet) {
-    // All conditions pass — badge is active
     return { visible: true, status: 'active' }
   }
 
   if (earnedAt && graceUntil && now < graceUntil) {
-    // Conditions failed but still within grace period
     return { visible: true, status: 'grace' }
   }
 
-  // Never earned, or grace expired — no badge
   return { visible: false, status: 'none' }
 }
 
@@ -168,10 +161,10 @@ export function useSellerStats(sellerId: string | null) {
   })
   const [loading, setLoading] = useState(true)
 
-  // Track seller-level fields for badge computation
   const [sellerFields, setSellerFields] = useState<{
     phoneVerified?: boolean
     nationality?: string
+    location?: string
     idDocumentPath?: string
     idStatus?: string
     businessName?: string
@@ -188,7 +181,6 @@ export function useSellerStats(sellerId: string | null) {
       return
     }
 
-    // Listen to seller doc for badge-related fields + storeCreatedAt
     const unsubSeller = onSnapshot(doc(db, 'sellers', sellerId), (snap) => {
       if (!snap.exists()) return
       const data = snap.data()
@@ -198,6 +190,7 @@ export function useSellerStats(sellerId: string | null) {
       setSellerFields({
         phoneVerified: data.phoneVerified || false,
         nationality: data.nationality || undefined,
+        location: data.location || undefined,
         idDocumentPath: data.idDocumentPath || undefined,
         idStatus: data.idStatus || undefined,
         businessName: data.businessName || undefined,
@@ -216,10 +209,8 @@ export function useSellerStats(sellerId: string | null) {
       }))
     })
 
-    // Listen to stats subcollection if it exists
     const unsubStats = onSnapshot(doc(db, 'sellers', sellerId, 'stats', 'main'), (snap) => {
       if (!snap.exists()) {
-        // No stats doc yet — compute from orders + products
         computeStatsFromOrdersAndProducts(sellerId)
         return
       }
@@ -249,12 +240,8 @@ export function useSellerStats(sellerId: string | null) {
     }
   }, [sellerId])
 
-  /**
-   * Fallback: compute stats from orders + products subcollections when stats/main doc doesn't exist.
-   */
   const computeStatsFromOrdersAndProducts = async (sid: string) => {
     try {
-      // Fetch orders
       const ordersSnap = await getDocs(query(collection(db, 'sellers', sid, 'orders')))
       const fulfilledOrdersArr = ordersSnap.docs.filter(d => d.data().status === 'fulfilled')
       const totalSales = fulfilledOrdersArr.reduce((sum, d) => {
@@ -263,23 +250,19 @@ export function useSellerStats(sellerId: string | null) {
       }, 0)
       const fulfilledOrders = fulfilledOrdersArr.length
 
-      // Count unique buyers for repeat buyers
       const buyerNames = new Set(fulfilledOrdersArr.map(d => d.data().buyerName?.toLowerCase()).filter(Boolean))
       const repeatBuyers = fulfilledOrders > buyerNames.size ? fulfilledOrders - buyerNames.size : 0
 
-      // Delivery success: fulfilled vs cancelled (all processed)
       const cancelledOrders = ordersSnap.docs.filter(d => d.data().status === 'cancelled').length
       const totalProcessed = fulfilledOrders + cancelledOrders
       const deliverySuccess = totalProcessed > 0 ? Math.round((fulfilledOrders / totalProcessed) * 100) : 0
 
-      // Fetch products
       const productsSnap = await getDocs(query(collection(db, 'sellers', sid, 'products')))
       const productCount = productsSnap.size
       const productWithImageCount = productsSnap.docs.filter(d => {
         const data = d.data()
         return data.imageUrl || (data.images && data.images.length > 0)
       }).length
-      // Quality products: name 5+ chars, description 20+ chars, has image
       const productQualityCount = productsSnap.docs.filter(d => {
         const data = d.data()
         const hasName = typeof data.name === 'string' && data.name.trim().length >= 5
@@ -306,10 +289,10 @@ export function useSellerStats(sellerId: string | null) {
     }
   }
 
-  // Recompute raw badge conditions
   const realSellerConditionsMet = computeRealSellerBadge(
     sellerFields.phoneVerified ?? false,
     sellerFields.nationality,
+    sellerFields.location,
     sellerFields.businessName,
     sellerFields.bio,
     stats.productCount,
@@ -325,7 +308,6 @@ export function useSellerStats(sellerId: string | null) {
     stats.productQualityCount,
   )
 
-  // Apply grace period rules
   const realBadge = computeBadgeStatus(
     realSellerConditionsMet,
     sellerFields.realSellerBadgeEarnedAt,
@@ -350,17 +332,14 @@ export function useSellerStats(sellerId: string | null) {
   }
 }
 
-// Helper to get a friendly sales label
 export function getSalesLabel(totalSales: number): string {
   return computeSalesLabel(totalSales)
 }
 
-// Helper to format rating for display
 export function formatRating(rating: number): string {
   return rating.toFixed(1)
 }
 
-// Helper to render star symbols
 export function renderStars(rating: number): string {
   const full = Math.floor(rating)
   const half = rating - full >= 0.5 ? 1 : 0
@@ -368,7 +347,6 @@ export function renderStars(rating: number): string {
   return '★'.repeat(full) + (half ? '½' : '') + '☆'.repeat(empty)
 }
 
-// Helper to get a human-readable label for badge status
 export function getBadgeStatusLabel(status: BadgeStatus, badgeName: string): string {
   switch (status) {
     case 'active': return badgeName
