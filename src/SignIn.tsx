@@ -330,6 +330,16 @@ function SignIn() {
               {/* reCAPTCHA container (invisible) */}
               <div id="phone-recaptcha-container" />
             </div>
+
+            {/* Guest Button */}
+            <button onClick={() => navigate('/onboarding')}
+              style={{
+                width: '100%', padding: '16px 32px', background: 'transparent', color: '#aaa',
+                border: '1px solid #444', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px',
+                marginTop: '4px',
+              }}>
+              Continue as guest →
+            </button>
           </div>
         </div>
 
