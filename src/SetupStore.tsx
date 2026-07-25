@@ -223,9 +223,6 @@ function SetupStore() {
     if (!nationality) {
       newErrors.nationality = 'Please select your nationality'
     }
-    if (!idFile && !idFileName) {
-      newErrors.idDocument = 'Please upload your National ID'
-    }
     if (!phoneVerified) {
       newErrors.submit = 'Please verify your phone number before creating your store'
     }
@@ -362,7 +359,7 @@ function SetupStore() {
     }
   }
 
-  const isFormReady = businessName && bio && whatsapp.length === 9 && phoneVerified && nationality && (idFile || idFileName)
+  const isFormReady = businessName && bio && whatsapp.length === 9 && phoneVerified && nationality
 
   return (
     <div style={{ minHeight: '100vh', background: '#f9f9f9', fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
@@ -534,9 +531,9 @@ function SetupStore() {
         {!errors.nationality && <div style={{ marginBottom: '16px' }} />}
 
         {/* National ID Upload */}
-        <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>National ID</label>
+        <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>National ID <span style={{ color: '#888', fontWeight: '400', fontSize: '12px' }}>(optional for now)</span></label>
         <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>
-          Upload a photo or scan of your National ID card. This is <strong>private</strong> — only you can see it.
+          Upload a photo or scan of your National ID card. This is <strong>private</strong> — only you can see it. Stronger identity verification coming soon.
         </p>
         <div style={{ marginBottom: '4px' }}>
           {!idFileName ? (
