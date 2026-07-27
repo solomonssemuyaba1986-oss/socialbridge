@@ -202,6 +202,12 @@ function BrowsePage() {
       return
     }
 
+    // Prevent self-ordering
+    if (auth.currentUser && auth.currentUser.uid === sellerId) {
+      showFeedback("You can't order from your own store. Sign in with a different account to test buying.", 'error')
+      return
+    }
+
     try {
       const buyerUid = auth.currentUser?.uid || null
       const orderRef = await addDoc(collection(db, 'sellers', sellerId, 'orders'), {
