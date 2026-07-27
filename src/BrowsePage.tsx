@@ -203,8 +203,10 @@ function BrowsePage() {
     }
 
     try {
+      const buyerUid = auth.currentUser?.uid || null
       const orderRef = await addDoc(collection(db, 'sellers', sellerId, 'orders'), {
         buyerName,
+        buyerUid,
         productName: orderProduct.name,
         productPrice: orderProduct.price,
         quantity,
