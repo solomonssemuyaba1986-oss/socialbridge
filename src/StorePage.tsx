@@ -3,7 +3,7 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { collection, query, where, getDocs, addDoc, setDoc, doc } from 'firebase/firestore'
 import { db, auth } from './firebase'
 import { suppressNextSellerOrderAlert } from './orderAlerts.ts'
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, FacebookAuthProvider, OAuthProvider } from 'firebase/auth'
 import { CATEGORIES, getSubcategories } from './categories'
 import { useConversation } from './useConversation.ts'
 import { useGuestOTP } from './useGuestOTP.ts'
@@ -596,9 +596,8 @@ const handleSendMessage = async () => {
   }
 }
 
-const handleSignupAndSendMessage = async () => {
+const handleSignupForAction = async (provider: any) => {
   try {
-    const provider = new GoogleAuthProvider()
     const result = await signInWithPopup(auth, provider)
     console.log('User signed up/in:', result.user.uid)
 
@@ -609,22 +608,11 @@ const handleSignupAndSendMessage = async () => {
       signupAt: new Date()
     }, { merge: true })
 
-    // Now send the message
-    if (messageText.trim() && messageProduct && seller) {
-      await sendMessage(
-        result.user.uid,
-        messageText.trim(),
-        seller.businessName || 'Seller',
-        result.user.displayName || 'Buyer'
-      )
-      console.log('Message sent')
-      setMessageText('')
-      setMessageProduct(null)
-      setShowSignupSheet(false)
-    }
+    setShowSignupSheet(false)
+    showFeedback("You're signed in! Complete your action now.", 'success')
   } catch (err) {
-    console.error('Signup/message error:', err)
-    showFeedback('Signup failed for now. Please try again and your message will send.', 'error')
+    console.error('Signup error:', err)
+    showFeedback('Signup failed for now. Please try again.', 'error')
   }
 }
 
@@ -1086,12 +1074,25 @@ const handleSignupAndSendMessage = async () => {
         <div className="rt-modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1001, padding: '20px' }}>
           <div className="rt-modal-box" style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '380px', border: '1px solid #222', textAlign: 'center' }}>
             <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: '800', color: '#fff' }}>Join Rachett</h3>
-            <p style={{ margin: '0 0 24px', color: '#888', fontSize: '14px' }}>Sign up to send your message</p>
+            <p style={{ margin: '0 0 24px', color: '#888', fontSize: '14px' }}>Sign up to continue</p>
 
             {/* Google Sign In */}
-            <button onClick={handleSignupAndSendMessage}
-              style={{ width: '100%', padding: '14px', background: '#fff', color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '14px', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '16px' }}>🔵</span> Continue with Google
+            {/* Google */}
+            <button onClick={() => handleSignupForAction(new GoogleAuthProvider())}
+              style={{ width: '100%', padding: '14px', background: '#fff', color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '14px', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+              <img src="https://www.google.com/favicon.ico" width="18" alt="Google" /> Continue with Google
+            </button>
+
+            {/* Apple */}
+            <button onClick={() => handleSignupForAction(new OAuthProvider('apple.com'))}
+              style={{ width: '100%', padding: '14px', background: '#000', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '14px', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '18px' }}></span> Continue with Apple
+            </button>
+
+            {/* Facebook */}
+            <button onClick={() => handleSignupForAction(new FacebookAuthProvider())}
+              style={{ width: '100%', padding: '14px', background: '#4267B2', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '14px', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '18px' }}>f</span> Continue with Facebook
             </button>
 
             {/* Phone Auth Note */}
