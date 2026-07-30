@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { collection, getDocs, query, addDoc, doc, updateDoc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
-import { onAuthStateChanged } from 'firebase/auth'
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, FacebookAuthProvider, OAuthProvider } from 'firebase/auth'
 import { db, auth } from './firebase'
 import { useNavigate } from 'react-router-dom'
 import { getMainCategories } from './categories'
@@ -104,6 +104,10 @@ function BrowsePage() {
   const [feedbackType, setFeedbackType] = useState<'success' | 'error' | 'info'>('success')
   const [feedbackVisible, setFeedbackVisible] = useState(false)
 
+  // Signup sheet state
+  const [showSignupSheet, setShowSignupSheet] = useState(false)
+  const [signupLoading, setSignupLoading] = useState('')
+
   // Message modal state
   const [messageProduct, setMessageProduct] = useState<Product | null>(null)
   const [messageText, setMessageText] = useState('')
@@ -185,9 +189,29 @@ function BrowsePage() {
     }
   }
 
+  const handleSocialSignIn = async (provider: any, name: string) => {
+    setSignupLoading(name)
+    try {
+      const result = await signInWithPopup(auth, provider)
+      await setDoc(doc(db, 'users', result.user.uid), {
+        displayName: result.user.displayName || '',
+        email: result.user.email || '',
+        lastSeen: new Date(),
+        signupAt: new Date(),
+      }, { merge: true })
+      setShowSignupSheet(false)
+      showFeedback("You're signed in! Complete your order now.", 'success')
+    } catch (err) {
+      console.error('Sign-in error:', err)
+      showFeedback('Sign in failed. Please try again.', 'error')
+    } finally {
+      setSignupLoading('')
+    }
+  }
+
   const handleOrder = async () => {
     if (!auth.currentUser) {
-      showFeedback('Please sign in to place your order.', 'info')
+      setShowSignupSheet(true)
       return
     }
     if (!buyerName.trim()) {
@@ -688,6 +712,44 @@ Order ID: #${orderId}`
               {sendingMessage ? 'Sending...' : 'Send Message'}
             </button>
             <button onClick={() => { setMessageProduct(null); setMessageText(''); }}
+              style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Signup Sheet Modal */}
+      {showSignupSheet && (
+        <div className="rt-modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1001, padding: '20px' }}>
+          <div className="rt-modal-box" style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '380px', border: '1px solid #222', textAlign: 'center' }}>
+            <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: '800', color: '#fff' }}>Join Rachett</h3>
+            <p style={{ margin: '0 0 24px', color: '#888', fontSize: '14px' }}>Sign up to continue</p>
+
+            {/* Google */}
+            <button onClick={() => handleSocialSignIn(new GoogleAuthProvider(), 'Google')} disabled={!!signupLoading}
+              style={{ width: '100%', padding: '14px', background: '#fff', color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: signupLoading ? 'not-allowed' : 'pointer', fontSize: '14px', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: signupLoading && signupLoading !== 'Google' ? 0.5 : 1 }}>
+              <img src="https://www.google.com/favicon.ico" width="18" alt="Google" />
+              {signupLoading === 'Google' ? 'Signing in...' : 'Continue with Google'}
+            </button>
+
+            {/* Apple */}
+            <button onClick={() => handleSocialSignIn(new OAuthProvider('apple.com'), 'Apple')} disabled={!!signupLoading}
+              style={{ width: '100%', padding: '14px', background: '#000', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '700', cursor: signupLoading ? 'not-allowed' : 'pointer', fontSize: '14px', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: signupLoading && signupLoading !== 'Apple' ? 0.5 : 1 }}>
+              <span style={{ fontSize: '18px' }}></span>
+              {signupLoading === 'Apple' ? 'Signing in...' : 'Continue with Apple'}
+            </button>
+
+            {/* Facebook */}
+            <button onClick={() => handleSocialSignIn(new FacebookAuthProvider(), 'Facebook')} disabled={!!signupLoading}
+              style={{ width: '100%', padding: '14px', background: '#4267B2', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: signupLoading ? 'not-allowed' : 'pointer', fontSize: '14px', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: signupLoading && signupLoading !== 'Facebook' ? 0.5 : 1 }}>
+              <span style={{ fontSize: '18px' }}>f</span>
+              {signupLoading === 'Facebook' ? 'Signing in...' : 'Continue with Facebook'}
+            </button>
+
+            <p style={{ margin: '12px 0', color: '#666', fontSize: '12px' }}>Phone sign-up coming soon</p>
+
+            <button onClick={() => setShowSignupSheet(false)}
               style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
               Cancel
             </button>
