@@ -402,13 +402,6 @@ function Dashboard() {
                 <div style={{ padding: '12px' }}>
                   <p style={{ margin: '0 0 4px', fontWeight: '600', fontSize: '14px' }}>{p.name}</p>
                   <p style={{ margin: 0, fontWeight: '700', color: green, fontSize: '14px' }}>UGX {p.price}</p>
-                  <div style={{ marginTop: '10px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    <button onClick={() => shareToWhatsApp(p)} style={{ flex: '1 1 48%', padding: '8px', background: '#25D366', border: 'none', color: '#000', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '700' }}>WhatsApp</button>
-                    <button onClick={() => shareToTelegram(p)} style={{ flex: '1 1 48%', padding: '8px', background: '#2CA5E0', border: 'none', color: '#000', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '700' }}>Telegram</button>
-                    <button onClick={() => shareToTwitter(p)} style={{ flex: '1 1 48%', padding: '8px', background: '#1DA1F2', border: 'none', color: '#000', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '700' }}>Twitter</button>
-                    <button onClick={() => shareToFacebook(p)} style={{ flex: '1 1 48%', padding: '8px', background: '#4267B2', border: 'none', color: '#fff', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '700' }}>Facebook</button>
-                    <button onClick={() => copyCaption(p)} style={{ width: '100%', padding: '10px', marginTop: '6px', background: '#444', border: 'none', color: '#fff', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '700' }}>Copy caption</button>
-                  </div>
                 </div>
               </div>
             ))}
