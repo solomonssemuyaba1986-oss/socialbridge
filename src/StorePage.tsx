@@ -781,6 +781,14 @@ const handleSignupAndSendMessage = async () => {
         </div>
       </div>
 
+      {/* Discovery CTA — always visible between trust & products */}
+      <div style={{ maxWidth: '640px', margin: '0 auto 0', padding: '12px 16px' }}>
+        <button onClick={() => navigate('/browse')}
+          style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '12px', fontWeight: '800', cursor: 'pointer', fontSize: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+          🛍️ Discover more sellers on rachett →
+        </button>
+      </div>
+
       {/* Products */}
       <div style={{ maxWidth: '640px', margin: '0 auto', padding: '32px 16px' }}>
         <div className="rt-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -868,7 +876,7 @@ const handleSignupAndSendMessage = async () => {
       <div style={{ maxWidth: '640px', margin: '0 auto', padding: '0 16px 32px' }}>
         <button onClick={() => navigate('/browse')}
           style={{ width: '100%', padding: '16px', background: '#1a1a1a', color: '#fff', border: `1px solid ${green}`, borderRadius: '12px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-          🛍️ Browse more sellers on Rachett
+          🛍️ Browse more sellers on rachett
         </button>
       </div>
 
