@@ -76,15 +76,6 @@ function Dashboard() {
     { label: 'Reviews', path: '/dashboard', icon: '⭐' },
   ]
 
-  const getProductUrl = (product: Product) => `${storeLink}?productId=${product.id}`
-  const getCaption = (product: Product) =>
-    `${product.name} — UGX ${product.price}\nSee more from this seller at ${storeLink}\n${getProductUrl(product)}`
-  const shareToWhatsApp = (product: Product) => window.open(`https://wa.me/?text=${encodeURIComponent(getCaption(product))}`, '_blank')
-  const shareToTelegram = (product: Product) => window.open(`https://t.me/share/url?url=${encodeURIComponent(getProductUrl(product))}&text=${encodeURIComponent(getCaption(product))}`, '_blank')
-  const shareToTwitter = (product: Product) => window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(getCaption(product))}`, '_blank')
-  const shareToFacebook = (product: Product) => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(getProductUrl(product))}`, '_blank')
-  const copyCaption = async (product: Product) => { await navigator.clipboard.writeText(getCaption(product)); alert('Caption copied!') }
-
   const playNewOrderAlert = useCallback(() => {
     try {
       const audio = new Audio('/notification.mp3')
