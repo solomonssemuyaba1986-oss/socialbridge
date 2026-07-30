@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { collection, query, where, getDocs, addDoc, setDoc, doc } from 'firebase/firestore'
 import { db, auth } from './firebase'
 import { suppressNextSellerOrderAlert } from './orderAlerts.ts'
@@ -315,6 +315,7 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onRefresh }: an
 function StorePage() {
   const { slug } = useParams()
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const productDeepLinkId = searchParams.get('productId')
   const [seller, setSeller] = useState<Seller | null>(null)
   const [products, setProducts] = useState<Product[]>([])
@@ -861,6 +862,14 @@ const handleSignupAndSendMessage = async () => {
             ))}
           </div>
         )}
+      </div>
+
+      {/* Browse More CTA */}
+      <div style={{ maxWidth: '640px', margin: '0 auto', padding: '0 16px 32px' }}>
+        <button onClick={() => navigate('/browse')}
+          style={{ width: '100%', padding: '16px', background: '#1a1a1a', color: '#fff', border: `1px solid ${green}`, borderRadius: '12px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+          🛍️ Browse more sellers on Rachett
+        </button>
       </div>
 
       {/* Footer */}
