@@ -490,6 +490,10 @@ const handleImageUpload = async (file: File) => {
   }
 
 const handleOrder = async () => {
+  if (!auth.currentUser) {
+    setShowSignupSheet(true)
+    return
+  }
   if (!buyerName.trim()) {
     showFeedback('Please enter your name — the seller needs it to confirm your order fast.', 'error')
     return
