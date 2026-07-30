@@ -265,53 +265,7 @@ Order ID: #${orderId}`
 
     const storeMap = new Map<string, { sellerSlug: string; businessName: string; imageUrl: string; productCount: number; outOfStockCount: number }>()
     products.forEach((p) => {
-      const existing = storeMap.get(
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+      const existing = storeMap.get( 
         p.sellerSlug)
       if (!existing) {
         storeMap.set(p.sellerSlug, {
