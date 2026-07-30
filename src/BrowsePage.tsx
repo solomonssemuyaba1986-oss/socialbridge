@@ -101,7 +101,7 @@ function BrowsePage() {
   const [message, setMessage] = useState('')
   const [orderSuccess, setOrderSuccess] = useState(false)
   const [feedbackMessage, setFeedbackMessage] = useState('')
-  const [feedbackType, setFeedbackType] = useState<'success' | 'error'>('success')
+  const [feedbackType, setFeedbackType] = useState<'success' | 'error' | 'info'>('success')
   const [feedbackVisible, setFeedbackVisible] = useState(false)
 
   // Message modal state
@@ -109,7 +109,7 @@ function BrowsePage() {
   const [messageText, setMessageText] = useState('')
   const [sendingMessage, setSendingMessage] = useState(false)
 
-  const showFeedback = (msg: string, type: 'success' | 'error' = 'success') => {
+  const showFeedback = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
     setFeedbackMessage(msg)
     setFeedbackType(type)
     setFeedbackVisible(true)
@@ -186,6 +186,10 @@ function BrowsePage() {
   }
 
   const handleOrder = async () => {
+    if (!auth.currentUser) {
+      showFeedback('Please sign in to place your order.', 'info')
+      return
+    }
     if (!buyerName.trim()) {
       showFeedback('Please enter your name — the seller needs it to confirm your order fast.', 'error')
       return
