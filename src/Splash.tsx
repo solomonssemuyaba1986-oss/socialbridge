@@ -42,12 +42,12 @@ function Splash({ onDone }: SplashProps) {
   const [dwarfUrl, setDwarfUrl] = useState('')
 
   useEffect(() => {
-    // Process Rachett logo
+    // Rachett logo: black man on light bg → use multiply to make light bg transparent
     const rachettImg = new Image()
-    rachettImg.onload = () => setRachettUrl(processImageToBlackSilhouette(rachettImg))
-    rachettImg.src = '/Screenshot_20260613_115102_Chrome.jpg'
+    rachettImg.onload = () => setRachettUrl(rachettImg.src)
+    rachettImg.src = '/logo.jpg'
 
-    // Process mother company logo
+    // Process mother company logo with canvas
     const dwarfImg = new Image()
     dwarfImg.onload = () => setDwarfUrl(processImageToBlackSilhouette(dwarfImg))
     dwarfImg.src = '/mothercompanydwarf.png'
@@ -84,9 +84,10 @@ function Splash({ onDone }: SplashProps) {
           src={rachettUrl}
           alt="Rachett"
           style={{
-            width: '160px',
-            height: 'auto',
-          }}
+          width: '160px',
+          height: 'auto',
+          mixBlendMode: 'multiply' as any,
+        }}
         />
       )}
 
