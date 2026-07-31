@@ -4,6 +4,36 @@ interface SplashProps {
   onDone: () => void
 }
 
+function processDarkFigureOnLightBg(img: HTMLImageElement): string {
+  const canvas = document.createElement('canvas')
+  canvas.width = img.width
+  canvas.height = img.height
+  const ctx = canvas.getContext('2d')!
+  ctx.drawImage(img, 0, 0)
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const pixels = imageData.data
+
+  for (let i = 0; i < pixels.length; i += 4) {
+    const r = pixels[i]
+    const g = pixels[i + 1]
+    const b = pixels[i + 2]
+    const brightness = (r + g + b) / 3
+    // Dark areas (man) → pure black. Light areas (background) → transparent.
+    if (brightness < 80) {
+      pixels[i] = 0
+      pixels[i + 1] = 0
+      pixels[i + 2] = 0
+      pixels[i + 3] = 255  // fully opaque black
+    } else {
+      pixels[i + 3] = 0     // fully transparent
+    }
+  }
+
+  ctx.putImageData(imageData, 0, 0)
+  return canvas.toDataURL()
+}
+
 function processImageToBlackSilhouette(img: HTMLImageElement): string {
   const canvas = document.createElement('canvas')
   canvas.width = img.width
@@ -42,9 +72,9 @@ function Splash({ onDone }: SplashProps) {
   const [dwarfUrl, setDwarfUrl] = useState('')
 
   useEffect(() => {
-    // Rachett logo: black man on light bg → use multiply to make light bg transparent
+    // Rachett logo: dark man on light bg
     const rachettImg = new Image()
-    rachettImg.onload = () => setRachettUrl(rachettImg.src)
+    rachettImg.onload = () => setRachettUrl(processDarkFigureOnLightBg(rachettImg))
     rachettImg.src = '/logo.jpg'
 
     // Process mother company logo with canvas
@@ -86,7 +116,6 @@ function Splash({ onDone }: SplashProps) {
           style={{
           width: '160px',
           height: 'auto',
-          mixBlendMode: 'multiply' as any,
         }}
         />
       )}
