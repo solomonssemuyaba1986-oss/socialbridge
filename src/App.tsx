@@ -16,6 +16,7 @@ import OrderHistory from './OrderHistory.tsx'
 import EditStore from './EditStore.tsx'
 import ProductsPage from './ProductsPage.tsx'
 import TopNav from './TopNav.tsx'
+import Splash from './Splash.tsx'
 
 function BulkUploadWrapper() {
   const navigate = useNavigate()
@@ -28,6 +29,7 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [slug, setSlug] = useState<string | null>(null)
   const [signedIn, setSignedIn] = useState(false)
+  const [showSplash, setShowSplash] = useState(true)
 
   useEffect(() => {
     // If the user was redirected after sign-in (mobile redirect fallback), finalize the redirect login.
@@ -61,9 +63,13 @@ function App() {
     return () => unsubscribe()
   }, [])
 
+  if (showSplash) {
+    return <Splash onDone={() => setShowSplash(false)} />
+  }
+
   if (loading) return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-      <p>Loading...</p>
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#0f0f0f' }}>
+      <p style={{ color: '#555', fontFamily: 'sans-serif' }}>Loading...</p>
     </div>
   )
 
