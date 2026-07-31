@@ -63,6 +63,7 @@ function Splash({ onDone }: SplashProps) {
       zIndex: 9999,
       background: '#adff2f',
       display: 'flex',
+      flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
       transition: 'opacity 0.5s ease-out',
@@ -78,6 +79,17 @@ function Splash({ onDone }: SplashProps) {
           }}
         />
       )}
+      <img
+        src="/mothercompanydwarf.png"
+        alt="from dwarves"
+        style={{
+          position: 'absolute',
+          bottom: '48px',
+          width: '120px',
+          height: 'auto',
+          filter: 'brightness(0)',
+        }}
+      />
     </div>
   )
 }
