@@ -4,44 +4,53 @@ interface SplashProps {
   onDone: () => void
 }
 
+function processImageToBlackSilhouette(img: HTMLImageElement): string {
+  const canvas = document.createElement('canvas')
+  canvas.width = img.width
+  canvas.height = img.height
+  const ctx = canvas.getContext('2d')!
+  ctx.drawImage(img, 0, 0)
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const pixels = imageData.data
+
+  for (let i = 0; i < pixels.length; i += 4) {
+    const r = pixels[i]
+    const g = pixels[i + 1]
+    const b = pixels[i + 2]
+    const a = pixels[i + 3]
+    // Brightness of the pixel
+    const brightness = (r + g + b) / 3
+    // Light/white areas (foreground) → black. Dark areas + transparent → transparent.
+    if (a > 128 && brightness > 90) {
+      pixels[i] = 0        // R
+      pixels[i + 1] = 0    // G
+      pixels[i + 2] = 0    // B
+      pixels[i + 3] = 255  // A — fully opaque black
+    } else {
+      pixels[i + 3] = 0    // A — fully transparent
+    }
+  }
+
+  ctx.putImageData(imageData, 0, 0)
+  return canvas.toDataURL()
+}
+
 function Splash({ onDone }: SplashProps) {
   const [fading, setFading] = useState(false)
-  const [processedUrl, setProcessedUrl] = useState('')
+  const [rachettUrl, setRachettUrl] = useState('')
+  const [dwarfUrl, setDwarfUrl] = useState('')
 
   useEffect(() => {
-    const img = new Image()
-    img.onload = () => {
-      const canvas = document.createElement('canvas')
-      canvas.width = img.width
-      canvas.height = img.height
-      const ctx = canvas.getContext('2d')!
-      ctx.drawImage(img, 0, 0)
+    // Process Rachett logo
+    const rachettImg = new Image()
+    rachettImg.onload = () => setRachettUrl(processImageToBlackSilhouette(rachettImg))
+    rachettImg.src = '/Screenshot_20260613_115102_Chrome.jpg'
 
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-      const pixels = imageData.data
-
-      for (let i = 0; i < pixels.length; i += 4) {
-        const r = pixels[i]
-        const g = pixels[i + 1]
-        const b = pixels[i + 2]
-        // Calculate brightness: light pixels = the man figure, dark = background
-        const brightness = (r + g + b) / 3
-        if (brightness > 90) {
-          // Light area (man) → make it black
-          pixels[i] = 0
-          pixels[i + 1] = 0
-          pixels[i + 2] = 0
-          pixels[i + 3] = 255  // fully opaque black
-        } else {
-          // Dark area (background) → make it transparent
-          pixels[i + 3] = 0
-        }
-      }
-
-      ctx.putImageData(imageData, 0, 0)
-      setProcessedUrl(canvas.toDataURL())
-    }
-    img.src = '/Screenshot_20260613_115102_Chrome.jpg'
+    // Process mother company logo
+    const dwarfImg = new Image()
+    dwarfImg.onload = () => setDwarfUrl(processImageToBlackSilhouette(dwarfImg))
+    dwarfImg.src = '/mothercompanydwarf.png'
   }, [])
 
   useEffect(() => {
@@ -69,9 +78,10 @@ function Splash({ onDone }: SplashProps) {
       transition: 'opacity 0.5s ease-out',
       opacity: fading ? 0 : 1,
     }}>
-      {processedUrl && (
+      {/* Rachett Logo — centered */}
+      {rachettUrl && (
         <img
-          src={processedUrl}
+          src={rachettUrl}
           alt="Rachett"
           style={{
             width: '160px',
@@ -79,17 +89,20 @@ function Splash({ onDone }: SplashProps) {
           }}
         />
       )}
-      <img
-        src="/mothercompanydwarf.png"
-        alt="from dwarves"
-        style={{
-          position: 'absolute',
-          bottom: '48px',
-          width: '120px',
-          height: 'auto',
-          filter: 'brightness(0)',
-        }}
-      />
+
+      {/* Mother Company — fixed at bottom */}
+      {dwarfUrl && (
+        <img
+          src={dwarfUrl}
+          alt="from dwarves"
+          style={{
+            position: 'absolute',
+            bottom: '48px',
+            width: '120px',
+            height: 'auto',
+          }}
+        />
+      )}
     </div>
   )
 }
