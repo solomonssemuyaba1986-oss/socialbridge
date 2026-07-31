@@ -37,7 +37,8 @@ function Splash({ onDone }: SplashProps) {
         style={{
           width: '160px',
           height: 'auto',
-          filter: 'brightness(0)',
+          filter: 'invert(1)',
+          mixBlendMode: 'multiply',
         }}
       />
     </div>
