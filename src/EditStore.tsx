@@ -12,6 +12,7 @@ function EditStore() {
   const [email, setEmail] = useState('')
   const [instagram, setInstagram] = useState('')
   const [tiktok, setTiktok] = useState('')
+  const [showWhatsapp, setShowWhatsapp] = useState(true)
   const [logoUrl, setLogoUrl] = useState('')
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
@@ -49,6 +50,7 @@ function EditStore() {
           setTiktok((data.tiktok || '').replace(/^@+/, ''))
           setLogoUrl(data.logoUrl || '')
           setNationality(data.nationality || '')
+          setShowWhatsapp(data.showWhatsapp !== false)
           setLocation(data.location || '')
           if (data.idDocumentPath) {
             // Extract filename from path
@@ -209,6 +211,7 @@ function EditStore() {
         logoUrl: finalLogoUrl,
         nationality: nationality.trim(),
         location: location.trim(),
+        showWhatsapp,
       }
       if (idDocumentPath) {
         updates.idDocumentPath = idDocumentPath
@@ -244,6 +247,11 @@ function EditStore() {
 
         <label>TikTok username</label>
         <input value={tiktok} onChange={e => setTiktok(e.target.value.replace(/^@+/, ''))} placeholder="yourhandle" style={{ width: '100%', padding: 8, marginBottom: 8 }} />
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', cursor: 'pointer', fontSize: '13px', color: '#333' }}>
+          <input type="checkbox" checked={showWhatsapp} onChange={e => { setShowWhatsapp(e.target.checked); (e.target as HTMLInputElement).style.accentColor = '' }} style={{ cursor: 'pointer' }} />
+          Show my WhatsApp on my store (buyers can reach me directly via WhatsApp)
+        </label>
 
         {/* Nationality Dropdown */}
         <label>Nationality</label>
