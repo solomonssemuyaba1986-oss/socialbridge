@@ -39,6 +39,7 @@ function SetupStore() {
   const [locationLoading, setLocationLoading] = useState(false)
   const [errors, setErrors] = useState<SetupFormErrors>({})
   const [loading, setLoading] = useState(false)
+  const [showWhatsapp, setShowWhatsapp] = useState(true)
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [logoPreview, setLogoPreview] = useState('')
   const [uploadingLogo, setUploadingLogo] = useState(false)
@@ -372,6 +373,7 @@ function SetupStore() {
         nationality,
         location: location.trim(),
         phoneVerified,
+        showWhatsapp,
         idDocumentPath,
         idStatus: 'pending',
         recoveryEmail,
@@ -512,6 +514,15 @@ function SetupStore() {
             <span style={{ color: '#2e7d32', fontSize: '13px', fontWeight: '600' }}>Phone verified — +256{whatsapp}</span>
           </div>
         )}
+
+        {/* Show WhatsApp Toggle */}
+        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', cursor: 'pointer', fontSize: '13px', color: '#555' }}>
+          <input type="checkbox" checked={showWhatsapp} onChange={e => setShowWhatsapp(e.target.checked)} style={{ cursor: 'pointer', width: '16px', height: '16px' }} />
+          Show my WhatsApp on my store (buyers can reach me directly via WhatsApp)
+        </label>
+        <p style={{ fontSize: '11px', color: '#888', margin: '-12px 0 16px 24px' }}>
+          Your number is for verification only — never shared without your permission.
+        </p>
 
         {/* Nationality Dropdown */}
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Nationality</label>
