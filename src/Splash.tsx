@@ -19,15 +19,17 @@ function extractGreenMan(img: HTMLImageElement): string {
     const g = pixels[i + 1]
     const b = pixels[i + 2]
     const brightness = (r + g + b) / 3
-    // Detect green man: G channel dominant, brightness above threshold (not black frame)
-    const isGreen = g > 120 && g > r * 1.3 && g > b * 1.3 && brightness < 220
-    if (isGreen) {
-      pixels[i] = 0       // R → 0
-      pixels[i + 1] = 0   // G → 0
-      pixels[i + 2] = 0   // B → 0
-      pixels[i + 3] = 255 // A → opaque black
+
+    // Green-tinted man: G dominates over R and B, not too dark (excludes black frame), not too bright (excludes white bg)
+    const isGreenMan = g > r && g > b && brightness > 40 && brightness < 230
+
+    if (isGreenMan) {
+      pixels[i] = 0
+      pixels[i + 1] = 0
+      pixels[i + 2] = 0
+      pixels[i + 3] = 255
     } else {
-      pixels[i + 3] = 0   // A → transparent (removes white bg + black frame)
+      pixels[i + 3] = 0
     }
   }
 
@@ -46,20 +48,16 @@ function processImageToBlackSilhouette(img: HTMLImageElement): string {
   const pixels = imageData.data
 
   for (let i = 0; i < pixels.length; i += 4) {
-    const r = pixels[i]
-    const g = pixels[i + 1]
-    const b = pixels[i + 2]
+    const brightness = (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3
     const a = pixels[i + 3]
-    // Brightness of the pixel
-    const brightness = (r + g + b) / 3
-    // Light/white areas (foreground) → black. Dark areas + transparent → transparent.
+
     if (a > 128 && brightness > 90) {
-      pixels[i] = 0        // R
-      pixels[i + 1] = 0    // G
-      pixels[i + 2] = 0    // B
-      pixels[i + 3] = 255  // A — fully opaque black
+      pixels[i] = 0
+      pixels[i + 1] = 0
+      pixels[i + 2] = 0
+      pixels[i + 3] = 255
     } else {
-      pixels[i + 3] = 0    // A — fully transparent
+      pixels[i + 3] = 0
     }
   }
 
@@ -73,12 +71,10 @@ function Splash({ onDone }: SplashProps) {
   const [dwarfUrl, setDwarfUrl] = useState('')
 
   useEffect(() => {
-    // Rachett logo: dark man on light bg
     const rachettImg = new Image()
     rachettImg.onload = () => setRachettUrl(extractGreenMan(rachettImg))
     rachettImg.src = '/logo.jpg'
 
-    // Process mother company logo with canvas
     const dwarfImg = new Image()
     dwarfImg.onload = () => setDwarfUrl(processImageToBlackSilhouette(dwarfImg))
     dwarfImg.src = '/mothercompanydwarf.png'
@@ -109,19 +105,14 @@ function Splash({ onDone }: SplashProps) {
       transition: 'opacity 0.5s ease-out',
       opacity: fading ? 0 : 1,
     }}>
-      {/* Rachett Logo — centered */}
       {rachettUrl && (
         <img
           src={rachettUrl}
           alt="Rachett"
-          style={{
-          width: '160px',
-          height: 'auto',
-        }}
+          style={{ width: '160px', height: 'auto' }}
         />
       )}
 
-      {/* Mother Company — fixed at bottom */}
       {dwarfUrl && (
         <img
           src={dwarfUrl}
