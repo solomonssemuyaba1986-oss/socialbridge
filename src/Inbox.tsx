@@ -17,6 +17,13 @@ function orderTotal(price: string, quantity: number | string): number {
   return unit * qty
 }
 
+function maskPhone(phone?: string): string {
+  if (!phone) return 'N/A'
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length < 7) return '****'
+  return digits.substring(0, 4) + '****' + digits.slice(-2)
+}
+
 function formatDate(createdAt: { toDate?: () => Date } | null | undefined): string {
   if (createdAt?.toDate) return createdAt.toDate().toLocaleString()
   return 'Just now'
@@ -265,7 +272,7 @@ function Inbox() {
                           </p>
                           <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>Message · {m.productName}</p>
                           {isVerifiedGuest && (
-                            <p style={{ margin: '4px 0 0', color: '#555', fontSize: '11px' }}>📱 {m.senderPhone}</p>
+                            <p style={{ margin: '4px 0 0', color: '#555', fontSize: '11px' }}>📱 {maskPhone(m.senderPhone)}</p>
                           )}
                         </div>
                       </div>
@@ -282,7 +289,7 @@ function Inbox() {
                       {m.senderUid?.startsWith('guest_') ? (
                         <div>
                           <DetailRow label="Name" value={m.senderName} />
-                          <DetailRow label="Phone" value={m.senderPhone || 'N/A'} />
+                          <DetailRow label="Phone" value={maskPhone(m.senderPhone)} />
                           <DetailRow label="Verified" value="✓ Yes" />
                           <DetailRow label="Product" value={m.productName} />
                           <DetailRow label="Message" value={m.text} />
