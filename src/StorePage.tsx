@@ -18,6 +18,7 @@ interface Seller {
   email?: string
   instagram?: string
   tiktok?: string
+  showWhatsapp?: boolean
 }
 
 function maskEmail(email: string): string {
@@ -669,7 +670,7 @@ const handleSignupForAction = async (provider: any) => {
               ✉️ {isOwner ? seller.email : maskEmail(seller.email)}
             </a>
           )}
-          {seller.whatsapp && (
+          {seller.whatsapp && seller.showWhatsapp !== false && (
             <a href={`https://wa.me/${seller.whatsapp}`} target="_blank" rel="noreferrer" style={{ color: '#fff', fontSize: '13px', textDecoration: 'none', background: '#111', padding: '8px 12px', borderRadius: '999px', border: '1px solid #333' }}>
               💬 WhatsApp
             </a>
