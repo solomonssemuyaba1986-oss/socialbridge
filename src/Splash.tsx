@@ -4,7 +4,7 @@ interface SplashProps {
   onDone: () => void
 }
 
-function processDarkFigureOnLightBg(img: HTMLImageElement): string {
+function extractGreenMan(img: HTMLImageElement): string {
   const canvas = document.createElement('canvas')
   canvas.width = img.width
   canvas.height = img.height
@@ -19,14 +19,15 @@ function processDarkFigureOnLightBg(img: HTMLImageElement): string {
     const g = pixels[i + 1]
     const b = pixels[i + 2]
     const brightness = (r + g + b) / 3
-    // Dark areas (man) → pure black. Light areas (background) → transparent.
-    if (brightness < 80) {
-      pixels[i] = 0
-      pixels[i + 1] = 0
-      pixels[i + 2] = 0
-      pixels[i + 3] = 255  // fully opaque black
+    // Detect green man: G channel dominant, brightness above threshold (not black frame)
+    const isGreen = g > 120 && g > r * 1.3 && g > b * 1.3 && brightness < 220
+    if (isGreen) {
+      pixels[i] = 0       // R → 0
+      pixels[i + 1] = 0   // G → 0
+      pixels[i + 2] = 0   // B → 0
+      pixels[i + 3] = 255 // A → opaque black
     } else {
-      pixels[i + 3] = 0     // fully transparent
+      pixels[i + 3] = 0   // A → transparent (removes white bg + black frame)
     }
   }
 
@@ -74,7 +75,7 @@ function Splash({ onDone }: SplashProps) {
   useEffect(() => {
     // Rachett logo: dark man on light bg
     const rachettImg = new Image()
-    rachettImg.onload = () => setRachettUrl(processDarkFigureOnLightBg(rachettImg))
+    rachettImg.onload = () => setRachettUrl(extractGreenMan(rachettImg))
     rachettImg.src = '/logo.jpg'
 
     // Process mother company logo with canvas
