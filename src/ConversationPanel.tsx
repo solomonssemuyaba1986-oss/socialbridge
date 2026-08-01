@@ -13,12 +13,11 @@ type Props = {
   productName?: string
   productPrice?: string
   productImage?: string
-  sellerWhatsapp?: string
   productId?: string
   orderCount?: number
 }
 
-export default function ConversationPanel({ sellerId, buyerId, sellerName, buyerName, productName, productPrice, productImage, sellerWhatsapp, productId, orderCount }: Props) {
+export default function ConversationPanel({ sellerId, buyerId, sellerName, buyerName, productName, productPrice, productImage, productId, orderCount }: Props) {
   const { messages, loading, sendMessage } = useConversation(sellerId, buyerId)
   const [text, setText] = useState('')
   const [showQuickReplies, setShowQuickReplies] = useState(false)
@@ -60,7 +59,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
     }
 
     try {
-      const { orderId } = await createBuyerOrder(sellerId, {
+      await createBuyerOrder(sellerId, {
         buyerName: buyerNameOrder,
         buyerUid: buyerId,
         productName,
@@ -77,27 +76,13 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
         await incrementProductOrderCount(sellerId, productId, orderCount || 0)
       }
 
-      const whatsappText =
-`🟢 NEW ORDER — Rachett
-
-Customer: ${buyerNameOrder}
-Product: ${productName}
-Price: UGX ${productPrice}
-Quantity: ${quantity}
-Total: UGX ${Number(String(productPrice).replace(/,/g, '')) * Number(quantity)}
-Delivery Area: ${deliveryArea}
-${orderMessage ? `Message: ${orderMessage}\n` : ''}
-Order ID: #${orderId}`
-
-      const whatsappNumber = sellerWhatsapp || ''
       setOrderSuccess(true)
-      showFeedback('Order sent! Opening WhatsApp...', 'success')
+      showFeedback('Order sent! The seller will respond in your Inbox.', 'success')
       setTimeout(() => {
-        window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappText)}`, '_blank')
         setBuyerNameOrder(''); setQuantity('1'); setDeliveryArea(''); setOrderMessage('')
         setShowOrderModal(false)
         setOrderSuccess(false)
-      }, 1500)
+      }, 2500)
     } catch (err) {
       console.error('Order error:', err)
       showFeedback('Failed to place order', 'error')
@@ -231,7 +216,7 @@ Order ID: #${orderId}`
                   ✓
                 </div>
                 <h3 style={{ color: '#fff', fontWeight: '800', fontSize: '18px', margin: '0 0 8px' }}>Order Sent!</h3>
-                <p style={{ color: '#888', fontSize: '14px', margin: 0 }}>Opening WhatsApp...</p>
+                <p style={{ color: '#888', fontSize: '14px', margin: 0 }}>Order sent! The seller will respond in your Inbox.</p>
               </div>
             ) : (
               <>
@@ -251,7 +236,7 @@ Order ID: #${orderId}`
                   style={{ width: '100%', minHeight: '100px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '24px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
                 <button onClick={handleBuyNow}
                   style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
-                  Send Order on WhatsApp
+                  Place Order
                 </button>
                 <button onClick={() => { setShowOrderModal(false); setBuyerNameOrder(''); setQuantity('1'); setDeliveryArea(''); setOrderMessage(''); }}
                   style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
