@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { collection, addDoc } from 'firebase/firestore'
 import { db } from './firebase'
+import { notify } from './notifications'
 
 interface ProductDraft {
   file: File
@@ -84,7 +85,7 @@ function BulkUpload({ sellerId, onDone }: { sellerId: string, onDone: () => void
 
   const handleSaveAll = async () => {
     const valid = drafts.filter(d => d.name.trim() && d.price.trim())
-    if (valid.length === 0) return alert('Add a name and price to at least one product')
+    if (valid.length === 0) return alert(notify.productNamePriceRequired)
     setSaving(true)
 
     for (let i = 0; i < drafts.length; i++) {
