@@ -9,6 +9,19 @@ export function getConversationId(sellerId: string, buyerId: string) {
   return [sellerId, buyerId].sort().join('_')
 }
 
+export async function markConversationRead(
+  conversationId: string,
+  userId: string,
+  sellerId: string,
+  buyerId: string
+) {
+  const patch: Record<string, boolean> = {}
+  if (userId === sellerId) patch.unreadBySeller = false
+  if (userId === buyerId) patch.unreadByBuyer = false
+  if (Object.keys(patch).length === 0) return
+  await setDoc(doc(db, 'conversations', conversationId), patch, { merge: true })
+}
+
 export function useConversation(sellerId: string | null, buyerId: string | null) {
   const [messages, setMessages] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
