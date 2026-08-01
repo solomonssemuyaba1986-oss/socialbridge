@@ -145,7 +145,7 @@ function BrowsePage() {
 
     // Prevent self-messaging
     if (auth.currentUser && auth.currentUser.uid === sellerId) {
-      showFeedback("You can't message your own store.", 'error')
+      showFeedback("Please, you can't message your self.", 'error')
       setMessageProduct(null)
       return
     }
