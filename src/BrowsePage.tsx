@@ -143,6 +143,13 @@ function BrowsePage() {
       return
     }
 
+    // Prevent self-messaging
+    if (auth.currentUser && auth.currentUser.uid === sellerId) {
+      showFeedback("You can't message your own store.", 'error')
+      setMessageProduct(null)
+      return
+    }
+
     setSendingMessage(true)
     try {
       const conversationId = getConversationId(sellerId, auth.currentUser.uid)
@@ -658,7 +665,7 @@ Order ID: #${orderId}`
                   </div>
                   {!p.outOfStock ? (
                     <div style={{ padding: '0 12px 12px', display: 'flex', gap: '8px' }}>
-                      <button onClick={(e) => { e.stopPropagation(); setMessageProduct(p); }}
+                      <button onClick={(e) => { e.stopPropagation(); if (auth.currentUser && p.sellerId === auth.currentUser.uid) { showFeedback("You can't message your self.", 'error'); return; } setMessageProduct(p); }}
                         style={{ flex: 1, padding: '10px', background: 'transparent', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '12px' }}>
                         💬 Message
                       </button>
