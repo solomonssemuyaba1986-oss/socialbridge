@@ -244,7 +244,7 @@ function Dashboard() {
                 {unreadCount} new order{unreadCount !== 1 ? 's' : ''} waiting
               </p>
               <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>
-                Tap to open Inbox and see who ordered what
+                Tap to open and see who ordered what
               </p>
             </div>
             <span style={{ color: green, fontSize: '20px' }}>→</span>
