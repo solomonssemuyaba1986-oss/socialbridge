@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useSellerOrders, type SellerOrder } from './useSellerOrders.ts'
+import { updateDoc, doc } from 'firebase/firestore'
+import { db } from './firebase'
 
 const green = '#adff2f'
 
@@ -16,12 +18,36 @@ function statusLabel(status?: string): { text: string; color: string; bg: string
   return { text: 'Pending', color: '#888', bg: '#222' }
 }
 
+function platformMeta(platform?: string) {
+  const key = (platform || 'web').toLowerCase()
+  if (key.includes('whatsapp')) return { icon: '💬', label: 'WhatsApp' }
+  if (key.includes('instagram')) return { icon: '📸', label: 'Instagram' }
+  if (key.includes('tiktok')) return { icon: '🎵', label: 'TikTok' }
+  if (key.includes('telegram')) return { icon: '✈️', label: 'Telegram' }
+  if (key.includes('twitter')) return { icon: '🐦', label: 'Twitter' }
+  if (key.includes('facebook')) return { icon: '📘', label: 'Facebook' }
+  if (key.includes('email')) return { icon: '✉️', label: 'Email' }
+  if (key.includes('web')) return { icon: '🌐', label: 'Web' }
+  return { icon: '🌐', label: platform || 'Web' }
+}
+
+function orderTotal(price: string, quantity: number | string): number {
+  const unit = Number(String(price).replace(/,/g, '')) || 0
+  const qty = Number(quantity) || 1
+  return unit * qty
+}
+
 function OrderHistory() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { orders, loading } = useSellerOrders()
+  const { orders, loading, userId } = useSellerOrders()
   const [filter, setFilter] = useState<'all' | 'pending' | 'fulfilled' | 'out_of_stock'>('pending')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  const updateOrderStatus = async (orderId: string, status: string) => {
+    if (!userId) return
+    await updateDoc(doc(db, 'sellers', userId, 'orders', orderId), { status })
+  }
 
   const navItems = [
     { label: 'Dashboard', path: '/dashboard', icon: '📊' },
@@ -39,6 +65,7 @@ function OrderHistory() {
   })
 
   const selected = filtered.find(o => o.id === selectedId) ?? null
+  const pendingCount = orders.filter(o => o.status === 'pending' || !o.status || o.status === 'needs_details').length
 
   if (loading) {
     return (
@@ -69,6 +96,11 @@ function OrderHistory() {
                 }}>
                 <span>{item.icon}</span>
                 <span style={{ flex: 1 }}>{item.label}</span>
+                {item.label === 'Orders' && pendingCount > 0 && (
+                  <span style={{ minWidth: '24px', height: '24px', borderRadius: '999px', background: green, color: '#000', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 900, padding: '0 6px', boxShadow: `0 0 0 2px rgba(173,255,47,0.2)` }}>
+                    {pendingCount}
+                  </span>
+                )}
               </button>
             )
           })}
@@ -78,8 +110,10 @@ function OrderHistory() {
       <div style={{ width: '100%', marginLeft: 260, padding: '24px 28px', minHeight: '100vh' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <div>
-            <h1 style={{ margin: 0, fontSize: '20px', fontWeight: '800' }}>New Orders</h1>
-            <p style={{ margin: '4px 0 0', color: '#888', fontSize: '13px' }}>Tap any order to see the details.</p>
+            <h1 style={{ margin: 0, fontSize: '20px', fontWeight: '800' }}>Orders</h1>
+            <p style={{ margin: '4px 0 0', color: '#888', fontSize: '13px' }}>
+              {pendingCount} pending — manage, confirm, and update every order.
+            </p>
           </div>
           <button onClick={() => navigate('/dashboard')}
             style={{ background: '#111', border: '1px solid #222', color: '#fff', borderRadius: '12px', padding: '10px 16px', cursor: 'pointer', fontSize: '13px' }}>
@@ -117,6 +151,7 @@ function OrderHistory() {
               {filtered.map(o => {
                 const st = statusLabel(o.status)
                 const isSelected = selectedId === o.id
+                const pm = platformMeta(o.sourcePlatform)
                 return (
                   <div key={o.id}>
                     <div
@@ -129,11 +164,17 @@ function OrderHistory() {
                         cursor: 'pointer',
                       }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
                           <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '15px' }}>{o.buyerName}</p>
                           <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>{o.productName} × {o.quantity}</p>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', borderRadius: '999px', background: '#111', border: '1px solid #222', fontSize: '14px' }}>
+                              {pm.icon}
+                            </span>
+                            <span style={{ color: '#666', fontSize: '12px' }}>{pm.label}</span>
+                          </div>
                         </div>
-                        <div style={{ textAlign: 'right' }}>
+                        <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '12px' }}>
                           <p style={{ margin: '0 0 6px', color: green, fontSize: '13px', fontWeight: '700' }}>UGX {o.productPrice}</p>
                           <span style={{ background: st.bg, color: st.color, padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600' }}>
                             {st.text}
@@ -150,7 +191,29 @@ function OrderHistory() {
                       }}>
                         {o.deliveryArea && <p style={{ margin: '0 0 8px', color: '#888', fontSize: '13px' }}>📍 {o.deliveryArea}</p>}
                         {o.orderId && <p style={{ margin: '0 0 8px', color: '#666', fontSize: '13px' }}>#{o.orderId}</p>}
-                        <p style={{ margin: 0, color: '#555', fontSize: '12px' }}>Placed {formatDate(o.createdAt)}</p>
+                        <p style={{ margin: '0 0 4px', color: '#888', fontSize: '13px' }}>Channel: {pm.icon} {pm.label}</p>
+                        <p style={{ margin: '0 0 4px', color: green, fontSize: '13px', fontWeight: '700' }}>
+                          Total: UGX {orderTotal(o.productPrice, o.quantity).toLocaleString()}
+                        </p>
+                        <p style={{ margin: '0 0 16px', color: '#555', fontSize: '12px' }}>Placed {formatDate(o.createdAt)}</p>
+
+                        {/* Status Action Buttons */}
+                        {(o.status === 'pending' || !o.status || o.status === 'needs_details') && (
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                            <button onClick={() => updateOrderStatus(o.id, 'fulfilled')}
+                              style={{ padding: '10px', background: green, color: '#000', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700' }}>
+                              ✓ Confirm
+                            </button>
+                            <button onClick={() => updateOrderStatus(o.id, 'out_of_stock')}
+                              style={{ padding: '10px', background: 'transparent', color: '#ff4444', border: '1px solid #ff4444', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+                              Out of Stock
+                            </button>
+                            <button onClick={() => updateOrderStatus(o.id, 'needs_details')}
+                              style={{ padding: '10px', background: 'transparent', color: '#888', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+                              Need Details
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
