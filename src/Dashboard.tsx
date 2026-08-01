@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { doc, getDoc, collection, getDocs, updateDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
@@ -6,6 +6,7 @@ import { onAuthStateChanged } from 'firebase/auth'
 import { useSellerOrders } from './useSellerOrders'
 import { useSellerMessages } from './useSellerMessages'
 import { useSellerConversations } from './useSellerConversations'
+import { useBuyerConversations } from './useBuyerConversations'
 
 interface Seller {
   businessName: string
@@ -89,17 +90,19 @@ function Dashboard() {
 
   const { orders, unreadCount } = useSellerOrders(playNewOrderAlert)
   const { unreadCount: unreadMessagesCount } = useSellerMessages()
-  const { unreadCount: unreadConversationsCount } = useSellerConversations()
+  const { unreadCount: unreadSellerConvoCount } = useSellerConversations()
+  const { unreadCount: unreadBuyerConvoCount } = useBuyerConversations()
+
+  const totalMessageUnread = unreadMessagesCount + unreadSellerConvoCount + unreadBuyerConvoCount
 
   // Play notification sound when messages/conversations arrive
-  const prevMessageTotal = useState(0)
+  const prevMessageTotal = useRef(0)
   useEffect(() => {
-    const total = unreadMessagesCount + unreadConversationsCount
-    if (total > prevMessageTotal[0]) {
+    if (totalMessageUnread > prevMessageTotal.current) {
       playNewOrderAlert()
     }
-    prevMessageTotal[0] = total
-  }, [unreadMessagesCount, unreadConversationsCount])
+    prevMessageTotal.current = totalMessageUnread
+  }, [totalMessageUnread])
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -159,7 +162,7 @@ function Dashboard() {
         <div style={{ display: 'grid', gap: '6px' }}>
           {navItems.map(item => {
             const active = location.pathname === item.path || (item.path === '/dashboard' && location.pathname === '/dashboard')
-            const showBadge = item.label === 'Orders' ? orders.filter(o => o.read !== true).length : item.label === 'Inbox' ? (unreadMessagesCount + unreadConversationsCount) : 0
+            const showBadge = item.label === 'Orders' ? orders.filter(o => o.read !== true).length : item.label === 'Inbox' ? totalMessageUnread : 0
             return (
               <button key={item.path + item.label} onClick={() => navigate(item.path)}
                 style={{
