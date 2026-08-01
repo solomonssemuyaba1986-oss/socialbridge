@@ -160,12 +160,13 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
             }
             const statusInfo = statusStyles[status] || statusStyles.sent
             const isSeller = m.senderId === sellerId
-            const senderName = isSeller ? (sellerName || 'Seller') : (buyerName || 'Buyer')
+            const isMe = m.senderId === auth.currentUser?.uid
             const borderColor = isSeller ? '#3399ff' : '#ff4444'
-            const senderIcon = isSeller ? '🏪' : '👤'
+            const senderName = isMe ? 'Me' : (isSeller ? (sellerName || 'Seller') : (buyerName || 'Buyer'))
+            const senderIcon = isMe ? '👤' : (isSeller ? '🏪' : '👤')
             return (
               <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <div style={{ fontSize: 12, color: '#888', fontWeight: 600 }}>{senderIcon} {senderName}</div>
+                <div style={{ fontSize: 12, color: borderColor, fontWeight: 600 }}>{senderIcon} {senderName}</div>
                 <div style={{ width: '100%', background: '#111', color: '#eee', padding: '14px', borderRadius: '4px 12px 12px 12px', borderTop: '1px solid #222', borderRight: '1px solid #222', borderBottom: '1px solid #222', borderLeft: `4px solid ${borderColor}`, fontSize: 14, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                   {m.text}
                 </div>
