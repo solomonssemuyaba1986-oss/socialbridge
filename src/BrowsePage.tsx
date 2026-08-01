@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import { getMainCategories } from './categories'
 import Fuse from 'fuse.js'
 import { getConversationId } from './useConversation'
+import { notify } from './notifications'
 
 interface Product {
   id: string
@@ -128,24 +129,23 @@ function BrowsePage() {
 
   const handleSendMessage = async () => {
     if (!messageText.trim()) {
-      showFeedback('Write a quick message so the seller can reply.', 'error')
+      showFeedback(notify.messageWriteRequired, 'error')
       return
     }
     if (!messageProduct) return
     if (!auth.currentUser) {
-      showFeedback('Please sign in to send a message.', 'error')
+      showFeedback(notify.messageSignInRequired, 'error')
       return
     }
 
     const sellerId = messageProduct.sellerId
     if (!sellerId) {
-      showFeedback('Seller info not available.', 'error')
+      showFeedback(notify.messageSellerNotFound, 'error')
       return
     }
 
-    // Prevent self-messaging
     if (auth.currentUser && auth.currentUser.uid === sellerId) {
-      showFeedback("Please, you can't message your self.", 'error')
+      showFeedback(notify.messageSelfBlock, 'error')
       setMessageProduct(null)
       return
     }
@@ -186,12 +186,12 @@ function BrowsePage() {
         createdAt: serverTimestamp()
       })
 
-      showFeedback('Message sent! The seller will see it soon.', 'success')
+      showFeedback(notify.messageSent, 'success')
       setMessageText('')
       setMessageProduct(null)
     } catch (err) {
       console.error('Send message error:', err)
-      showFeedback('Failed to send message. Please try again.', 'error')
+      showFeedback(notify.messageFailed, 'error')
     } finally {
       setSendingMessage(false)
     }
@@ -208,10 +208,10 @@ function BrowsePage() {
         signupAt: new Date(),
       }, { merge: true })
       setShowSignupSheet(false)
-      showFeedback("You're signed in! Complete your order now.", 'success')
+      showFeedback(notify.signUpSuccess, 'success')
     } catch (err) {
       console.error('Sign-in error:', err)
-      showFeedback('Sign in failed. Please try again.', 'error')
+      showFeedback(notify.signInFailed, 'error')
     } finally {
       setSignupLoading('')
     }
@@ -223,24 +223,24 @@ function BrowsePage() {
       return
     }
     if (!buyerName.trim()) {
-      showFeedback('Please enter your name — the seller needs it to confirm your order fast.', 'error')
+      showFeedback(notify.orderNameRequired, 'error')
       return
     }
     if (!deliveryArea.trim()) {
-      showFeedback('Please add your delivery area so the seller can quote delivery quickly.', 'error')
+      showFeedback(notify.orderDeliveryRequired, 'error')
       return
     }
     if (!orderProduct) return
 
     const sellerId = orderProduct.sellerId
     if (!sellerId) {
-      showFeedback('Seller info not available. Please try again.', 'error')
+      showFeedback(notify.orderSellerNotFound, 'error')
       return
     }
 
     // Prevent self-ordering
     if (auth.currentUser && auth.currentUser.uid === sellerId) {
-      showFeedback("You can't order from your own store. Sign in with a different account to test buying.", 'error')
+      showFeedback(notify.orderSelfBlock, 'error')
       return
     }
 
@@ -279,7 +279,7 @@ Order ID: #${orderId}`
 
       const whatsappNumber = orderProduct.sellerWhatsapp || ''
       setOrderSuccess(true)
-      showFeedback('Great! Your order is on the way. Opening WhatsApp so the seller can confirm it quickly.', 'success')
+      showFeedback(notify.orderSent, 'success')
       setTimeout(() => {
         window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappText)}`, '_blank')
         setBuyerName(''); setQuantity('1'); setDeliveryArea(''); setMessage('')
@@ -288,7 +288,7 @@ Order ID: #${orderId}`
       }, 1500)
     } catch (err) {
       console.error('Order error:', err)
-      showFeedback('Failed to place order. Please try again.', 'error')
+      showFeedback(notify.orderFailed, 'error')
     }
   }
 
@@ -600,7 +600,7 @@ Order ID: #${orderId}`
           <p style={{ textAlign: 'center', color: '#555' }}>Loading products...</p>
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 20px' }}>
-            <div style={{ fontSize: '48px', marginBottom: '16px' }}>�</div>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}></div>
             <h3 style={{ fontWeight: '700', margin: '0 0 8px', fontSize: '16px' }}>No products found</h3>
             <p style={{ color: '#555', margin: '0 0 24px', fontSize: '14px' }}>
               {search ? `Try a different search term, or check similar products below` : 'Try a different category or check trending items'}
@@ -665,7 +665,7 @@ Order ID: #${orderId}`
                   </div>
                   {!p.outOfStock ? (
                     <div style={{ padding: '0 12px 12px', display: 'flex', gap: '8px' }}>
-                      <button onClick={(e) => { e.stopPropagation(); if (auth.currentUser && p.sellerId === auth.currentUser.uid) { showFeedback("You can't message your self.", 'error'); return; } setMessageProduct(p); }}
+                      <button onClick={(e) => { e.stopPropagation(); if (auth.currentUser && p.sellerId === auth.currentUser.uid) { showFeedback(notify.messageSelfBlock, 'error'); return; } setMessageProduct(p); }}
                         style={{ flex: 1, padding: '10px', background: 'transparent', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '12px' }}>
                         💬 Message
                       </button>
