@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
-import { collection, getDocs, query, addDoc, doc, updateDoc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, getDocs, query, addDoc, doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
+import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder'
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, FacebookAuthProvider, OAuthProvider } from 'firebase/auth'
 import { db, auth } from './firebase'
 import { useNavigate } from 'react-router-dom'
@@ -237,8 +238,8 @@ function BrowsePage() {
     }
 
     try {
-      const buyerUid = auth.currentUser?.uid || null
-      const orderRef = await addDoc(collection(db, 'sellers', sellerId, 'orders'), {
+      const buyerUid = auth.currentUser.uid
+      const { orderId } = await createBuyerOrder(sellerId, {
         buyerName,
         buyerUid,
         productName: orderProduct.name,
@@ -248,17 +249,14 @@ function BrowsePage() {
         status: 'pending',
         read: false,
         sourcePlatform: 'Browse',
-        createdAt: new Date()
+        createdAt: new Date(),
       })
 
-      const orderId = `RT-${orderRef.id.slice(0, 6).toUpperCase()}`
-
-      await updateDoc(doc(db, 'sellers', sellerId, 'orders', orderRef.id), { orderId })
-
-      // Increment product orderCount
-      await updateDoc(doc(db, 'sellers', sellerId, 'products', orderProduct.id), { 
-        orderCount: (orderProduct.orderCount || 0) + 1 
-      })
+      await incrementProductOrderCount(
+        sellerId,
+        orderProduct.id,
+        orderProduct.orderCount || 0
+      )
 
       const whatsappText =
 `🟢 NEW ORDER — Rachett
