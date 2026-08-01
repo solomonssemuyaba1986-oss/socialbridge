@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useConversation } from './useConversation'
 import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder'
 import { auth } from './firebase'
+import { notify } from './notifications'
 
 const green = '#adff2f'
 
@@ -28,11 +29,11 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
   const [orderMessage, setOrderMessage] = useState('')
   const [orderSuccess, setOrderSuccess] = useState(false)
   const [feedbackMessage, setFeedbackMessage] = useState('')
-  const [feedbackType, setFeedbackType] = useState<'success' | 'error'>('success')
+  const [feedbackType, setFeedbackType] = useState<'success' | 'error' | 'info'>('success')
   const [feedbackVisible, setFeedbackVisible] = useState(false)
   const listRef = useRef<HTMLDivElement | null>(null)
 
-  const showFeedback = (msg: string, type: 'success' | 'error' = 'success') => {
+  const showFeedback = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
     setFeedbackMessage(msg)
     setFeedbackType(type)
     setFeedbackVisible(true)
@@ -46,15 +47,15 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
 
   const handleBuyNow = async () => {
     if (!buyerNameOrder.trim()) {
-      showFeedback('Please enter your name', 'error')
+      showFeedback(notify.orderNameRequired, 'error')
       return
     }
     if (!deliveryArea.trim()) {
-      showFeedback('Please add your delivery area', 'error')
+      showFeedback(notify.orderDeliveryRequired, 'error')
       return
     }
     if (!productName || !productPrice) {
-      showFeedback('Product info is kinda not available', 'error')
+      showFeedback(notify.orderSellerNotFound, 'error')
       return
     }
 
@@ -77,7 +78,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
       }
 
       setOrderSuccess(true)
-      showFeedback('Order sent! The seller will respond in time.', 'success')
+      showFeedback(notify.orderSent, 'success')
       setTimeout(() => {
         setBuyerNameOrder(''); setQuantity('1'); setDeliveryArea(''); setOrderMessage('')
         setShowOrderModal(false)
@@ -85,7 +86,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
       }, 2500)
     } catch (err) {
       console.error('Order error:', err)
-      showFeedback('Failed to place order', 'error')
+      showFeedback(notify.orderFailed, 'error')
     }
   }
 
@@ -123,7 +124,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
       setShowQuickReplies(false)
     } catch (err) {
       console.error('Failed to send conversation message:', err)
-      alert('Failed to send message')
+      showFeedback(notify.messageFailed, 'error')
     }
   }
 
@@ -212,7 +213,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
 
       {/* Feedback Toast */}
       {feedbackVisible && (
-        <div style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 2000, maxWidth: '400px', width: '90%', padding: '14px 16px', borderRadius: '14px', border: `1px solid ${feedbackType === 'success' ? '#2f8' : '#f55'}`, background: feedbackType === 'success' ? '#122a0d' : '#2a0d0d', color: '#fff', fontSize: '14px', textAlign: 'center' }}>
+        <div style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 2000, maxWidth: '400px', width: '90%', padding: '14px 16px', borderRadius: '14px', border: `1px solid ${feedbackType === 'success' ? '#2f8' : feedbackType === 'error' ? '#f55' : '#55d'}`, background: feedbackType === 'success' ? '#122a0d' : feedbackType === 'error' ? '#2a0d0d' : '#0d122a', color: '#fff', fontSize: '14px', textAlign: 'center' }}>
           {feedbackMessage}
         </div>
       )}
