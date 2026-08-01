@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { useSellerOrders, isUnread, type SellerOrder } from './useSellerOrders'
 import { useSellerMessages, isUnreadMessage, type SellerMessage } from './useSellerMessages'
 import { useSellerConversations } from './useSellerConversations'
+import { useBuyerConversations } from './useBuyerConversations'
 import ConversationPanel from './ConversationPanel'
 
 const green = '#adff2f'
@@ -54,13 +55,14 @@ function Inbox() {
   const { orders, loading: ordersLoading, userId } = useSellerOrders()
   const { messages, unreadCount: unreadMessages, loading: messagesLoading } = useSellerMessages()
   const { conversations: sellerConversations, unreadCount: unreadSellerConversations, loading: conversationsLoading } = useSellerConversations()
+  const { conversations: buyerConversations, unreadCount: unreadBuyerConversations, loading: buyerConversationsLoading } = useBuyerConversations()
   const [filter, setFilter] = useState<InboxFilter>('messages')
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null)
   const [selectedConvoId, setSelectedConvoId] = useState<string | null>(null)
   const [seller, setSeller] = useState<{ whatsapp?: string; businessName?: string } | null>(null)
 
-  const loading = ordersLoading || messagesLoading || conversationsLoading
+  const loading = ordersLoading || messagesLoading || conversationsLoading || buyerConversationsLoading
   const showingMessages = filter === 'messages'
 
   useEffect(() => {
@@ -113,7 +115,7 @@ function Inbox() {
   const selectedOrder = orders.find(o => o.id === selectedOrderId) ?? null
   const selectedMessage = messages.find(m => m.id === selectedMessageId) ?? null
 
-  const totalUnread = unreadMessages + unreadSellerConversations
+  const totalUnread = unreadMessages + unreadSellerConversations + unreadBuyerConversations
 
   if (loading) {
     return (
@@ -128,9 +130,9 @@ function Inbox() {
     : 'Nothing here yet'
 
   const listEmpty = showingMessages
-    ? filteredMessages.length === 0 && sellerConversations.length === 0
+    ? filteredMessages.length === 0 && sellerConversations.length === 0 && buyerConversations.length === 0
     : filter === 'all'
-      ? filteredOrders.length === 0 && filteredMessages.length === 0 && sellerConversations.length === 0
+      ? filteredOrders.length === 0 && filteredMessages.length === 0 && sellerConversations.length === 0 && buyerConversations.length === 0
       : filteredOrders.length === 0
 
   return (
@@ -312,7 +314,64 @@ function Inbox() {
               )
             })}
 
-            {/* New conversations (from BrowsePage Message button — includes seller→seller) */}
+            {/* Buyer conversations — YOU messaged someone */}
+            {(showingMessages || filter === 'all') && buyerConversations.map(convo => {
+              const unread = convo.unreadByBuyer
+              const selected = selectedConvoId === `buyer-${convo.id}`
+              return (
+                <div key={`buyer-convo-${convo.id}`}>
+                  <div
+                    onClick={() => {
+                      const id = `buyer-${convo.id}`
+                      setSelectedConvoId(selected ? null : id)
+                      setSelectedMessageId(null)
+                      setSelectedOrderId(null)
+                    }}
+                    style={{
+                      background: selected ? '#1a2a1a' : unread ? '#152015' : '#1a1a1a',
+                      borderRadius: selected ? '12px 12px 0 0' : '12px',
+                      padding: '16px',
+                      border: `1px solid ${selected ? green : unread ? green : '#222'}`,
+                      cursor: 'pointer',
+                    }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                        {unread && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: green, flexShrink: 0 }} />}
+                        <div style={{ minWidth: 0 }}>
+                          <p style={{ margin: '0 0 2px', fontWeight: '700', fontSize: '15px', color: '#fff' }}>
+                            <span style={{ color: green }}>You →</span> {convo.sellerName}
+                          </p>
+                          <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>
+                            {convo.productName ? ` Inquiry · ${convo.productName}` : ' Message'}
+                          </p>
+                        </div>
+                      </div>
+                      <p style={{ margin: 0, color: '#444', fontSize: '11px', flexShrink: 0, marginLeft: '8px' }}>{formatDate(convo.lastMessageAt)}</p>
+                    </div>
+                    <p style={{ margin: '0 0 8px', color: '#aaa', fontSize: '13px', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {convo.lastMessage}
+                    </p>
+                    <span style={{ color: '#555', fontSize: '12px' }}>{unread ? 'Tap to read message' : 'Tap to view again'}</span>
+                  </div>
+
+                  {selected && (
+                    <DetailPanel title="Conversation">
+                      <ConversationPanel
+                        sellerId={convo.sellerId}
+                        buyerId={userId || convo.buyerId}
+                        sellerName={convo.sellerName}
+                        buyerName={convo.buyerName}
+                        productName={convo.productName}
+                        productPrice={convo.productPrice}
+                        productImage={convo.productImage}
+                      />
+                    </DetailPanel>
+                  )}
+                </div>
+              )
+            })}
+
+            {/* Seller conversations — someone messaged YOU */}
             {(showingMessages || filter === 'all') && sellerConversations.map(convo => {
               const unread = convo.unreadBySeller
               const selected = selectedConvoId === convo.id
