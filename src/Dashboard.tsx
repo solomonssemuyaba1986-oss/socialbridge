@@ -91,6 +91,16 @@ function Dashboard() {
   const { unreadCount: unreadMessagesCount } = useSellerMessages()
   const { unreadCount: unreadConversationsCount } = useSellerConversations()
 
+  // Play notification sound when messages/conversations arrive
+  const prevMessageTotal = useState(0)
+  useEffect(() => {
+    const total = unreadMessagesCount + unreadConversationsCount
+    if (total > prevMessageTotal[0]) {
+      playNewOrderAlert()
+    }
+    prevMessageTotal[0] = total
+  }, [unreadMessagesCount, unreadConversationsCount])
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) { navigate('/'); return }
