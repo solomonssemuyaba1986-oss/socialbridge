@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { auth, googleProvider, facebookProvider, appleProvider } from './firebase'
 import { signOut, signInWithPopup } from 'firebase/auth'
+import { notify } from './notifications'
 
 function TopNav() {
   const navigate = useNavigate()
@@ -19,7 +20,7 @@ function TopNav() {
       navigate('/onboarding')
     } catch (error: unknown) {
       console.error(`${name} sign-in error:`, error)
-      alert('Sign in failed. Please try again.')
+      alert(notify.signInFailed)
     } finally {
       setLoginLoading('')
     }
