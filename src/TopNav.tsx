@@ -53,7 +53,7 @@ function TopNav() {
 
           {user && (
             <>
-              <button onClick={() => navigate('/my-chats')} style={{ background: 'transparent', color: '#fff', border: '1px solid #333', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>💬 Chats</button>
+              <button onClick={() => navigate('/inbox')} style={{ background: 'transparent', color: '#fff', border: '1px solid #333', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>💬 Inbox</button>
               <button onClick={() => navigate('/dashboard')} style={{ background: 'transparent', color: '#fff', border: '1px solid #333', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Manage Store</button>
               <button onClick={async () => { await signOut(auth); navigate('/') }} style={{ background: '#444', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Sign out</button>
             </>
