@@ -5,6 +5,7 @@ import { auth, db } from './firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 import { useSellerOrders } from './useSellerOrders'
 import { useSellerMessages } from './useSellerMessages'
+import { useSellerConversations } from './useSellerConversations'
 
 interface Seller {
   businessName: string
@@ -88,6 +89,7 @@ function Dashboard() {
 
   const { orders, unreadCount } = useSellerOrders(playNewOrderAlert)
   const { unreadCount: unreadMessagesCount } = useSellerMessages()
+  const { unreadCount: unreadConversationsCount } = useSellerConversations()
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -147,7 +149,7 @@ function Dashboard() {
         <div style={{ display: 'grid', gap: '6px' }}>
           {navItems.map(item => {
             const active = location.pathname === item.path || (item.path === '/dashboard' && location.pathname === '/dashboard')
-            const showBadge = item.label === 'Orders' ? orders.filter(o => o.read !== true).length : item.label === 'Inbox' ? unreadMessagesCount : 0
+            const showBadge = item.label === 'Orders' ? orders.filter(o => o.read !== true).length : item.label === 'Inbox' ? (unreadMessagesCount + unreadConversationsCount) : 0
             return (
               <button key={item.path + item.label} onClick={() => navigate(item.path)}
                 style={{
