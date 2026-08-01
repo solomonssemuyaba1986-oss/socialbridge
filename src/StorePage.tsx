@@ -5,6 +5,7 @@ import { db, auth } from './firebase'
 import { suppressNextSellerOrderAlert } from './orderAlerts.ts'
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, FacebookAuthProvider, OAuthProvider } from 'firebase/auth'
 import { CATEGORIES, getSubcategories } from './categories'
+import { notify } from './notifications'
 import { useConversation } from './useConversation.ts'
 import { useGuestOTP } from './useGuestOTP.ts'
 import { useSellerStats, getSalesLabel, formatRating, renderStars, getBadgeStatusLabel } from './useSellerStats.ts'
@@ -83,7 +84,7 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onRefresh }: an
   const images = p.images?.length > 0 ? p.images : [p.imageUrl].filter(Boolean)
 
   const handleEditImageUpload = async (files: FileList) => {
-    if (editImages.length >= 4) return alert('Maximum 4 images per product')
+    if (editImages.length >= 4) return alert(notify.productMaxImages)
     setUploadingEdit(true)
     const remaining = 4 - editImages.length
     const filesToUpload = Array.from(files).slice(0, remaining)
@@ -167,7 +168,7 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onRefresh }: an
   const shareToTelegram = () => window.open(`https://t.me/share/url?url=${encodeURIComponent(getProductUrl())}&text=${encodeURIComponent(getCaption())}`, '_blank')
   const shareToTwitter = () => window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(getCaption())}`, '_blank')
   const shareToFacebook = () => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(getProductUrl())}`, '_blank')
-  const copyCaption = async () => { await navigator.clipboard.writeText(getCaption()); alert('Caption copied!') }
+  const copyCaption = async () => { await navigator.clipboard.writeText(getCaption()); alert(notify.storeLinkCopied) }
 
 
   return (
@@ -479,10 +480,10 @@ const handleImageUpload = async (file: File) => {
 }
 
   const handleAddProduct = async () => {
-    if (!name || !price) return alert('Name and price are required')
-    if (!imageUrl) return alert('Please upload a product image')
-    if (!category) return alert('Please select a category')
-    if (!subCategory) return alert('Please select a subcategory')
+    if (!name || !price) return alert(notify.productNamePriceRequired)
+    if (!imageUrl) return alert(notify.productImageRequired)
+    if (!category) return alert(notify.productCategoryRequired)
+    if (!subCategory) return alert(notify.productSubcategoryRequired)
     await addDoc(collection(db, 'sellers', sellerId, 'products'), {
       name, price, description, imageUrl, category, subCategory
     })
@@ -497,11 +498,11 @@ const handleOrder = async () => {
     return
   }
   if (!buyerName.trim()) {
-    showFeedback('Please enter your name — the seller needs it to confirm your order fast.', 'error')
+    showFeedback(notify.orderNameRequired, 'error')
     return
   }
   if (!deliveryArea.trim()) {
-    showFeedback('Please add your delivery area so the seller can quote delivery quickly.', 'error')
+    showFeedback(notify.orderDeliveryRequired, 'error')
     return
   }
   if (!orderProduct || !seller) return
@@ -549,7 +550,7 @@ Order ID: #${orderId}`
 
   const whatsappNumber = seller.whatsapp || ''
   setOrderSuccess(true)
-  showFeedback('Great! Your order is on the way. Opening WhatsApp so the seller can confirm it quickly.', 'success')
+  showFeedback(notify.orderSent, 'success')
   setTimeout(() => {
     window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappText)}`, '_blank')
     setBuyerName(''); setQuantity('1'); setDeliveryArea(''); setMessage('')
@@ -560,17 +561,17 @@ Order ID: #${orderId}`
 
 const handleSendMessage = async () => {
   if (!messageText.trim()) {
-    showFeedback('Write a quick message so the seller can reply. Keep it short and clear.', 'error')
+    showFeedback(notify.messageWriteRequired, 'error')
     return
   }
   if (!messageProduct || !seller) {
-    showFeedback('Choose a product first, then send your question to the seller.', 'error')
+    showFeedback(notify.messageProductRequired, 'error')
     return
   }
 
   if (!auth.currentUser) {
     setShowSignupSheet(true)
-    showFeedback('Please sign in so your message reaches the seller. It only takes a moment.', 'info')
+    showFeedback(notify.messageSignInRequired, 'info')
     return
   }
 
@@ -584,10 +585,10 @@ const handleSendMessage = async () => {
     console.log('Message sent')
     setMessageText('')
     setMessageProduct(null)
-    showFeedback('Message sent! The seller will see it soon and reply quickly.', 'success')
+    showFeedback(notify.messageSent, 'success')
   } catch (err: any) {
     console.error('opps! something is not adding up:', err?.code, err?.message, err)
-    showFeedback('Oops — we hit an error sending your message. Please try again.', 'error')
+    showFeedback(notify.messageFailed, 'error')
   }
 }
 
@@ -604,10 +605,10 @@ const handleSignupForAction = async (provider: any) => {
     }, { merge: true })
 
     setShowSignupSheet(false)
-    showFeedback("You're signed in! Complete your action now.", 'success')
+    showFeedback(notify.signUpSuccess, 'success')
   } catch (err) {
     console.error('Signup error:', err)
-    showFeedback('Signup failed for now. Please try again.', 'error')
+    showFeedback(notify.signUpFailed, 'error')
   }
 }
 
