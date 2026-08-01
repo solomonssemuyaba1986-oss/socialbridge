@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ChangeEvent, type CSSProperties, typ
 import { useNavigate } from 'react-router-dom'
 import { addDoc, collection, deleteDoc, doc, getDocs, updateDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
+import { notify } from './notifications'
 
 interface Product {
   id: string
@@ -134,7 +135,7 @@ function ProductsPage() {
       setForm((prev) => ({ ...prev, imageUrls: [...prev.imageUrls, ...addedUrls] }))
     } catch (err) {
       console.error('Upload product images failed', err)
-      alert('Could not upload one or more images. Please try again.')
+      alert(notify.productSaveFailed)
     } finally {
       setUploadingImages(false)
     }
@@ -151,7 +152,7 @@ function ProductsPage() {
     if (!sellerId) return
 
     if (!form.name.trim() || !form.price.trim()) {
-      alert('Please add a product name and price')
+      alert(notify.productNamePriceRequired)
       return
     }
 
@@ -181,7 +182,7 @@ function ProductsPage() {
       resetForm()
     } catch (err) {
       console.error('Save product failed', err)
-      alert('Could not save the product. Please try again.')
+      alert(notify.productSaveFailed)
     } finally {
       setSaving(false)
     }
@@ -197,7 +198,7 @@ function ProductsPage() {
       setProducts((prev) => prev.filter((p) => p.id !== productId))
     } catch (err) {
       console.error('Delete product failed', err)
-      alert('Could not delete the product.')
+      alert(notify.productDeleteFailed)
     }
   }
 
