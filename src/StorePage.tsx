@@ -8,6 +8,7 @@ import { CATEGORIES, getSubcategories } from './categories'
 import { useConversation } from './useConversation.ts'
 import { useGuestOTP } from './useGuestOTP.ts'
 import { useSellerStats, getSalesLabel, formatRating, renderStars, getBadgeStatusLabel } from './useSellerStats.ts'
+import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder.ts'
 
 interface Seller {
   businessName: string
@@ -507,8 +508,8 @@ const handleOrder = async () => {
 
   const sourcePlatform = detectPlatform(searchParams)
 
-  const buyerUid = auth.currentUser?.uid || null
-  const orderRef = await addDoc(collection(db, 'sellers', sellerId, 'orders'), {
+  const buyerUid = auth.currentUser.uid
+  const { orderId } = await createBuyerOrder(sellerId, {
     buyerName,
     buyerUid,
     productName: orderProduct.name,
@@ -518,20 +519,13 @@ const handleOrder = async () => {
     status: 'pending',
     read: false,
     sourcePlatform,
-    createdAt: new Date()
+    createdAt: new Date(),
   })
 
-  const orderId = `RT-${orderRef.id.slice(0, 6).toUpperCase()}`
-
-  await import('firebase/firestore').then(({ updateDoc, doc }) =>
-    updateDoc(doc(db, 'sellers', sellerId, 'orders', orderRef.id), { orderId })
-  )
-
-  // Increment product orderCount
-  await import('firebase/firestore').then(({ updateDoc, doc }) =>
-    updateDoc(doc(db, 'sellers', sellerId, 'products', orderProduct.id), { 
-      orderCount: (orderProduct.orderCount || 0) + 1 
-    })
+  await incrementProductOrderCount(
+    sellerId,
+    orderProduct.id,
+    orderProduct.orderCount || 0
   )
 
   if (auth.currentUser?.uid === sellerId) {
