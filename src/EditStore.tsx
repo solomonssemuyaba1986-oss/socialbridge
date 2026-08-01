@@ -4,6 +4,7 @@ import { auth, db, storage } from './firebase'
 import { doc, getDoc, updateDoc } from 'firebase/firestore'
 import { ref, uploadBytes } from 'firebase/storage'
 import { COUNTRIES } from './countries'
+import { notify } from './notifications'
 
 function EditStore() {
   const [businessName, setBusinessName] = useState('')
@@ -80,11 +81,11 @@ function EditStore() {
     }
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
     if (!allowedTypes.includes(file.type)) {
-      alert('Please upload a JPG, PNG, or PDF file')
+      alert(notify.fileTypeInvalid)
       return
     }
     if (file.size > 10 * 1024 * 1024) {
-      alert('File must be under 10MB')
+      alert(notify.fileTooLarge)
       return
     }
     setIdFile(file)
@@ -94,7 +95,7 @@ function EditStore() {
   // -- Geolocation --
   const handleUseMyLocation = () => {
     if (!navigator.geolocation) {
-      alert('Geolocation not supported in your browser.')
+      alert(notify.geolocationUnavailable)
       return
     }
     setLocationLoading(true)
@@ -124,9 +125,7 @@ function EditStore() {
       (err) => {
         console.error('Geolocation error:', err)
         setLocationLoading(false)
-        alert(err.code === 1
-          ? 'Location access denied. Please enter your location manually.'
-          : 'Could not get location. Please enter manually.')
+        alert(err.code === 1 ? notify.geolocationDenied : notify.geolocationUnavailable)
       },
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
     )
