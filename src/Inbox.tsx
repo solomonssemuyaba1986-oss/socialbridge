@@ -1,22 +1,11 @@
-import { useState, useEffect, type ReactNode } from 'react'
-import { doc, getDoc, updateDoc } from 'firebase/firestore'
-import { db } from './firebase'
+import { useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useSellerOrders, isUnread, type SellerOrder } from './useSellerOrders'
-import { useSellerMessages, isUnreadMessage, type SellerMessage } from './useSellerMessages'
+import { useSellerMessages, isUnreadMessage } from './useSellerMessages'
 import { useSellerConversations } from './useSellerConversations'
 import { useBuyerConversations } from './useBuyerConversations'
 import ConversationPanel from './ConversationPanel'
 
 const green = '#adff2f'
-
-type InboxFilter = 'all' | 'messages' | 'pending' | 'confirmed'
-
-function orderTotal(price: string, quantity: number | string): number {
-  const unit = Number(String(price).replace(/,/g, '')) || 0
-  const qty = Number(quantity) || 1
-  return unit * qty
-}
 
 function maskPhone(phone?: string): string {
   if (!phone) return 'N/A'
@@ -28,13 +17,6 @@ function maskPhone(phone?: string): string {
 function formatDate(createdAt: { toDate?: () => Date } | null | undefined): string {
   if (createdAt?.toDate) return createdAt.toDate().toLocaleString()
   return 'Just now'
-}
-
-function statusLabel(status?: string): { text: string; color: string; bg: string } {
-  if (status === 'fulfilled') return { text: '✓ Confirmed', color: green, bg: '#1a2a1a' }
-  if (status === 'out_of_stock') return { text: 'Out of Stock', color: '#ff4444', bg: '#2a1a1a' }
-  if (status === 'needs_details') return { text: 'Need Details', color: '#888', bg: '#222' }
-  return { text: 'Pending', color: '#888', bg: '#222' }
 }
 
 function platformMeta(platform?: string) {
@@ -52,69 +34,13 @@ function platformMeta(platform?: string) {
 
 function Inbox() {
   const navigate = useNavigate()
-  const { orders, loading: ordersLoading, userId } = useSellerOrders()
   const { messages, unreadCount: unreadMessages, loading: messagesLoading } = useSellerMessages()
   const { conversations: sellerConversations, unreadCount: unreadSellerConversations, loading: conversationsLoading } = useSellerConversations()
   const { conversations: buyerConversations, unreadCount: unreadBuyerConversations, loading: buyerConversationsLoading } = useBuyerConversations()
-  const [filter, setFilter] = useState<InboxFilter>('messages')
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null)
   const [selectedConvoId, setSelectedConvoId] = useState<string | null>(null)
-  const [seller, setSeller] = useState<{ whatsapp?: string; businessName?: string } | null>(null)
 
-  const loading = ordersLoading || messagesLoading || conversationsLoading || buyerConversationsLoading
-  const showingMessages = filter === 'messages'
-
-  useEffect(() => {
-    if (!userId) return
-    getDoc(doc(db, 'sellers', userId)).then(snap => {
-      if (snap.exists()) setSeller(snap.data() as { whatsapp?: string })
-    })
-  }, [userId])
-
-  const markOrderRead = async (orderId: string) => {
-    if (!userId) return
-    await updateDoc(doc(db, 'sellers', userId, 'orders', orderId), { read: true })
-  }
-
-  const markMessageRead = async (messageId: string) => {
-    if (!userId) return
-    await updateDoc(doc(db, 'sellers', userId, 'messages', messageId), { read: true })
-  }
-
-  const selectOrder = async (order: SellerOrder) => {
-    setSelectedOrderId(order.id)
-    setSelectedMessageId(null)
-    if (isUnread(order)) await markOrderRead(order.id)
-  }
-
-  const selectMessage = async (message: SellerMessage) => {
-    setSelectedMessageId(message.id)
-    setSelectedOrderId(null)
-    if (isUnreadMessage(message)) await markMessageRead(message.id)
-  }
-
-  const openWhatsAppForOrder = (order: SellerOrder) => {
-    if (seller?.whatsapp) {
-      const text = `Hi ${order.buyerName}, following up on your order for ${order.productName} x${order.quantity}.`
-      window.open(`https://wa.me/${seller.whatsapp}?text=${encodeURIComponent(text)}`, '_blank')
-    }
-  }
-
-  const filteredOrders = orders.filter(o => {
-    if (filter === 'pending') return o.status === 'pending' || !o.status
-    if (filter === 'confirmed') return o.status === 'fulfilled'
-    if (filter === 'all') return true
-    return false
-  })
-
-  const filteredMessages = filter === 'messages' || filter === 'all'
-    ? messages
-    : []
-
-  const selectedOrder = orders.find(o => o.id === selectedOrderId) ?? null
-  const selectedMessage = messages.find(m => m.id === selectedMessageId) ?? null
-
+  const loading = messagesLoading || conversationsLoading || buyerConversationsLoading
   const totalUnread = unreadMessages + unreadSellerConversations + unreadBuyerConversations
 
   if (loading) {
@@ -125,19 +51,10 @@ function Inbox() {
     )
   }
 
-  const emptyCopy = filter === 'messages'
-    ? 'No buyer messages yet'
-    : 'Nothing here yet'
-
-  const listEmpty = showingMessages
-    ? filteredMessages.length === 0 && sellerConversations.length === 0 && buyerConversations.length === 0
-    : filter === 'all'
-      ? filteredOrders.length === 0 && filteredMessages.length === 0 && sellerConversations.length === 0 && buyerConversations.length === 0
-      : filteredOrders.length === 0
+  const listEmpty = messages.length === 0 && sellerConversations.length === 0 && buyerConversations.length === 0
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
-
       <div className="rt-topnav" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #1a1a1a' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <button onClick={() => navigate('/dashboard')}
@@ -153,109 +70,121 @@ function Inbox() {
         </div>
       </div>
 
-      <div className="rt-filters" style={{ display: 'flex', gap: '8px', padding: '16px 24px', borderBottom: '1px solid #1a1a1a', overflowX: 'auto' }}>
-        {([
-          { key: 'all' as const, count: orders.length + messages.length },
-          { key: 'messages' as const, count: messages.length },
-          { key: 'pending' as const, count: orders.filter(o => o.status === 'pending' || !o.status).length },
-          { key: 'confirmed' as const, count: orders.filter(o => o.status === 'fulfilled').length },
-        ]).map(({ key, count }) => {
-          const active = filter === key
-          const badgeCount = key === 'messages' ? unreadMessages : 0
-          return (
-            <button key={key} onClick={() => { setFilter(key); setSelectedOrderId(null); setSelectedMessageId(null) }}
-              style={{ padding: '8px 16px', borderRadius: '20px', border: `1px solid ${active ? green : '#333'}`, background: active ? green : 'transparent', color: active ? '#000' : '#aaa', fontWeight: active ? '700' : '500', cursor: 'pointer', fontSize: '13px', whiteSpace: 'nowrap', textTransform: 'capitalize', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              {key}
-              {badgeCount > 0 && key === 'messages' && (
-                <span style={{ background: active ? '#000' : green, color: active ? green : '#000', borderRadius: '50%', minWidth: '20px', height: '20px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '800', padding: '0 5px' }}>
-                  {badgeCount}
-                </span>
-              )}
-              {key !== 'messages' && count > 0 && (
-                <span style={{ color: active ? '#333' : '#555', fontSize: '11px' }}>({count})</span>
-              )}
-            </button>
-          )
-        })}
-      </div>
-
       <div className="rt-container" style={{ maxWidth: '640px', margin: '0 auto', padding: '16px' }}>
         {listEmpty ? (
           <div style={{ textAlign: 'center', padding: '80px 20px' }}>
             <div style={{ fontSize: '48px', marginBottom: '16px' }}>📭</div>
-            <p style={{ color: '#555', fontSize: '15px' }}>{emptyCopy}</p>
+            <p style={{ color: '#555', fontSize: '15px' }}>No messages yet</p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
 
-            {!showingMessages && filteredOrders.map(o => {
-              const unread = isUnread(o)
-              const selected = selectedOrderId === o.id
-              const st = statusLabel(o.status)
+            {/* Buyer conversations — YOU messaged someone */}
+            {buyerConversations.map(convo => {
+              const unread = convo.unreadByBuyer
+              const selected = selectedConvoId === `buyer-${convo.id}`
               return (
-                <div key={`order-${o.id}`}>
+                <div key={`buyer-convo-${convo.id}`}>
                   <div
-                    onClick={() => selectOrder(o)}
+                    onClick={() => {
+                      const id = `buyer-${convo.id}`
+                      setSelectedConvoId(selected ? null : id)
+                      setSelectedMessageId(null)
+                    }}
                     style={{
                       background: selected ? '#1a2a1a' : unread ? '#152015' : '#1a1a1a',
-                      borderRadius: selected && selectedOrder ? '12px 12px 0 0' : '12px',
+                      borderRadius: selected ? '12px 12px 0 0' : '12px',
                       padding: '16px',
                       border: `1px solid ${selected ? green : unread ? green : '#222'}`,
                       cursor: 'pointer',
                     }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
                         {unread && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: green, flexShrink: 0 }} />}
-                        <div>
-                          <p style={{ margin: '0 0 2px', fontWeight: '700', fontSize: '15px', color: '#fff' }}>{o.buyerName}</p>
-                          <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>Order · {o.productName} × {o.quantity}</p>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
-                            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', borderRadius: '999px', background: '#111', border: '1px solid #222', fontSize: '14px' }}>
-                              {platformMeta(o.sourcePlatform).icon}
-                            </span>
-                            <span style={{ color: '#666', fontSize: '12px' }}>{platformMeta(o.sourcePlatform).label}</span>
-                          </div>
+                        <div style={{ minWidth: 0 }}>
+                          <p style={{ margin: '0 0 2px', fontWeight: '700', fontSize: '15px', color: '#fff' }}>
+                            <span style={{ color: green }}>You →</span> {convo.sellerName}
+                          </p>
+                          <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>
+                            {convo.productName ? ` Inquiry · ${convo.productName}` : ' Message'}
+                          </p>
                         </div>
                       </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <p style={{ margin: '0 0 4px', color: green, fontSize: '13px', fontWeight: '700' }}>UGX {o.productPrice}</p>
-                        <p style={{ margin: 0, color: '#444', fontSize: '11px' }}>{formatDate(o.createdAt)}</p>
-                      </div>
+                      <p style={{ margin: 0, color: '#444', fontSize: '11px', flexShrink: 0, marginLeft: '8px' }}>{formatDate(convo.lastMessageAt)}</p>
                     </div>
-                    <span style={{ color: '#555', fontSize: '12px' }}>{unread ? 'Tap to view order' : 'Tap to view again'}</span>
-                    <span style={{ float: 'right', background: st.bg, color: st.color, padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600' }}>{st.text}</span>
+                    <p style={{ margin: '0 0 8px', color: '#aaa', fontSize: '13px', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {convo.lastMessage}
+                    </p>
+                    <span style={{ color: '#555', fontSize: '12px' }}>{unread ? 'Tap to read message' : 'Tap to view again'}</span>
                   </div>
-
-                  {selected && selectedOrder && (
-                    <DetailPanel title="Order details" action={<ActionButton label="💬 Open WhatsApp Chat" onClick={() => openWhatsAppForOrder(o)} />}>
-                      <DetailRow label="Customer" value={o.buyerName} />
-                      <DetailRow label="Product" value={o.productName} />
-                      <DetailRow label="Quantity" value={String(o.quantity)} />
-                      <DetailRow label="Unit price" value={`UGX ${o.productPrice}`} />
-                      <DetailRow label="Total" value={`UGX ${orderTotal(o.productPrice, o.quantity).toLocaleString()}`} highlight />
-                      {o.deliveryArea && <DetailRow label="Delivery area" value={o.deliveryArea} />}
-                      <DetailRow label="Channel" value={`${platformMeta(o.sourcePlatform).icon} ${platformMeta(o.sourcePlatform).label}`} />
-                      {o.orderId && <DetailRow label="Order ID" value={`#${o.orderId}`} />}
-                      <DetailRow label="Placed" value={formatDate(o.createdAt)} />
-                      <DetailRow label="Status" value={st.text} />
+                  {selected && (
+                    <DetailPanel title="Conversation">
+                      <ConversationPanel sellerId={convo.sellerId} buyerId={convo.buyerId} sellerName={convo.sellerName} buyerName={convo.buyerName} productName={convo.productName} productPrice={convo.productPrice} productImage={convo.productImage} />
                     </DetailPanel>
                   )}
                 </div>
               )
             })}
 
-            {/* Messages (buyer → seller) — includes verified guest messages */}
-            {(showingMessages || filter === 'all') && filteredMessages.map(m => {
+            {/* Seller conversations — someone messaged YOU */}
+            {sellerConversations.map(convo => {
+              const unread = convo.unreadBySeller
+              const selected = selectedConvoId === convo.id
+              return (
+                <div key={`convo-${convo.id}`}>
+                  <div
+                    onClick={() => {
+                      setSelectedConvoId(selected ? null : convo.id)
+                      setSelectedMessageId(null)
+                    }}
+                    style={{
+                      background: selected ? '#1a2a1a' : unread ? '#152015' : '#1a1a1a',
+                      borderRadius: selected ? '12px 12px 0 0' : '12px',
+                      padding: '16px',
+                      border: `1px solid ${selected ? green : unread ? green : '#222'}`,
+                      cursor: 'pointer',
+                    }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                        {unread && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: green, flexShrink: 0 }} />}
+                        <div style={{ minWidth: 0 }}>
+                          <p style={{ margin: '0 0 2px', fontWeight: '700', fontSize: '15px', color: '#fff' }}>{convo.buyerName}</p>
+                          <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>
+                            {convo.productName ? `Inquiry · ${convo.productName}` : 'Message'}
+                          </p>
+                        </div>
+                      </div>
+                      <p style={{ margin: 0, color: '#444', fontSize: '11px', flexShrink: 0, marginLeft: '8px' }}>{formatDate(convo.lastMessageAt)}</p>
+                    </div>
+                    <p style={{ margin: '0 0 8px', color: '#aaa', fontSize: '13px', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {convo.lastMessage}
+                    </p>
+                    <span style={{ color: '#555', fontSize: '12px' }}>{unread ? 'Tap to read message' : 'Tap to view again'}</span>
+                  </div>
+                  {selected && (
+                    <DetailPanel title="Conversation">
+                      <ConversationPanel sellerId={convo.sellerId} buyerId={convo.buyerId} sellerName={convo.sellerName} buyerName={convo.buyerName} productName={convo.productName} productPrice={convo.productPrice} productImage={convo.productImage} />
+                    </DetailPanel>
+                  )}
+                </div>
+              )
+            })}
+
+            {/* Guest messages (verified OTP) */}
+            {messages.map(m => {
               const unread = isUnreadMessage(m)
               const selected = selectedMessageId === m.id
               const isVerifiedGuest = m.verified && m.senderPhone
               return (
                 <div key={`msg-${m.id}`}>
                   <div
-                    onClick={() => selectMessage(m)}
+                    onClick={() => {
+                      setSelectedMessageId(selected ? null : m.id)
+                      setSelectedConvoId(null)
+                    }}
                     style={{
                       background: selected ? '#1a2a1a' : unread ? '#152015' : '#1a1a1a',
-                      borderRadius: selected && selectedMessage ? '12px 12px 0 0' : '12px',
+                      borderRadius: selected && selectedMessageId ? '12px 12px 0 0' : '12px',
                       padding: '16px',
                       border: `1px solid ${selected ? green : unread ? green : '#222'}`,
                       cursor: 'pointer',
@@ -285,8 +214,7 @@ function Inbox() {
                     </p>
                     <span style={{ color: '#555', fontSize: '12px' }}>{unread ? 'Tap to read message' : 'Tap to view again'}</span>
                   </div>
-
-                  {selected && selectedMessage && (
+                  {selected && (
                     <DetailPanel title="Conversation">
                       {m.senderUid?.startsWith('guest_') ? (
                         <div>
@@ -306,119 +234,8 @@ function Inbox() {
                           </div>
                         </div>
                       ) : (
-                        <ConversationPanel sellerId={userId} buyerId={m.senderUid} sellerName={seller?.businessName} buyerName={m.senderName} />
+                        <ConversationPanel sellerId={m.receiverUid || ''} buyerId={m.senderUid} buyerName={m.senderName} productName={m.productName} productPrice={m.productPrice} />
                       )}
-                    </DetailPanel>
-                  )}
-                </div>
-              )
-            })}
-
-            {/* Buyer conversations — YOU messaged someone */}
-            {(showingMessages || filter === 'all') && buyerConversations.map(convo => {
-              const unread = convo.unreadByBuyer
-              const selected = selectedConvoId === `buyer-${convo.id}`
-              return (
-                <div key={`buyer-convo-${convo.id}`}>
-                  <div
-                    onClick={() => {
-                      const id = `buyer-${convo.id}`
-                      setSelectedConvoId(selected ? null : id)
-                      setSelectedMessageId(null)
-                      setSelectedOrderId(null)
-                    }}
-                    style={{
-                      background: selected ? '#1a2a1a' : unread ? '#152015' : '#1a1a1a',
-                      borderRadius: selected ? '12px 12px 0 0' : '12px',
-                      padding: '16px',
-                      border: `1px solid ${selected ? green : unread ? green : '#222'}`,
-                      cursor: 'pointer',
-                    }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                        {unread && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: green, flexShrink: 0 }} />}
-                        <div style={{ minWidth: 0 }}>
-                          <p style={{ margin: '0 0 2px', fontWeight: '700', fontSize: '15px', color: '#fff' }}>
-                            <span style={{ color: green }}>You →</span> {convo.sellerName}
-                          </p>
-                          <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>
-                            {convo.productName ? ` Inquiry · ${convo.productName}` : ' Message'}
-                          </p>
-                        </div>
-                      </div>
-                      <p style={{ margin: 0, color: '#444', fontSize: '11px', flexShrink: 0, marginLeft: '8px' }}>{formatDate(convo.lastMessageAt)}</p>
-                    </div>
-                    <p style={{ margin: '0 0 8px', color: '#aaa', fontSize: '13px', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {convo.lastMessage}
-                    </p>
-                    <span style={{ color: '#555', fontSize: '12px' }}>{unread ? 'Tap to read message' : 'Tap to view again'}</span>
-                  </div>
-
-                  {selected && (
-                    <DetailPanel title="Conversation">
-                      <ConversationPanel
-                        sellerId={convo.sellerId}
-                        buyerId={userId || convo.buyerId}
-                        sellerName={convo.sellerName}
-                        buyerName={convo.buyerName}
-                        productName={convo.productName}
-                        productPrice={convo.productPrice}
-                        productImage={convo.productImage}
-                      />
-                    </DetailPanel>
-                  )}
-                </div>
-              )
-            })}
-
-            {/* Seller conversations — someone messaged YOU */}
-            {(showingMessages || filter === 'all') && sellerConversations.map(convo => {
-              const unread = convo.unreadBySeller
-              const selected = selectedConvoId === convo.id
-              return (
-                <div key={`convo-${convo.id}`}>
-                  <div
-                    onClick={() => {
-                      setSelectedConvoId(selected ? null : convo.id)
-                      setSelectedMessageId(null)
-                      setSelectedOrderId(null)
-                    }}
-                    style={{
-                      background: selected ? '#1a2a1a' : unread ? '#152015' : '#1a1a1a',
-                      borderRadius: selected ? '12px 12px 0 0' : '12px',
-                      padding: '16px',
-                      border: `1px solid ${selected ? green : unread ? green : '#222'}`,
-                      cursor: 'pointer',
-                    }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                        {unread && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: green, flexShrink: 0 }} />}
-                        <div style={{ minWidth: 0 }}>
-                          <p style={{ margin: '0 0 2px', fontWeight: '700', fontSize: '15px', color: '#fff' }}>{convo.buyerName}</p>
-                          <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>
-                            {convo.productName ? `Inquiry · ${convo.productName}` : 'Message'}
-                          </p>
-                        </div>
-                      </div>
-                      <p style={{ margin: 0, color: '#444', fontSize: '11px', flexShrink: 0, marginLeft: '8px' }}>{formatDate(convo.lastMessageAt)}</p>
-                    </div>
-                    <p style={{ margin: '0 0 8px', color: '#aaa', fontSize: '13px', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {convo.lastMessage}
-                    </p>
-                    <span style={{ color: '#555', fontSize: '12px' }}>{unread ? 'Tap to read message' : 'Tap to view again'}</span>
-                  </div>
-
-                  {selected && (
-                    <DetailPanel title="Conversation">
-                      <ConversationPanel
-                        sellerId={userId}
-                        buyerId={convo.buyerId}
-                        sellerName={seller?.businessName || convo.sellerName}
-                        buyerName={convo.buyerName}
-                        productName={convo.productName}
-                        productPrice={convo.productPrice}
-                        productImage={convo.productImage}
-                      />
                     </DetailPanel>
                   )}
                 </div>
@@ -433,13 +250,8 @@ function Inbox() {
 
 function DetailPanel({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
   return (
-    <div style={{
-      background: '#111', border: `1px solid ${green}`, borderTop: 'none',
-      borderRadius: '0 0 12px 12px', padding: '20px', marginBottom: '8px',
-    }}>
-      <p style={{ margin: '0 0 16px', color: green, fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-        {title}
-      </p>
+    <div style={{ background: '#111', border: `1px solid ${green}`, borderTop: 'none', borderRadius: '0 0 12px 12px', padding: '20px', marginBottom: '8px' }}>
+      <p style={{ margin: '0 0 16px', color: green, fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</p>
       <div style={{ display: 'grid', gap: '12px', marginBottom: action ? '16px' : 0 }}>{children}</div>
       {action}
     </div>
@@ -452,16 +264,6 @@ function DetailRow({ label, value, highlight }: { label: string; value: string; 
       <span style={{ color: '#666', fontSize: '13px', flexShrink: 0 }}>{label}</span>
       <span style={{ color: highlight ? green : '#fff', fontSize: '14px', fontWeight: highlight ? '800' : '600', textAlign: 'right' }}>{value}</span>
     </div>
-  )
-}
-
-function ActionButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      onClick={e => { e.stopPropagation(); onClick() }}
-      style={{ width: '100%', padding: '12px', background: 'transparent', color: green, border: `1px solid ${green}`, borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>
-      {label}
-    </button>
   )
 }
 
