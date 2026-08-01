@@ -4,6 +4,7 @@ import type { AuthProvider, ConfirmationResult } from 'firebase/auth'
 import { auth, db, googleProvider, facebookProvider, appleProvider, createRecaptchaVerifier } from './firebase'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore'
+import { notify } from './notifications'
 
 const OTP_SERVER_URL = import.meta.env.VITE_OTP_SERVER_URL || 'http://localhost:3001'
 
@@ -77,10 +78,10 @@ function SignIn() {
           await signInWithRedirect(auth, provider)
         } catch (redirectError) {
           console.error('Redirect fallback failed:', redirectError)
-          alert('Oops! Sign in failed. Please allow popups or try again in a browser tab.')
+          alert(notify.signInFailed)
         }
       } else {
-        alert('Oops! Try again.')
+        alert(notify.somethingWentWrong)
       }
     } finally {
       setAuthLoading(false)
@@ -98,7 +99,7 @@ function SignIn() {
       navigate('/onboarding')
     } catch (error: unknown) {
       console.error('Re-auth error:', error)
-      alert('Could not sign you in automatically. Please sign in again.')
+      alert(notify.signInFailed)
     } finally {
       setAuthLoading(false)
     }
