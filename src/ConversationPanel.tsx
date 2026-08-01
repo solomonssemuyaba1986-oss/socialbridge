@@ -113,8 +113,8 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
     if (!messageText) return
     const senderId = auth.currentUser?.uid
     if (!senderId) return
-    if (senderId === sellerId) {
-      showFeedback("You can't message your self.", 'error')
+    if (senderId === sellerId && sellerId === buyerId) {
+      showFeedback("You can't message your own store.", 'error')
       return
     }
     try {
