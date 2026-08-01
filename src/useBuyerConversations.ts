@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore'
+import { collection, query, where, onSnapshot } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth, db } from './firebase'
 
@@ -39,12 +39,18 @@ export function useBuyerConversations() {
 
       const q = query(
         collection(db, 'conversations'),
-        where('buyerId', '==', user.uid),
-        orderBy('lastMessageAt', 'desc')
+        where('buyerId', '==', user.uid)
       )
 
       unsub = onSnapshot(q, (snap) => {
-        setConversations(snap.docs.map(d => ({ id: d.id, ...d.data() } as BuyerConversation)))
+        const list = snap.docs.map(d => ({ id: d.id, ...d.data() } as BuyerConversation))
+        // Sort client-side to avoid Firestore composite index requirement
+        list.sort((a, b) => {
+          const dateA = a.lastMessageAt?.toDate?.()?.getTime() || 0
+          const dateB = b.lastMessageAt?.toDate?.()?.getTime() || 0
+          return dateB - dateA
+        })
+        setConversations(list)
         setLoading(false)
       }, (err) => {
         console.error('Failed to load buyer conversations:', err)
