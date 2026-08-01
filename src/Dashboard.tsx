@@ -7,6 +7,7 @@ import { useSellerOrders } from './useSellerOrders'
 import { useSellerMessages } from './useSellerMessages'
 import { useSellerConversations } from './useSellerConversations'
 import { useBuyerConversations } from './useBuyerConversations'
+import { notify } from './notifications'
 
 interface Seller {
   businessName: string
@@ -180,7 +181,7 @@ function Dashboard() {
           })}
         </div>
         <div style={{ marginTop: 'auto' }}>
-          <button onClick={() => { navigator.clipboard.writeText(storeLink); alert('Link copied!') }}
+          <button onClick={() => { navigator.clipboard.writeText(storeLink); alert(notify.storeLinkCopied) }}
             style={{ width: '100%', padding: '12px', borderRadius: '14px', border: '1px solid #222', background: '#111', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>
             Copy Store Link
           </button>
@@ -330,7 +331,7 @@ function Dashboard() {
   <p style={{ color: '#888', fontSize: '13px', margin: '0 0 12px' }}>
     📢 <span style={{ color: '#fff', fontWeight: '600' }}>Grow your sales</span> — paste your link anywhere you have an audience. Instagram bio, TikTok profile, WhatsApp status, Facebook, Telegram, Pinterest, Reddit — anywhere.
   </p>
-  <button onClick={() => { navigator.clipboard.writeText(storeLink); alert('Link copied! Paste it everywhere you sell.') }}
+  <button onClick={() => { navigator.clipboard.writeText(storeLink); alert(notify.storeLinkCopied) }}
     style={{ width: '100%', padding: '12px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '14px' }}>
     📋 Copy Link — Share Everywhere
   </button>
