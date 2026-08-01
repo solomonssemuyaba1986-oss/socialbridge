@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useConversation } from './useConversation'
 import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder'
+import { auth } from './firebase'
 
 const green = '#adff2f'
 
@@ -204,8 +205,8 @@ Order ID: #${orderId}`
           </div>
         )}
 
-        {/* Buy Now Button */}
-        {productName && productPrice && (
+        {/* Buy Now Button — only for the buyer (not the seller viewing their own conversation) */}
+        {auth.currentUser && auth.currentUser.uid === buyerId && buyerId !== sellerId && productName && productPrice && (
           <button onClick={() => setShowOrderModal(true)}
             style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '12px', fontWeight: '700', cursor: 'pointer', fontSize: '15px' }}>
             Buy Now — UGX {productPrice}
