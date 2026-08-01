@@ -54,7 +54,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
       return
     }
     if (!productName || !productPrice) {
-      showFeedback('Product info not available', 'error')
+      showFeedback('Product info is kinda not available', 'error')
       return
     }
 
@@ -77,7 +77,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
       }
 
       setOrderSuccess(true)
-      showFeedback('Order sent! The seller will respond in your Inbox.', 'success')
+      showFeedback('Order sent! The seller will respond in time.', 'success')
       setTimeout(() => {
         setBuyerNameOrder(''); setQuantity('1'); setDeliveryArea(''); setOrderMessage('')
         setShowOrderModal(false)
@@ -114,7 +114,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
     const senderId = auth.currentUser?.uid
     if (!senderId) return
     if (senderId === sellerId) {
-      showFeedback("You can't message your own store.", 'error')
+      showFeedback("You can't message your self.", 'error')
       return
     }
     try {
