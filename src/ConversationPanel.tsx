@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useConversation } from './useConversation'
-import { collection, addDoc, doc, updateDoc } from 'firebase/firestore'
-import { db } from './firebase'
+import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder'
 
 const green = '#adff2f'
 
@@ -60,8 +59,9 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
     }
 
     try {
-      const orderRef = await addDoc(collection(db, 'sellers', sellerId, 'orders'), {
+      const { orderId } = await createBuyerOrder(sellerId, {
         buyerName: buyerNameOrder,
+        buyerUid: buyerId,
         productName,
         productPrice,
         quantity,
@@ -69,16 +69,11 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
         status: 'pending',
         read: false,
         sourcePlatform: 'Chat',
-        createdAt: new Date()
+        createdAt: new Date(),
       })
 
-      const orderId = `RT-${orderRef.id.slice(0, 6).toUpperCase()}`
-      await updateDoc(doc(db, 'sellers', sellerId, 'orders', orderRef.id), { orderId })
-
       if (productId) {
-        await updateDoc(doc(db, 'sellers', sellerId, 'products', productId), {
-          orderCount: (orderCount || 0) + 1
-        })
+        await incrementProductOrderCount(sellerId, productId, orderCount || 0)
       }
 
       const whatsappText =
