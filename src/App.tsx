@@ -90,7 +90,7 @@ function App() {
       <Route path="/bulk-upload" element={signedIn ? <BulkUploadWrapper /> : <Navigate to="/" />} />
       <Route path="/products" element={signedIn ? <ProductsPage /> : <Navigate to="/" />} />
       <Route path="/inbox" element={signedIn ? <Inbox /> : <Navigate to="/" />} />
-      <Route path="/my-chats" element={signedIn ? <MyChats /> : <Navigate to="/" />} />
+      <Route path="/my-chats" element={<Navigate to="/inbox" />} />
       <Route path="/orders" element={signedIn ? <OrderHistory /> : <Navigate to="/" />} />
       <Route path="/edit-store" element={signedIn ? <EditStore /> : <Navigate to="/" />} />
       </Routes>
