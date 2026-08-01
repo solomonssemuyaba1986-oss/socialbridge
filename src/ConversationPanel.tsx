@@ -111,8 +111,10 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
   const handleSend = async (newText?: string) => {
     const messageText = (newText !== undefined ? newText : text).trim()
     if (!messageText) return
+    const senderId = auth.currentUser?.uid
+    if (!senderId) return
     try {
-      await sendMessage(sellerId, messageText, sellerName || 'Seller', buyerName || 'Buyer')
+      await sendMessage(senderId, messageText, sellerName || 'Seller', buyerName || 'Buyer')
       setText('')
       setShowQuickReplies(false)
     } catch (err) {
@@ -157,10 +159,14 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
               seen: { color: '#a457ff', label: 'Seen' },
             }
             const statusInfo = statusStyles[status] || statusStyles.sent
+            const isSeller = m.senderId === sellerId
+            const senderName = isSeller ? (sellerName || 'Seller') : (buyerName || 'Buyer')
+            const borderColor = isSeller ? '#3399ff' : '#ff4444'
+            const senderIcon = isSeller ? '🏪' : '👤'
             return (
-              <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
-                <div style={{ fontSize: 12, color: '#888' }}>{m.senderId === sellerId ? sellerName || 'Seller' : buyerName || 'Buyer'}</div>
-                <div style={{ width: '100%', background: '#111', color: '#eee', padding: '14px', borderRadius: 16, border: '1px solid #222', fontSize: 14, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+              <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ fontSize: 12, color: '#888', fontWeight: 600 }}>{senderIcon} {senderName}</div>
+                <div style={{ width: '100%', background: '#111', color: '#eee', padding: '14px', borderRadius: '4px 12px 12px 12px', borderTop: '1px solid #222', borderRight: '1px solid #222', borderBottom: '1px solid #222', borderLeft: `4px solid ${borderColor}`, fontSize: 14, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                   {m.text}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: '#666' }}>
