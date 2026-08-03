@@ -97,9 +97,9 @@ function Dashboard() {
   const totalMessageUnread = unreadMessagesCount + unreadSellerConvoCount + unreadBuyerConvoCount
 
   // Play notification sound when messages/conversations arrive
-  const prevMessageTotal = useRef(0)
+  const prevMessageTotal = useRef<number | null>(null)
   useEffect(() => {
-    if (totalMessageUnread > prevMessageTotal.current) {
+    if (prevMessageTotal.current !== null && totalMessageUnread > prevMessageTotal.current) {
       playNewOrderAlert()
     }
     prevMessageTotal.current = totalMessageUnread
