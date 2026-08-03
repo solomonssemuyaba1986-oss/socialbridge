@@ -228,7 +228,7 @@ function Dashboard() {
 
         {unreadCount > 0 && (
           <div
-            onClick={() => navigate('/inbox')}
+            onClick={() => navigate('/orders')}
             style={{
               background: '#1a2a1a',
               border: `1px solid ${green}`,
