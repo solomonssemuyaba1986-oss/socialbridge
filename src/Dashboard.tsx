@@ -120,11 +120,11 @@ function Dashboard() {
   }, [navigate])
 
   const markFulfilled = async (orderId: string) => {
-    await updateDoc(doc(db, 'sellers', userId, 'orders', orderId), { status: 'fulfilled' })
+    await updateDoc(doc(db, 'sellers', userId, 'orders', orderId), { status: 'fulfilled', read: true })
   }
 
   const updateOrderStatus = async (orderId: string, status: string) => {
-    await updateDoc(doc(db, 'sellers', userId, 'orders', orderId), { status })
+    await updateDoc(doc(db, 'sellers', userId, 'orders', orderId), { status, read: true })
   }
 
   if (loading) return (
