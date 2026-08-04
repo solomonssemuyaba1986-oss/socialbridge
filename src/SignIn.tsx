@@ -5,6 +5,7 @@ import { auth, db, googleProvider, facebookProvider, appleProvider, createRecapt
 import { useNavigate, useLocation } from 'react-router-dom'
 import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore'
 import { notify } from './notifications'
+import { COUNTRY_CODES, type CountryCode } from './countryCodes'
 
 const OTP_SERVER_URL = import.meta.env.VITE_OTP_SERVER_URL || 'http://localhost:3001'
 
@@ -43,12 +44,17 @@ function SignIn() {
   }, [location.state])
 
   // Phone auth state
+  const [selectedCountry, setSelectedCountry] = useState<CountryCode>(
+    COUNTRY_CODES.find(c => c.dialCode === '+256') || COUNTRY_CODES[0]
+  )
   const [phoneNumber, setPhoneNumber] = useState('')
   const [phoneOtpSent, setPhoneOtpSent] = useState(false)
   const [phoneOtp, setPhoneOtp] = useState('')
   const [phoneOtpLoading, setPhoneOtpLoading] = useState(false)
   const [phoneOtpError, setPhoneOtpError] = useState('')
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null)
+  const [showCountryDropdown, setShowCountryDropdown] = useState(false)
+  const [countrySearch, setCountrySearch] = useState('')
 
   // Recovery modal state
   const [showRecoveryModal, setShowRecoveryModal] = useState(false)
@@ -112,10 +118,9 @@ function SignIn() {
 
   // -- Phone Auth handlers --
   const handlePhoneChange = (val: string) => {
-    const digits = val.replace(/\D/g, '').slice(0, 9)
+    const digits = val.replace(/\D/g, '').slice(0, 15)
     setPhoneNumber(digits)
     setPhoneOtpError('')
-    // Reset OTP state when number changes
     if (digits !== phoneNumber) {
       setPhoneOtpSent(false)
       setPhoneOtp('')
@@ -124,13 +129,13 @@ function SignIn() {
   }
 
   const handleSendPhoneOtp = async () => {
-    if (phoneNumber.length !== 9 || !/^7\d{8}$/.test(phoneNumber)) {
-      setPhoneOtpError('Enter a valid Uganda number starting with 7')
+    if (!phoneNumber || phoneNumber.length < 5) {
+      setPhoneOtpError('Enter a valid phone number for your country')
       return
     }
     setPhoneOtpLoading(true)
     setPhoneOtpError('')
-    const fullNumber = `+256${phoneNumber}`
+    const fullNumber = `${selectedCountry.dialCode}${phoneNumber}`
     try {
       const recaptchaVerifier = createRecaptchaVerifier('phone-recaptcha-container')
       const result = await signInWithPhoneNumber(auth, fullNumber, recaptchaVerifier)
@@ -194,6 +199,7 @@ function SignIn() {
       const q = query(collection(db, 'sellers'), where('recoveryEmail', '==', recoveryEmailInput.toLowerCase().trim()))
       const snapshot = await getDocs(q)
       if (snapshot.empty) {
+       
         setRecoveryError('No account found with that recovery email.')
       } else {
         const sellerData = snapshot.docs[0]
@@ -384,16 +390,52 @@ function SignIn() {
 
               {!phoneOtpSent ? (
                 <>
-                  {/* Phone input */}
+                  {/* Country code dropdown */}
+                  <div style={{ position: 'relative', marginBottom: '8px' }}>
+                    <div
+                      onClick={() => { setShowCountryDropdown(!showCountryDropdown); setCountrySearch('') }}
+                      style={{ display: 'flex', alignItems: 'center', border: '1px solid #333', borderRadius: '8px', overflow: 'hidden', cursor: 'pointer', background: '#111' }}>
+                      <div style={{ padding: '12px 14px', fontSize: '14px', color: '#aaa', fontWeight: '600' }}>
+                        {selectedCountry.flag} {selectedCountry.dialCode}
+                      </div>
+                      <span style={{ marginLeft: 'auto', marginRight: '12px', color: '#555', fontSize: '12px' }}>▼</span>
+                    </div>
+
+                    {showCountryDropdown && (
+                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', maxHeight: '220px', overflow: 'hidden', zIndex: 10, marginTop: '4px' }}>
+                        <input
+                          value={countrySearch}
+                          onChange={e => setCountrySearch(e.target.value)}
+                          placeholder="Search country..."
+                          autoFocus
+                          style={{ width: '100%', padding: '10px 12px', border: 'none', borderBottom: '1px solid #333', fontSize: '13px', boxSizing: 'border-box', outline: 'none', background: '#111', color: '#fff' }}
+                        />
+                        <div style={{ maxHeight: '180px', overflowY: 'auto' }}>
+                          {COUNTRY_CODES.filter(c =>
+                            !countrySearch || c.name.toLowerCase().includes(countrySearch.toLowerCase()) || c.dialCode.includes(countrySearch)
+                          ).map(c => (
+                            <div key={c.dialCode} onClick={() => { setSelectedCountry(c); setShowCountryDropdown(false); setCountrySearch(''); }}
+                              style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', cursor: 'pointer', fontSize: '13px', color: selectedCountry.dialCode === c.dialCode ? green : '#aaa', background: selectedCountry.dialCode === c.dialCode ? '#0a1a0a' : 'transparent' }}>
+                              <span style={{ fontSize: '16px' }}>{c.flag}</span>
+                              <span style={{ flex: 1 }}>{c.name}</span>
+                              <span style={{ color: '#666' }}>{c.dialCode}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Phone number input */}
                   <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #333', borderRadius: '8px', overflow: 'hidden', marginBottom: '8px' }}>
-                    <div style={{ background: '#111', padding: '12px 14px', fontSize: '14px', borderRight: '1px solid #333', color: '#aaa', whiteSpace: 'nowrap', fontWeight: '600' }}>
-                      🇺🇬 +256
+                    <div style={{ background: '#111', padding: '12px 14px', fontSize: '14px', borderRight: '1px solid #333', color: '#aaa', fontWeight: '600' }}>
+                      {selectedCountry.dialCode}
                     </div>
                     <input
                       value={phoneNumber}
                       onChange={e => handlePhoneChange(e.target.value)}
-                      placeholder="771234567"
-                      maxLength={9}
+                      placeholder="Phone number"
+                      maxLength={15}
                       style={{ flex: 1, padding: '12px', border: 'none', outline: 'none', fontSize: '15px', background: '#111', color: '#fff' }}
                     />
                   </div>
@@ -402,10 +444,10 @@ function SignIn() {
                     <p style={{ color: '#ff4444', fontSize: '12px', margin: '4px 0 8px' }}>{phoneOtpError}</p>
                   )}
 
-                  <button onClick={handleSendPhoneOtp} disabled={phoneOtpLoading || phoneNumber.length !== 9}
+                  <button onClick={handleSendPhoneOtp} disabled={phoneOtpLoading || !phoneNumber || phoneNumber.length < 5}
                     style={{
-                      width: '100%', padding: '12px', background: (phoneOtpLoading || phoneNumber.length !== 9) ? '#333' : green,
-                      color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (phoneOtpLoading || phoneNumber.length !== 9) ? 'not-allowed' : 'pointer', fontSize: '15px',
+                      width: '100%', padding: '12px', background: (phoneOtpLoading || !phoneNumber || phoneNumber.length < 5) ? '#333' : green,
+                      color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (phoneOtpLoading || !phoneNumber || phoneNumber.length < 5) ? 'not-allowed' : 'pointer', fontSize: '15px',
                     }}>
                     {phoneOtpLoading ? 'Sending code...' : 'Send Verification Code'}
                   </button>
@@ -413,7 +455,7 @@ function SignIn() {
               ) : (
                 <>
                   <p style={{ color: '#888', fontSize: '13px', margin: '0 0 10px', textAlign: 'left' }}>
-                    A 6-digit code was sent to <strong style={{ color: '#fff' }}>+256{phoneNumber}</strong>
+                    A 6-digit code was sent to <strong style={{ color: '#fff' }}>{selectedCountry.dialCode}{phoneNumber}</strong>
                   </p>
                   <input
                     value={phoneOtp}
