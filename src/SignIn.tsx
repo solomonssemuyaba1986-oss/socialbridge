@@ -55,6 +55,7 @@ function SignIn() {
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null)
   const [showCountryDropdown, setShowCountryDropdown] = useState(false)
   const [countrySearch, setCountrySearch] = useState('')
+  const [termsAgreed, setTermsAgreed] = useState(false)
 
   // Recovery modal state
   const [showRecoveryModal, setShowRecoveryModal] = useState(false)
@@ -494,6 +495,12 @@ function SignIn() {
               {/* reCAPTCHA container (invisible) */}
               <div id="phone-recaptcha-container" />
             </div>
+
+            {/* Terms & Conditions */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: '#666', marginTop: '4px' }}>
+              <input type="checkbox" checked={termsAgreed} onChange={e => setTermsAgreed(e.target.checked)} style={{ cursor: 'pointer', width: '16px', height: '16px' }} />
+              I agree to <span style={{ color: green, textDecoration: 'underline' }}>rachett's Terms and Conditions</span>
+            </label>
 
             {/* Guest Button */}
             <button onClick={() => navigate('/onboarding')}
