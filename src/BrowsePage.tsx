@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, KeyboardEvent } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { collection, getDocs, query } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebase'
@@ -78,7 +78,12 @@ function BrowsePage() {
     setRecentSearches([])
   }
 
-  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleRecentSearchClick = (term: string) => {
+    setSearch(term)
+    saveRecentSearch(term)
+  }
+
+  const handleSearchKeyDown = (e: { key: string }) => {
     if (e.key === 'Enter') {
       saveRecentSearch(search)
     }
@@ -365,7 +370,7 @@ function BrowsePage() {
           <p style={{ textAlign: 'center', color: '#555' }}>Loading products...</p>
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 20px' }}>
-            <div style={{ fontSize: '48px', marginBottom: '16px' }}>�</div>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>🛍️</div>
             <h3 style={{ fontWeight: '700', margin: '0 0 8px', fontSize: '16px' }}>No products found</h3>
             <p style={{ color: '#555', margin: '0 0 24px', fontSize: '14px' }}>
               {search ? `Try a different search term, or check similar products below` : 'Try a different category or check trending items'}
