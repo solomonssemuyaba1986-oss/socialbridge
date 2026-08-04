@@ -1,13 +1,10 @@
-import { useEffect, useState, useMemo } from 'react'
-import { collection, getDocs, query, addDoc, doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
-import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder'
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, FacebookAuthProvider, OAuthProvider } from 'firebase/auth'
+import { useEffect, useState, useMemo, KeyboardEvent } from 'react'
+import { collection, getDocs, query } from 'firebase/firestore'
+import { onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebase'
 import { useNavigate } from 'react-router-dom'
 import { getMainCategories } from './categories'
 import Fuse from 'fuse.js'
-import { getConversationId } from './useConversation'
-import { notify } from './notifications'
 
 interface Product {
   id: string
@@ -21,8 +18,6 @@ interface Product {
   subCategory?: string
   outOfStock?: boolean
   orderCount?: number
-  sellerId?: string
-  sellerWhatsapp?: string
 }
 
 const categories = ['All', ...getMainCategories()]
@@ -37,7 +32,6 @@ function BrowsePage() {
   const [sortBy, setSortBy] = useState<'relevance' | 'price-asc' | 'price-desc' | 'newest' | 'popular'>('relevance')
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 10000000])
   const [hideOutOfStock, setHideOutOfStock] = useState(true)
-  const [showMyProducts, setShowMyProducts] = useState<'all' | 'mine' | 'others'>('all')
   const [errorMsg, setErrorMsg] = useState<string>('')
   const [recentSearches, setRecentSearches] = useState<string[]>([])
   const [userId, setUserId] = useState<string | null>(null)
@@ -84,211 +78,9 @@ function BrowsePage() {
     setRecentSearches([])
   }
 
-  const handleRecentSearchClick = (term: string) => {
-    setSearch(term)
-    saveRecentSearch(term)
-  }
-
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       saveRecentSearch(search)
-    }
-  }
-
-  // Order modal state
-  const [orderProduct, setOrderProduct] = useState<Product | null>(null)
-  const [buyerName, setBuyerName] = useState('')
-  const [quantity, setQuantity] = useState('1')
-  const [deliveryArea, setDeliveryArea] = useState('')
-  const [message, setMessage] = useState('')
-  const [orderSuccess, setOrderSuccess] = useState(false)
-  const [feedbackMessage, setFeedbackMessage] = useState('')
-  const [feedbackType, setFeedbackType] = useState<'success' | 'error' | 'info'>('success')
-  const [feedbackVisible, setFeedbackVisible] = useState(false)
-
-  // Signup sheet state
-  const [showSignupSheet, setShowSignupSheet] = useState(false)
-  const [signupLoading, setSignupLoading] = useState('')
-
-  // Message modal state
-  const [messageProduct, setMessageProduct] = useState<Product | null>(null)
-  const [messageText, setMessageText] = useState('')
-  const [sendingMessage, setSendingMessage] = useState(false)
-
-  const showFeedback = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
-    setFeedbackMessage(msg)
-    setFeedbackType(type)
-    setFeedbackVisible(true)
-  }
-
-  useEffect(() => {
-    if (!feedbackVisible) return
-    const timeoutId = window.setTimeout(() => setFeedbackVisible(false), 4500)
-    return () => window.clearTimeout(timeoutId)
-  }, [feedbackVisible])
-
-  const handleSendMessage = async () => {
-    if (!messageText.trim()) {
-      showFeedback(notify.messageWriteRequired, 'error')
-      return
-    }
-    if (!messageProduct) return
-    if (!auth.currentUser) {
-      showFeedback(notify.messageSignInRequired, 'error')
-      return
-    }
-
-    const sellerId = messageProduct.sellerId
-    if (!sellerId) {
-      showFeedback(notify.messageSellerNotFound, 'error')
-      return
-    }
-
-    if (auth.currentUser && auth.currentUser.uid === sellerId) {
-      showFeedback(notify.messageSelfBlock, 'error')
-      setMessageProduct(null)
-      return
-    }
-
-    setSendingMessage(true)
-    try {
-      const conversationId = getConversationId(sellerId, auth.currentUser.uid)
-      const convoRef = doc(db, 'conversations', conversationId)
-      const convoSnap = await getDoc(convoRef)
-
-      if (!convoSnap.exists()) {
-        await setDoc(convoRef, {
-          sellerId,
-          buyerId: auth.currentUser.uid,
-          sellerName: messageProduct.businessName,
-          buyerName: auth.currentUser.displayName || 'Buyer',
-          lastMessage: messageText.trim(),
-          lastMessageAt: serverTimestamp(),
-          unreadBySeller: true,
-          unreadByBuyer: false,
-          productName: messageProduct.name,
-          productPrice: messageProduct.price,
-          productImage: messageProduct.imageUrl,
-        })
-      } else {
-        await setDoc(convoRef, {
-          lastMessage: messageText.trim(),
-          lastMessageAt: serverTimestamp(),
-          unreadBySeller: true,
-          unreadByBuyer: false,
-        }, { merge: true })
-      }
-
-      await addDoc(collection(db, 'conversations', conversationId, 'messages'), {
-        senderId: auth.currentUser.uid,
-        text: messageText.trim(),
-        status: 'sent',
-        createdAt: serverTimestamp()
-      })
-
-      showFeedback(notify.messageSent, 'success')
-      setMessageText('')
-      setMessageProduct(null)
-    } catch (err) {
-      console.error('Send message error:', err)
-      showFeedback(notify.messageFailed, 'error')
-    } finally {
-      setSendingMessage(false)
-    }
-  }
-
-  const handleSocialSignIn = async (provider: any, name: string) => {
-    setSignupLoading(name)
-    try {
-      const result = await signInWithPopup(auth, provider)
-      await setDoc(doc(db, 'users', result.user.uid), {
-        displayName: result.user.displayName || '',
-        email: result.user.email || '',
-        lastSeen: new Date(),
-        signupAt: new Date(),
-      }, { merge: true })
-      setShowSignupSheet(false)
-      showFeedback(notify.signUpSuccess, 'success')
-    } catch (err) {
-      console.error('Sign-in error:', err)
-      showFeedback(notify.signInFailed, 'error')
-    } finally {
-      setSignupLoading('')
-    }
-  }
-
-  const handleOrder = async () => {
-    if (!auth.currentUser) {
-      setShowSignupSheet(true)
-      return
-    }
-    if (!buyerName.trim()) {
-      showFeedback(notify.orderNameRequired, 'error')
-      return
-    }
-    if (!deliveryArea.trim()) {
-      showFeedback(notify.orderDeliveryRequired, 'error')
-      return
-    }
-    if (!orderProduct) return
-
-    const sellerId = orderProduct.sellerId
-    if (!sellerId) {
-      showFeedback(notify.orderSellerNotFound, 'error')
-      return
-    }
-
-    // Prevent self-ordering
-    if (auth.currentUser && auth.currentUser.uid === sellerId) {
-      showFeedback(notify.orderSelfBlock, 'error')
-      return
-    }
-
-    try {
-      const buyerUid = auth.currentUser.uid
-      const { orderId } = await createBuyerOrder(sellerId, {
-        buyerName,
-        buyerUid,
-        productName: orderProduct.name,
-        productPrice: orderProduct.price,
-        quantity,
-        deliveryArea,
-        status: 'pending',
-        read: false,
-        sourcePlatform: 'Browse',
-        createdAt: new Date(),
-      })
-
-      await incrementProductOrderCount(
-        sellerId,
-        orderProduct.id,
-        orderProduct.orderCount || 0
-      )
-
-      const whatsappText =
-`🟢 NEW ORDER — Rachett
-
-Customer: ${buyerName}
-Product: ${orderProduct.name}
-Price: UGX ${orderProduct.price}
-Quantity: ${quantity}
-Total: UGX ${Number(String(orderProduct.price).replace(/,/g, '')) * Number(quantity)}
-Delivery Area: ${deliveryArea}
-${message ? `Message: ${message}\n` : ''}
-Order ID: #${orderId}`
-
-      const whatsappNumber = orderProduct.sellerWhatsapp || ''
-      setOrderSuccess(true)
-      showFeedback(notify.orderSent, 'success')
-      setTimeout(() => {
-        window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappText)}`, '_blank')
-        setBuyerName(''); setQuantity('1'); setDeliveryArea(''); setMessage('')
-        setOrderProduct(null)
-        setOrderSuccess(false)
-      }, 1500)
-    } catch (err) {
-      console.error('Order error:', err)
-      showFeedback(notify.orderFailed, 'error')
     }
   }
 
@@ -298,8 +90,7 @@ Order ID: #${orderId}`
 
     const storeMap = new Map<string, { sellerSlug: string; businessName: string; imageUrl: string; productCount: number; outOfStockCount: number }>()
     products.forEach((p) => {
-      const existing = storeMap.get( 
-        p.sellerSlug)
+      const existing = storeMap.get(p.sellerSlug)
       if (!existing) {
         storeMap.set(p.sellerSlug, {
           sellerSlug: p.sellerSlug,
@@ -353,9 +144,7 @@ Order ID: #${orderId}`
                 sellerSlug: sellerData.slug,
                 businessName: sellerData.businessName,
                 outOfStock: productData.outOfStock || false,
-                orderCount: productData.orderCount || 0,
-                sellerId: sellerDoc.id,
-                sellerWhatsapp: sellerData.whatsapp || ''
+                orderCount: productData.orderCount || 0
               })
             })
           } catch (err) {
@@ -411,13 +200,6 @@ Order ID: #${orderId}`
       result = searchResults.map(r => r.item)
     }
 
-    // Apply seller filter (only when user is signed in)
-    if (userId && showMyProducts === 'mine') {
-      result = result.filter(p => p.sellerId === userId)
-    } else if (userId && showMyProducts === 'others') {
-      result = result.filter(p => p.sellerId !== userId)
-    }
-
     // Apply sorting
     if (sortBy === 'price-asc') {
       result.sort((a, b) => {
@@ -439,7 +221,7 @@ Order ID: #${orderId}`
     }
 
     setFiltered(result)
-  }, [activeCategory, search, products, sortBy, priceRange, hideOutOfStock, userId, showMyProducts])
+  }, [activeCategory, search, products, sortBy, priceRange, hideOutOfStock])
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
@@ -528,13 +310,7 @@ Order ID: #${orderId}`
       <div style={{ padding: '16px 24px', borderBottom: '1px solid #1a1a1a', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', fontSize: '13px' }}>
         <select
           value={sortBy}
-          onChange={e => {
-            const validSorts = ['relevance', 'price-asc', 'price-desc', 'newest', 'popular'] as const
-            const val = e.target.value
-            if (validSorts.includes(val as typeof validSorts[number])) {
-              setSortBy(val as typeof sortBy)
-            }
-          }}
+          onChange={e => setSortBy(e.target.value as typeof sortBy)}
           style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #333', background: '#1a1a1a', color: '#fff', cursor: 'pointer', fontSize: '13px' }}>
           <option value="relevance">Sort: Relevance</option>
           <option value="price-asc">Sort: Price (Low → High)</option>
@@ -571,17 +347,6 @@ Order ID: #${orderId}`
           />
           Hide out of stock
         </label>
-
-        {userId && (
-          <select
-            value={showMyProducts}
-            onChange={e => setShowMyProducts(e.target.value as 'all' | 'mine' | 'others')}
-            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #333', background: '#1a1a1a', color: '#fff', cursor: 'pointer', fontSize: '13px' }}>
-            <option value="all">All products</option>
-            <option value="mine">Mine only</option>
-            <option value="others">Hide mine</option>
-          </select>
-        )}
       </div>
 
       {/* Categories */}
@@ -600,7 +365,7 @@ Order ID: #${orderId}`
           <p style={{ textAlign: 'center', color: '#555' }}>Loading products...</p>
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 20px' }}>
-            <div style={{ fontSize: '48px', marginBottom: '16px' }}></div>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>�</div>
             <h3 style={{ fontWeight: '700', margin: '0 0 8px', fontSize: '16px' }}>No products found</h3>
             <p style={{ color: '#555', margin: '0 0 24px', fontSize: '14px' }}>
               {search ? `Try a different search term, or check similar products below` : 'Try a different category or check trending items'}
@@ -610,8 +375,8 @@ Order ID: #${orderId}`
               <div style={{ marginBottom: '32px', paddingTop: '24px', borderTop: '1px solid #222' }}>
                 <p style={{ color: '#888', fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', marginBottom: '16px' }}>💡 Tips</p>
                 <ul style={{ color: '#666', fontSize: '13px', margin: 0, paddingLeft: '20px', textAlign: 'left', maxWidth: '300px', marginLeft: 'auto', marginRight: 'auto' }}>
-                  <li>Check spelling:</li>
-                  <li>Try broader terms: </li>
+                  <li>Check spelling: "laptop" vs "lapto"</li>
+                  <li>Try broader terms: "laptop" instead of "gaming laptop"</li>
                   <li>Browse by category instead</li>
                   <li>Check price & availability filters</li>
                 </ul>
@@ -647,34 +412,16 @@ Order ID: #${orderId}`
             <p style={{ color: '#555', fontSize: '13px', marginBottom: '20px' }}>{filtered.length} products available</p>
             <div className="rt-products" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
               {filtered.map(p => (
-                <div key={p.id}
-                  style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222', position: 'relative' }}>
-                  <div onClick={() => navigate(`/store/${p.sellerSlug}`)} style={{ cursor: 'pointer', position: 'relative' }}>
-                    {userId && p.sellerId === userId && (
-                      <div style={{ position: 'absolute', top: '8px', left: '8px', background: green, color: '#000', fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '999px', zIndex: 2 }}>
-                        Yours
-                      </div>
-                    )}
-                    <img src={p.imageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
-                      style={{ width: '100%', height: '160px', objectFit: 'cover', opacity: p.outOfStock ? 0.5 : 1 }} />
-                    <div style={{ padding: '12px' }}>
-                      <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: '#fff' }}>{p.name}</p>
-                      <p style={{ margin: '0 0 8px', color: '#555', fontSize: '12px' }}>{p.businessName}</p>
-                      <p style={{ margin: '0 0 10px', fontWeight: '800', color: green, fontSize: '14px' }}>UGX {p.price}</p>
-                    </div>
+                <div key={p.id} onClick={() => navigate(`/store/${p.sellerSlug}`)}
+                  style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222', cursor: 'pointer', position: 'relative' }}>
+                  <img src={p.imageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
+                    style={{ width: '100%', height: '160px', objectFit: 'cover', opacity: p.outOfStock ? 0.5 : 1 }} />
+                  <div style={{ padding: '12px' }}>
+                    <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: '#fff' }}>{p.name}</p>
+                    <p style={{ margin: '0 0 8px', color: '#555', fontSize: '12px' }}>{p.businessName}</p>
+                    <p style={{ margin: 0, fontWeight: '800', color: green, fontSize: '14px' }}>UGX {p.price}</p>
                   </div>
-                  {!p.outOfStock ? (
-                    <div style={{ padding: '0 12px 12px', display: 'flex', gap: '8px' }}>
-                      <button onClick={(e) => { e.stopPropagation(); if (auth.currentUser && p.sellerId === auth.currentUser.uid) { showFeedback(notify.messageSelfBlock, 'error'); return; } setMessageProduct(p); }}
-                        style={{ flex: 1, padding: '10px', background: 'transparent', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '12px' }}>
-                        💬 Message
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); setOrderProduct(p); }}
-                        style={{ flex: 1, padding: '10px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' }}>
-                        Buy Now
-                      </button>
-                    </div>
-                  ) : (
+                  {p.outOfStock && (
                     <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '700', fontSize: '13px', textAlign: 'center', padding: '8px' }}>
                       Out of Stock
                     </div>
@@ -685,128 +432,6 @@ Order ID: #${orderId}`
           </>
         )}
       </div>
-
-      {/* Feedback Toast */}
-      {feedbackVisible && (
-        <div style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 2000, maxWidth: '400px', width: '90%', padding: '14px 16px', borderRadius: '14px', border: `1px solid ${feedbackType === 'success' ? '#2f8' : '#f55'}`, background: feedbackType === 'success' ? '#122a0d' : '#2a0d0d', color: '#fff', fontSize: '14px', textAlign: 'center' }}>
-          {feedbackMessage}
-        </div>
-      )}
-
-      {/* Message Modal */}
-      {messageProduct && (
-        <div className="rt-modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
-          <div className="rt-modal-box" style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222' }}>
-            <h3 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: '800', color: '#fff' }}>
-              Message {messageProduct.businessName}
-            </h3>
-            <p style={{ margin: '0 0 4px', color: '#888', fontSize: '14px' }}>
-              About: {messageProduct.name}
-            </p>
-            <p style={{ margin: '0 0 24px', color: green, fontSize: '14px', fontWeight: '700' }}>
-              UGX {messageProduct.price}
-            </p>
-            <textarea
-              placeholder="Hi, is this still available? I'd like to know more..."
-              value={messageText}
-              onChange={e => setMessageText(e.target.value)}
-              style={{ width: '100%', minHeight: '120px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '20px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }}
-            />
-            <button onClick={handleSendMessage} disabled={sendingMessage}
-              style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: sendingMessage ? 'not-allowed' : 'pointer', fontSize: '15px', marginBottom: '12px', opacity: sendingMessage ? 0.6 : 1 }}>
-              {sendingMessage ? 'Sending...' : 'Send Message'}
-            </button>
-            <button onClick={() => { setMessageProduct(null); setMessageText(''); }}
-              style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Signup Sheet Modal */}
-      {showSignupSheet && (
-        <div className="rt-modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1001, padding: '20px' }}>
-          <div className="rt-modal-box" style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '380px', border: '1px solid #222', textAlign: 'center' }}>
-            <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: '800', color: '#fff' }}>Join Rachett</h3>
-            <p style={{ margin: '0 0 24px', color: '#888', fontSize: '14px' }}>Sign up to continue</p>
-
-            {/* Google */}
-            <button onClick={() => handleSocialSignIn(new GoogleAuthProvider(), 'Google')} disabled={!!signupLoading}
-              style={{ width: '100%', padding: '14px', background: '#fff', color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: signupLoading ? 'not-allowed' : 'pointer', fontSize: '14px', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: signupLoading && signupLoading !== 'Google' ? 0.5 : 1 }}>
-              <img src="https://www.google.com/favicon.ico" width="18" alt="Google" />
-              {signupLoading === 'Google' ? 'Signing in...' : 'Continue with Google'}
-            </button>
-
-            {/* Apple */}
-            <button onClick={() => handleSocialSignIn(new OAuthProvider('apple.com'), 'Apple')} disabled={!!signupLoading}
-              style={{ width: '100%', padding: '14px', background: '#000', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '700', cursor: signupLoading ? 'not-allowed' : 'pointer', fontSize: '14px', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: signupLoading && signupLoading !== 'Apple' ? 0.5 : 1 }}>
-              <span style={{ fontSize: '18px' }}></span>
-              {signupLoading === 'Apple' ? 'Signing in...' : 'Continue with Apple'}
-            </button>
-
-            {/* Facebook */}
-            <button onClick={() => handleSocialSignIn(new FacebookAuthProvider(), 'Facebook')} disabled={!!signupLoading}
-              style={{ width: '100%', padding: '14px', background: '#4267B2', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: signupLoading ? 'not-allowed' : 'pointer', fontSize: '14px', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: signupLoading && signupLoading !== 'Facebook' ? 0.5 : 1 }}>
-              <span style={{ fontSize: '18px' }}>f</span>
-              {signupLoading === 'Facebook' ? 'Signing in...' : 'Continue with Facebook'}
-            </button>
-
-            <p style={{ margin: '12px 0', color: '#666', fontSize: '12px' }}>Phone sign-up coming soon</p>
-
-            <button onClick={() => setShowSignupSheet(false)}
-              style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Order Modal */}
-      {orderProduct && (
-        <div className="rt-modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
-          <div className="rt-modal-box" style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222', textAlign: 'center' }}>
-            {orderSuccess ? (
-              <div>
-                <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '28px', color: '#000', fontWeight: '800' }}>
-                  ✓
-                </div>
-                <h3 style={{ color: '#fff', fontWeight: '800', fontSize: '18px', margin: '0 0 8px' }}>Order Sent!</h3>
-                <p style={{ color: '#888', fontSize: '14px', margin: 0 }}>Opening WhatsApp...</p>
-              </div>
-            ) : (
-              <>
-                <h3 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: '800', color: '#fff', textAlign: 'left' }}>
-                  Order {orderProduct.name}
-                </h3>
-                <p style={{ margin: '0 0 24px', color: green, fontSize: '14px', fontWeight: '700', textAlign: 'left' }}>
-                  UGX {orderProduct.price} each — {orderProduct.businessName}
-                </p>
-                <input placeholder="Your name" value={buyerName} onChange={e => setBuyerName(e.target.value)}
-                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
-                <input placeholder="Quantity" value={quantity} onChange={e => setQuantity(e.target.value)} type="number" min="1"
-                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '24px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
-                <input placeholder="Delivery area e.g. Nakawa, Kampala" value={deliveryArea} onChange={e => setDeliveryArea(e.target.value)}
-                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '24px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
-                <textarea placeholder="Write a message to the seller (optional)" value={message} onChange={e => setMessage(e.target.value)}
-                  style={{ width: '100%', minHeight: '100px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '24px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
-                <button onClick={handleOrder}
-                  style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
-                  Send Order on WhatsApp
-                </button>
-                <a href={`tel:+${orderProduct.sellerWhatsapp || ''}`}
-                  style={{ display: 'block', width: '100%', padding: '14px', background: 'transparent', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', marginBottom: '12px', textAlign: 'center', textDecoration: 'none', boxSizing: 'border-box' }}>
-                  📞 Call Seller
-                </a>
-                <button onClick={() => { setOrderProduct(null); setBuyerName(''); setQuantity('1'); setDeliveryArea(''); setMessage(''); }}
-                  style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
-                  Cancel
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
