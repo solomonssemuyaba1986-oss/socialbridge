@@ -96,15 +96,7 @@ function Dashboard() {
 
   const totalMessageUnread = unreadMessagesCount + unreadSellerConvoCount + unreadBuyerConvoCount
 
-  // Play notification sound when messages/conversations arrive
-  const prevMessageTotal = useRef<number | null>(null)
-  useEffect(() => {
-    if (prevMessageTotal.current !== null && totalMessageUnread > prevMessageTotal.current) {
-      playNewOrderAlert()
-    }
-    prevMessageTotal.current = totalMessageUnread
-  }, [totalMessageUnread])
-
+  // Inbox notification sounds return in the native mobile app.
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) { navigate('/'); return }
