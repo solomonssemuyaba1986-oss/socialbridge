@@ -1,4 +1,4 @@
-# React + TypeScript + Vite
+thos is a project on social commerce called rachett created by solomon creflo. its main goal is to work as on orchestrator and social commerce brain or operating system.# React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 ### Deploying Firestore rules
