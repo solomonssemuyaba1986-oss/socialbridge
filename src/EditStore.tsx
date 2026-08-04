@@ -352,6 +352,16 @@ function EditStore() {
         <button onClick={handleSave} disabled={loading || uploadingId} style={{ padding: 10 }}>
           {loading || uploadingId ? 'Saving...' : 'Save'}
         </button>
+
+        <button onClick={() => {
+          if (window.confirm('Are you sure you want to sign out from Rachett?')) {
+            auth.signOut()
+            navigate('/')
+          }
+        }}
+          style={{ width: '100%', padding: '10px', marginTop: '16px', background: '#ff4444', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: '600', cursor: 'pointer', fontSize: '14px' }}>
+          Sign Out
+        </button>
       </div>
     </div>
   )
