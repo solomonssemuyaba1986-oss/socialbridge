@@ -155,7 +155,7 @@ function Dashboard() {
         <div style={{ display: 'grid', gap: '6px' }}>
           {navItems.map(item => {
             const active = location.pathname === item.path || (item.path === '/dashboard' && location.pathname === '/dashboard')
-            const showBadge = item.label === 'Orders' ? orders.filter(o => o.read !== true).length : item.label === 'Inbox' ? totalMessageUnread : 0
+            const showBadge = item.label === 'Orders' ? orders.filter(o => o.status === 'pending' || !o.status).length : item.label === 'Inbox' ? totalMessageUnread : 0
             return (
               <button key={item.path + item.label} onClick={() => navigate(item.path)}
                 style={{
