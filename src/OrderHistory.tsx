@@ -46,7 +46,7 @@ function OrderHistory() {
 
   const updateOrderStatus = async (orderId: string, status: string) => {
     if (!userId) return
-    await updateDoc(doc(db, 'sellers', userId, 'orders', orderId), { status })
+    await updateDoc(doc(db, 'sellers', userId, 'orders', orderId), { status, read: true })
   }
 
   const navItems = [
