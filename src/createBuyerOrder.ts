@@ -8,10 +8,14 @@ export type BuyerOrderFields = {
   productPrice: string
   quantity: string
   deliveryArea: string
-  status: 'pending'
+  status: 'pending' | 'paid' | 'awaiting_payment'
   read: false
   sourcePlatform: string
   createdAt: Date
+  paymentMethod?: string
+  transactionId?: string
+  flwRef?: string
+  paymentStatus?: string
 }
 
 /** One Firestore write — buyers are not allowed to patch orders after create (see firestore.rules). */
