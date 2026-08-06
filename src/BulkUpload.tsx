@@ -14,8 +14,8 @@ interface ProductDraft {
 }
 
 const green = '#adff2f'
-const CLOUD_NAME = 'dzudmmuxg'
-const UPLOAD_PRESET = 'p2z65zrv'
+const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'dzudmmuxg'
+const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'p2z65zrv'
 
 function BulkUpload({ sellerId, onDone }: { sellerId: string, onDone: () => void }) {
   const [drafts, setDrafts] = useState<ProductDraft[]>([])
