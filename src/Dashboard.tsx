@@ -96,6 +96,16 @@ function Dashboard() {
 
   const totalMessageUnread = unreadMessagesCount + unreadSellerConvoCount + unreadBuyerConvoCount
 
+  // Spotlight — dim screen and focus on orders badge when new orders exist
+  const [showSpotlight, setShowSpotlight] = useState(false)
+  useEffect(() => {
+    if (unreadCount > 0) {
+      setShowSpotlight(true)
+      const timer = window.setTimeout(() => setShowSpotlight(false), 3000)
+      return () => window.clearTimeout(timer)
+    }
+  }, [unreadCount])
+
   // Inbox notification sounds return in the native mobile app.
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -119,14 +129,7 @@ function Dashboard() {
     return () => unsubscribe()
   }, [navigate])
 
-  const markFulfilled = async (orderId: string) => {
-    await updateDoc(doc(db, 'sellers', userId, 'orders', orderId), { status: 'fulfilled', read: true })
-  }
-
-  const updateOrderStatus = async (orderId: string, status: string) => {
-    await updateDoc(doc(db, 'sellers', userId, 'orders', orderId), { status, read: true })
-  }
-
+  // Status update functions moved to Orders page — dashboard is view-only
   if (loading) return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p style={{ color: '#555', fontFamily: 'sans-serif' }}>Loading...</p>
@@ -144,7 +147,28 @@ function Dashboard() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', display: 'flex' }}>
-      <div style={{ position: 'fixed', left: 0, top: 0, bottom: 0, width: 260, background: '#070707', borderRight: '1px solid #111', padding: '28px 16px', display: 'flex', flexDirection: 'column', gap: '28px', zIndex: 20 }}>
+      {/* Spotlight dark overlay */}
+      {showSpotlight && (
+        <div
+          onClick={() => setShowSpotlight(false)}
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.85)',
+            zIndex: 30,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer',
+            animation: 'rachettFadeIn 0.5s ease',
+          }}>
+          <p style={{ color: '#888', fontSize: '14px', textAlign: 'center', position: 'absolute', bottom: '20%' }}>
+            Tap anywhere to dismiss
+          </p>
+          <style>{`
+            @keyframes rachettFadeIn { from { opacity: 0 } to { opacity: 1 } }
+            @keyframes rachettPulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(173,255,47,0.6); } 50% { transform: scale(1.15); box-shadow: 0 0 0 8px rgba(173,255,47,0.2); } }
+          `}</style>
+        </div>
+      )}
+      <div style={{ position: 'fixed', left: 0, top: 0, bottom: 0, width: 260, background: '#070707', borderRight: '1px solid #111', padding: '28px 16px', display: 'flex', flexDirection: 'column', gap: '28px', zIndex: showSpotlight ? 40 : 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
           <div style={{ background: green, width: 34, height: 34, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16, color: '#000' }}>R</div>
           <div>
@@ -164,7 +188,7 @@ function Dashboard() {
                 <span>{item.icon}</span>
                 <span style={{ flex: 1 }}>{item.label}</span>
                 {showBadge > 0 ? (
-                  <span style={{ minWidth: '24px', height: '24px', borderRadius: '999px', background: green, color: '#000', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 900, padding: '0 6px', boxShadow: `0 0 0 2px rgba(173,255,47,0.2)` }}>
+                  <span style={{ minWidth: '24px', height: '24px', borderRadius: '999px', background: green, color: '#000', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 900, padding: '0 6px', boxShadow: `0 0 0 2px rgba(173,255,47,0.2)`, animation: showSpotlight ? 'rachettPulse 0.8s ease-in-out infinite' : 'none' }}>
                     {showBadge}
                   </span>
                 ) : null}
@@ -321,10 +345,11 @@ function Dashboard() {
             <p style={{ color: '#444', margin: 0 }}>No pending orders.</p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
-            {pendingOrders.map(o => (
-  <div key={o.id} style={{ background: '#1a1a1a', borderRadius: '12px', padding: '16px 20px', border: '1px solid #222' }}>
-    <div className="rt-order-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
+            {pendingOrders.slice(0, 3).map(o => (
+  <div key={o.id} onClick={() => navigate('/orders')}
+    style={{ background: '#1a1a1a', borderRadius: '12px', padding: '16px 20px', border: '1px solid #222', cursor: 'pointer' }}>
+    <div className="rt-order-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
       <div>
         <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '15px', color: '#fff' }}>{o.buyerName}</p>
         <p style={{ margin: '0 0 4px', color: '#888', fontSize: '13px' }}>{o.productName} × {o.quantity}</p>
@@ -336,24 +361,15 @@ function Dashboard() {
         {o.createdAt?.toDate?.()?.toLocaleDateString() || 'Just now'}
       </p>
     </div>
-
-    {/* Status Buttons */}
-    <div className="rt-order-actions" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
-      <button onClick={() => markFulfilled(o.id)}
-        style={{ padding: '8px', background: green, color: '#000', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '11px', fontWeight: '700' }}>
-        ✓ Confirm
-      </button>
-      <button onClick={() => updateOrderStatus(o.id, 'out_of_stock')}
-        style={{ padding: '8px', background: 'transparent', color: '#ff4444', border: '1px solid #ff4444', borderRadius: '8px', cursor: 'pointer', fontSize: '11px', fontWeight: '600' }}>
-        Out of Stock
-      </button>
-      <button onClick={() => updateOrderStatus(o.id, 'needs_details')}
-        style={{ padding: '8px', background: 'transparent', color: '#888', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer', fontSize: '11px', fontWeight: '600' }}>
-        Need Details
-      </button>
-    </div>
+    <span style={{ color: '#555', fontSize: '12px' }}>Tap to manage →</span>
   </div>
             ))}
+            {pendingOrders.length > 3 && (
+              <button onClick={() => navigate('/orders')}
+                style={{ padding: '12px', background: 'transparent', color: green, border: `1px solid ${green}`, borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '700' }}>
+                🟢 View all {pendingOrders.length} pending orders →
+              </button>
+            )}
           </div>
         )}
 
