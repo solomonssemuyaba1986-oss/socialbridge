@@ -3,7 +3,7 @@ import { collection, getDocs, query } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebase'
 import { useNavigate } from 'react-router-dom'
-import { track } from './tracking'
+import { track, detectSource } from './tracking'
 import { getMainCategories } from './categories'
 import Fuse from 'fuse.js'
 
@@ -87,7 +87,7 @@ function BrowsePage() {
   const handleSearchKeyDown = (e: { key: string }) => {
     if (e.key === 'Enter') {
       saveRecentSearch(search)
-      track('search_performed', userId || null, 'Web', { query: search.trim() })
+      track('search_performed', userId || null, detectSource(), { query: search.trim() })
     }
   }
 
@@ -359,7 +359,7 @@ function BrowsePage() {
       {/* Categories */}
       <div className="rt-filters" style={{ padding: '20px 24px', borderBottom: '1px solid #1a1a1a', display: 'flex', gap: '8px', overflowX: 'auto' }}>
         {categories.map(cat => (
-          <button key={cat} onClick={() => { track('category_browsed', userId || null, 'Web', { category: cat }); setActiveCategory(cat) }}
+          <button key={cat} onClick={() => { track('category_browsed', userId || null, detectSource(), { category: cat }); setActiveCategory(cat) }}
             style={{ padding: '8px 18px', borderRadius: '20px', border: `1px solid ${activeCategory === cat ? green : '#333'}`, background: activeCategory === cat ? green : 'transparent', color: activeCategory === cat ? '#000' : '#aaa', fontWeight: activeCategory === cat ? '700' : '500', cursor: 'pointer', fontSize: '14px', whiteSpace: 'nowrap' }}>
             {cat}
           </button>
@@ -421,7 +421,7 @@ function BrowsePage() {
                             {filtered.map(p => (
                 <div key={p.id}
                   style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-                  <div onClick={() => { track('product_viewed', userId, 'Web', { productId: p.id, productName: p.name, sellerSlug: p.sellerSlug }); navigate(`/store/${p.sellerSlug}`) }} style={{ cursor: 'pointer' }}>
+                  <div onClick={() => { track('product_viewed', userId, detectSource(), { productId: p.id, productName: p.name, sellerSlug: p.sellerSlug }); navigate(`/store/${p.sellerSlug}`) }} style={{ cursor: 'pointer' }}>
                     <img src={p.imageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
                       style={{ width: '100%', height: '160px', objectFit: 'cover', opacity: p.outOfStock ? 0.5 : 1 }} />
                     <div style={{ padding: '12px' }}>
@@ -436,7 +436,7 @@ function BrowsePage() {
                         style={{ flex: 1, padding: '8px', background: '#222', color: green, border: `1px solid ${green}`, borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' }}>
                         Message
                       </button>
-                      <button onClick={(e) => { e.stopPropagation(); track('product_viewed', userId, 'Web', { productId: p.id, productName: p.name, sellerSlug: p.sellerSlug }); navigate(`/store/${p.sellerSlug}?productId=${p.id}`) }}
+                      <button onClick={(e) => { e.stopPropagation(); track('product_viewed', userId, detectSource(), { productId: p.id, productName: p.name, sellerSlug: p.sellerSlug }); navigate(`/store/${p.sellerSlug}?productId=${p.id}`) }}
                         style={{ flex: 1, padding: '8px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' }}>
                         Buy Now
                       </button>
