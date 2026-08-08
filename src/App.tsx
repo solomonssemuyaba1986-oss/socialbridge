@@ -14,6 +14,7 @@ import Inbox from './Inbox.tsx'
 import OrderHistory from './OrderHistory.tsx'
 import EditStore from './EditStore.tsx'
 import ProductsPage from './ProductsPage.tsx'
+import AnalyticsPage from './AnalyticsPage.tsx'
 import TopNav from './TopNav.tsx'
 import Splash from './Splash.tsx'
 
@@ -91,6 +92,7 @@ function App() {
       <Route path="/inbox" element={signedIn ? <Inbox /> : <Navigate to="/" />} />
       <Route path="/my-chats" element={<Navigate to="/inbox" />} />
       <Route path="/orders" element={signedIn ? <OrderHistory /> : <Navigate to="/" />} />
+      <Route path="/analytics" element={signedIn ? <AnalyticsPage /> : <Navigate to="/" />} />
       <Route path="/edit-store" element={signedIn ? <EditStore /> : <Navigate to="/" />} />
       </Routes>
     </>
