@@ -166,67 +166,55 @@ function AnalyticsPage() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) { navigate('/'); return }
-      try {
-        // Fetch orders
-        const ordersSnap = await getDocs(collection(db, 'sellers', user.uid, 'orders'))
-        const platformMap = new Map<string, { orders: number; messages: number }>()
-        let pendingCount = 0
-        const buyerIds = new Set<string>()
-        const allOrders: { buyerName: string; productName: string; createdAt: Date | null }[] = []
-        const allActivityOrders: { buyerName: string; productName: string; createdAt: Date | null }[] = []
+      const platformMap = new Map<string, { orders: number; messages: number }>()
+      let pendingCount = 0
+      const buyerIds = new Set<string>()
+      const allOrders: { buyerName: string; productName: string; createdAt: Date | null }[] = []
+      const allActivityOrders: { buyerName: string; productName: string; createdAt: Date | null }[] = []
+      let unreadCount = 0
+      const allMessages: { senderName: string; text: string; createdAt: Date | null }[] = []
+      let totalV = 0
+      const visitCounts = new Map<string, number>()
+      const allVisits: { createdAt: Date | null; sourcePlatform: string }[] = []
 
+      // Fetch orders
+      try {
+        const ordersSnap = await getDocs(collection(db, 'sellers', user.uid, 'orders'))
         ordersSnap.docs.forEach(doc => {
           const data = doc.data()
           const platform = (data.sourcePlatform || 'Web').toLowerCase()
-
           if (data.status === 'fulfilled') {
             const existing = platformMap.get(platform) || { orders: 0, messages: 0 }
             existing.orders += 1
             platformMap.set(platform, existing)
             if (data.buyerUid) buyerIds.add(data.buyerUid)
             const ts = data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt instanceof Date ? data.createdAt : null
-            allOrders.push({
-              buyerName: data.buyerName || 'Buyer',
-              productName: data.productName || '',
-              createdAt: ts,
-            })
+            allOrders.push({ buyerName: data.buyerName || 'Buyer', productName: data.productName || '', createdAt: ts })
           }
-
           if (data.status === 'pending' || !data.status) pendingCount++
-
           const ts2 = data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt instanceof Date ? data.createdAt : null
-          allActivityOrders.push({
-            buyerName: data.buyerName || 'Buyer',
-            productName: data.productName || '',
-            createdAt: ts2,
-          })
-        })        // Fetch messages
-        const messagesSnap = await getDocs(collection(db, 'sellers', user.uid, 'messages'))
-        let unreadCount = 0
-        const allMessages: { senderName: string; text: string; createdAt: Date | null }[] = []
+          allActivityOrders.push({ buyerName: data.buyerName || 'Buyer', productName: data.productName || '', createdAt: ts2 })
+        })
+      } catch (e) { console.error('Orders fetch failed:', e) }
 
+      // Fetch messages
+      try {
+        const messagesSnap = await getDocs(collection(db, 'sellers', user.uid, 'messages'))
         messagesSnap.docs.forEach(doc => {
           const data = doc.data()
           const platform = (data.sourcePlatform || 'Web').toLowerCase()
           const existing = platformMap.get(platform) || { orders: 0, messages: 0 }
           existing.messages += 1
           platformMap.set(platform, existing)
-
           if (data.read === false) unreadCount++
-
           const ts = data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt instanceof Date ? data.createdAt : null
-          allMessages.push({
-            senderName: data.senderName || 'Buyer',
-            text: data.text || '',
-            createdAt: ts,
-          })
+          allMessages.push({ senderName: data.senderName || 'Buyer', text: data.text || '', createdAt: ts })
         })
+      } catch (e) { console.error('Messages fetch failed:', e) }
 
-        // Fetch visits
+      // Fetch visits
+      try {
         const visitsSnap = await getDocs(collection(db, 'sellers', user.uid, 'visits'))
-        let totalV = 0
-        const visitCounts = new Map<string, number>()
-        const allVisits: { createdAt: Date | null; sourcePlatform: string }[] = []
         visitsSnap.docs.forEach(doc => {
           const data = doc.data()
           const platform = (data.sourcePlatform || 'Web').toLowerCase()
@@ -235,74 +223,51 @@ function AnalyticsPage() {
           const ts = data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt instanceof Date ? data.createdAt : null
           allVisits.push({ createdAt: ts, sourcePlatform: platform })
         })
+      } catch (e) { console.error('Visits fetch failed:', e) }
 
-        const stats: PlatformStat[] = []
-        let totalO = 0
-        let totalM = 0
+      // Compute stats
+      const stats: PlatformStat[] = []
+      let totalO = 0
 
-        platformMap.forEach((counts, platform) => {
+      platformMap.forEach((counts, platform) => {
+        const meta = platformMeta(platform)
+        const visits = visitCounts.get(platform) || 0
+        stats.push({ platform: meta.label, icon: meta.icon, orders: counts.orders, messages: counts.messages, visits, total: counts.orders + counts.messages })
+        totalO += counts.orders
+      })
+
+      visitCounts.forEach((visits, platform) => {
+        if (!platformMap.has(platform)) {
           const meta = platformMeta(platform)
-          const visits = visitCounts.get(platform) || 0
-          stats.push({
-            platform: meta.label,
-            icon: meta.icon,
-            orders: counts.orders,
-            messages: counts.messages,
-            visits,
-            total: counts.orders + counts.messages,
-          })
-          totalO += counts.orders
-          totalM += counts.messages
-        })
-
-        // Include platforms that only have visits (no orders/messages)
-        visitCounts.forEach((visits, platform) => {
-          if (!platformMap.has(platform)) {
-            const meta = platformMeta(platform)
-            stats.push({
-              platform: meta.label,
-              icon: meta.icon,
-              orders: 0,
-              messages: 0,
-              visits,
-              total: 0,
-            })
-          }
-        })
-
-        stats.sort((a, b) => b.visits - a.visits || b.total - a.total)
-        setPlatformStats(stats)
-        setTotalOrders(totalO)
-        setTotalVisits(totalV)
-        setUnreadMessages(unreadCount)
-        setPendingOrders(pendingCount)
-        setRepeatBuyers(totalO - buyerIds.size)
-
-        // Build recent activity feed (last 5 items, combined, sorted by time)
-        const recentRaw: { type: 'order' | 'message'; from: string; detail: string; ts: number }[] = []
-        for (const o of allActivityOrders) {
-          if (o.createdAt) recentRaw.push({ type: 'order', from: o.buyerName, detail: `Ordered ${o.productName}`, ts: o.createdAt.getTime() })
+          stats.push({ platform: meta.label, icon: meta.icon, orders: 0, messages: 0, visits, total: 0 })
         }
-        for (const m of allMessages) {
-          if (m.createdAt) recentRaw.push({ type: 'message', from: m.senderName, detail: m.text.slice(0, 80) + (m.text.length > 80 ? '...' : ''), ts: m.createdAt.getTime() })
-        }
-        recentRaw.sort((a, b) => b.ts - a.ts)
-        const recent = recentRaw.slice(0, 5).map(r => ({
-          type: r.type,
-          from: r.from,
-          detail: r.detail,
-          time: timeAgo(new Date(r.ts)),
-        }))
-        setRecentActivity(recent)
+      })
 
-        // Compute weekly report
-        const report = computeWeeklyReport(allVisits, allOrders.map(o => ({ createdAt: o.createdAt })))
-        setWeeklyReport(report)
-      } catch (err) {
-        console.error('Analytics load error:', err)
-      } finally {
-        setLoading(false)
+      stats.sort((a, b) => b.visits - a.visits || b.total - a.total)
+      setPlatformStats(stats)
+      setTotalOrders(totalO)
+      setTotalVisits(totalV)
+      setUnreadMessages(unreadCount)
+      setPendingOrders(pendingCount)
+      setRepeatBuyers(totalO - buyerIds.size)
+
+      // Build recent activity
+      const recentRaw: { type: 'order' | 'message'; from: string; detail: string; ts: number }[] = []
+      for (const o of allActivityOrders) {
+        if (o.createdAt) recentRaw.push({ type: 'order', from: o.buyerName, detail: `Ordered ${o.productName}`, ts: o.createdAt.getTime() })
       }
+      for (const m of allMessages) {
+        if (m.createdAt) recentRaw.push({ type: 'message', from: m.senderName, detail: m.text.slice(0, 80) + (m.text.length > 80 ? '...' : ''), ts: m.createdAt.getTime() })
+      }
+      recentRaw.sort((a, b) => b.ts - a.ts)
+      const recent = recentRaw.slice(0, 5).map(r => ({ type: r.type, from: r.from, detail: r.detail, time: timeAgo(new Date(r.ts)) }))
+      setRecentActivity(recent)
+
+      // Compute weekly report
+      const report = computeWeeklyReport(allVisits, allOrders.map(o => ({ createdAt: o.createdAt })))
+      setWeeklyReport(report)
+      setLoading(false)
+
     })
     return () => unsubscribe()
   }, [navigate])
