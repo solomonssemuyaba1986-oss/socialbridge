@@ -389,6 +389,14 @@ function StorePage() {
           console.log('StorePage: found seller doc', docData.id, docData.data())
           setSeller(docData.data() as Seller)
           setSellerId(docData.id)
+          // Record visit (skip if seller viewing own store)
+          if (auth.currentUser?.uid !== docData.id) {
+            const platform = detectPlatform(searchParams)
+            addDoc(collection(db, 'sellers', docData.id, 'visits'), {
+              sourcePlatform: platform,
+              createdAt: new Date(),
+            }).catch(() => {}) // fire-and-forget
+          }
           await fetchProducts(docData.id)
           const unsubscribe = onAuthStateChanged(auth, (user) => {
             if (user && user.uid === docData.id) setIsOwner(true)
