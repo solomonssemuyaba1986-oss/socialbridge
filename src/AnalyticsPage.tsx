@@ -13,6 +13,7 @@ interface PlatformStat {
   icon: string
   orders: number
   messages: number
+  visits: number
   total: number
 }
 
@@ -56,6 +57,7 @@ function AnalyticsPage() {
   const [platformStats, setPlatformStats] = useState<PlatformStat[]>([])
   const [totalOrders, setTotalOrders] = useState(0)
   const [totalMessages, setTotalMessages] = useState(0)
+  const [totalVisits, setTotalVisits] = useState(0)
   const [unreadMessages, setUnreadMessages] = useState(0)
   const [pendingOrders, setPendingOrders] = useState(0)
   const [repeatBuyers, setRepeatBuyers] = useState(0)
@@ -112,27 +114,55 @@ function AnalyticsPage() {
           })
         })
 
+        // Fetch visits
+        const visitsSnap = await getDocs(collection(db, 'sellers', user.uid, 'visits'))
+        let totalV = 0
+        const visitCounts = new Map<string, number>()
+        visitsSnap.docs.forEach(doc => {
+          const platform = (doc.data().sourcePlatform || 'Web').toLowerCase()
+          visitCounts.set(platform, (visitCounts.get(platform) || 0) + 1)
+          totalV++
+        })
+
         const stats: PlatformStat[] = []
         let totalO = 0
         let totalM = 0
 
         platformMap.forEach((counts, platform) => {
           const meta = platformMeta(platform)
+          const visits = visitCounts.get(platform) || 0
           stats.push({
             platform: meta.label,
             icon: meta.icon,
             orders: counts.orders,
             messages: counts.messages,
+            visits,
             total: counts.orders + counts.messages,
           })
           totalO += counts.orders
           totalM += counts.messages
         })
 
-        stats.sort((a, b) => b.total - a.total)
+        // Include platforms that only have visits (no orders/messages)
+        visitCounts.forEach((visits, platform) => {
+          if (!platformMap.has(platform)) {
+            const meta = platformMeta(platform)
+            stats.push({
+              platform: meta.label,
+              icon: meta.icon,
+              orders: 0,
+              messages: 0,
+              visits,
+              total: 0,
+            })
+          }
+        })
+
+        stats.sort((a, b) => b.visits - a.visits || b.total - a.total)
         setPlatformStats(stats)
         setTotalOrders(totalO)
         setTotalMessages(totalM)
+        setTotalVisits(totalV)
         setUnreadMessages(unreadCount)
         setPendingOrders(pendingCount)
         setRepeatBuyers(totalO - buyerIds.size)
@@ -249,18 +279,18 @@ function AnalyticsPage() {
         {/* Insight Cards */}
         <div className="rt-insights" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '24px' }}>
           <div style={{ background: '#1a1a1a', borderRadius: '12px', padding: '16px', border: '1px solid #222', textAlign: 'center' }}>
-            <p style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 2px', color: green }}>{totalOrders + totalMessages}</p>
-            <p style={{ fontSize: '11px', color: '#888', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Leads</p>
+            <p style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 2px', color: green }}>{totalVisits}</p>
+            <p style={{ fontSize: '11px', color: '#888', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Visits</p>
           </div>
           <div style={{ background: '#1a1a1a', borderRadius: '12px', padding: '16px', border: '1px solid #222', textAlign: 'center' }}>
             <p style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 2px', color: green }}>{totalOrders}</p>
             <p style={{ fontSize: '11px', color: '#888', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Orders</p>
           </div>
           <div style={{ background: '#1a1a1a', borderRadius: '12px', padding: '16px', border: '1px solid #222', textAlign: 'center' }}>
-            <p style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 2px', color: totalMessages > 0 && totalOrders > 0 ? (totalOrders / totalMessages >= 0.3 ? green : amber) : '#555' }}>
-              {totalMessages > 0 ? `1:${Math.max(1, Math.round(totalMessages / Math.max(1, totalOrders)))}` : '—'}
+            <p style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 2px', color: totalVisits > 0 ? (totalOrders / totalVisits >= 0.03 ? green : amber) : '#555' }}>
+              {totalVisits > 0 ? `${((totalOrders / totalVisits) * 100).toFixed(1)}%` : '—'}
             </p>
-            <p style={{ fontSize: '11px', color: '#888', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Msg → Order</p>
+            <p style={{ fontSize: '11px', color: '#888', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Conversion</p>
           </div>
           <div style={{ background: '#1a1a1a', borderRadius: '12px', padding: '16px', border: '1px solid #222', textAlign: 'center' }}>
             <p style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 2px', color: repeatBuyers > 0 ? green : '#555' }}>{repeatBuyers}</p>
@@ -268,49 +298,37 @@ function AnalyticsPage() {
           </div>
         </div>
 
-        {/* Top Platform Highlight */}
-        {platformStats.length > 0 && (
-          <div style={{ background: '#1a1a1a', borderRadius: '12px', padding: '16px 20px', border: '1px solid #222', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span style={{ fontSize: '24px' }}>{platformStats[0].icon}</span>
-            <div>
-              <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#fff' }}>
-                {platformStats[0].platform} is your #1 channel
-              </p>
-              <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#888' }}>
-                {platformStats[0].total} of {(totalOrders + totalMessages)} leads · {Math.round((platformStats[0].total / (totalOrders + totalMessages)) * 100)}%
-              </p>
-            </div>
-          </div>
-        )}
-
         {/* Platform Breakdown */}
-        <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px' }}>📊 Platform Breakdown</h2>
+        <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px' }}>📊 Where customers come from</h2>
         {platformStats.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px', background: '#1a1a1a', borderRadius: '12px', border: '1px dashed #333', marginBottom: '32px' }}>
             <p style={{ color: '#444', margin: 0 }}>No data yet. Share your store link to start tracking.</p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
-            {platformStats.map(stat => {
-              const meta = platformMeta(stat.platform)
-              const maxTotal = platformStats[0]?.total || 1
-              const barWidth = Math.round((stat.total / maxTotal) * 100)
+          <div style={{ marginBottom: '32px', background: '#1a1a1a', borderRadius: '12px', border: '1px solid #222', overflow: 'hidden' }}>
+            {/* Table Header */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: '8px', padding: '12px 16px', background: '#111', borderBottom: '1px solid #222', fontSize: '12px', color: '#666', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '600' }}>
+              <span>Source</span>
+              <span style={{ textAlign: 'center' }}>Visitors</span>
+              <span style={{ textAlign: 'center' }}>Orders</span>
+              <span style={{ textAlign: 'center' }}>Conversion</span>
+            </div>
+            {/* Table Rows */}
+            {platformStats.map((stat, i) => {
+              const convRate = stat.visits > 0 ? ((stat.orders / stat.visits) * 100).toFixed(1) : '—'
+              const convColor = stat.visits > 0 && stat.orders > 0
+                ? (stat.orders / stat.visits >= 0.05 ? green : stat.orders / stat.visits >= 0.02 ? amber : '#888')
+                : '#555'
               return (
-                <div key={stat.platform} style={{ background: '#1a1a1a', borderRadius: '12px', padding: '16px 20px', border: '1px solid #222' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '20px' }}>{stat.icon}</span>
-                      <span style={{ fontWeight: '700', fontSize: '15px' }}>{stat.platform}</span>
-                    </div>
-                    <div style={{ display: 'flex', gap: '16px', fontSize: '13px', color: '#888' }}>
-                      <span>📦 {stat.orders} orders</span>
-                      <span>💬 {stat.messages} msgs</span>
-                      <span style={{ color: green, fontWeight: '700' }}>{stat.total} total</span>
-                    </div>
+                <div key={stat.platform}
+                  style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: '8px', padding: '14px 16px', alignItems: 'center', borderBottom: i < platformStats.length - 1 ? '1px solid #1a1a1a' : 'none', fontSize: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '18px' }}>{stat.icon}</span>
+                    <span style={{ fontWeight: '600', color: '#fff' }}>{stat.platform}</span>
                   </div>
-                  <div style={{ height: '6px', background: '#222', borderRadius: '3px', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', background: meta.color, borderRadius: '3px', width: `${barWidth}%`, transition: 'width 0.5s ease' }} />
-                  </div>
+                  <span style={{ textAlign: 'center', color: stat.visits > 0 ? '#fff' : '#555', fontWeight: '600' }}>{stat.visits}</span>
+                  <span style={{ textAlign: 'center', color: stat.orders > 0 ? '#fff' : '#555', fontWeight: '600' }}>{stat.orders}</span>
+                  <span style={{ textAlign: 'center', color: convColor, fontWeight: '700' }}>{convRate}{stat.visits > 0 ? '%' : ''}</span>
                 </div>
               )
             })}
