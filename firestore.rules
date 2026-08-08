@@ -36,6 +36,11 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      match /visits/{visitId} {
+        allow create: if true;
+        allow read: if request.auth != null && request.auth.uid == sellerId;
+      }
+
       match /messages/{messageId} {
         allow create: if (request.auth != null
           && request.resource.data.senderUid == request.auth.uid
