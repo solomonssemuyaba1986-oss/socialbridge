@@ -24,6 +24,106 @@ interface RecentItem {
   time: string
 }
 
+interface WeeklyReport {
+  thisWeek: { visits: number; orders: number; conversion: number }
+  lastWeek: { visits: number; orders: number; conversion: number } | null
+  trend: number // percentage point change
+  trendPct: number // percentage change relative to last week
+  insight: string
+  dailyThis: number[] // 7 values Mon-Sun, conversion %
+  dailyLast: number[] // 7 values Mon-Sun, conversion %
+}
+
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+function getWeekBounds(date: Date): { start: Date; end: Date } {
+  const d = new Date(date)
+  const day = d.getDay()
+  const diff = day === 0 ? 6 : day - 1 // Monday = 0
+  const start = new Date(d)
+  start.setDate(d.getDate() - diff)
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(start)
+  end.setDate(start.getDate() + 6)
+  end.setHours(23, 59, 59, 999)
+  return { start, end }
+}
+
+function bucketByDay(items: { createdAt: Date | null }[], weekStart: Date): number[] {
+  const counts = new Array(7).fill(0)
+  for (const item of items) {
+    if (!item.createdAt) continue
+    const dayIdx = Math.floor((item.createdAt.getTime() - weekStart.getTime()) / 86400000)
+    if (dayIdx >= 0 && dayIdx < 7) counts[dayIdx]++
+  }
+  return counts
+}
+
+function dailyConversion(visitsPerDay: number[], ordersPerDay: number[]): number[] {
+  return visitsPerDay.map((v, i) => v > 0 ? Math.round((ordersPerDay[i] / v) * 1000) / 10 : 0)
+}
+
+function computeWeeklyReport(
+  allVisits: { createdAt: Date | null; sourcePlatform: string }[],
+  allOrderDates: { createdAt: Date | null }[]
+): WeeklyReport {
+  const now = new Date()
+  const thisWeek = getWeekBounds(now)
+  const lastWeekStart = new Date(thisWeek.start)
+  lastWeekStart.setDate(lastWeekStart.getDate() - 7)
+  const lastWeek = getWeekBounds(lastWeekStart)
+
+  const thisVisits = bucketByDay(allVisits, thisWeek.start)
+  const thisOrders = bucketByDay(allOrderDates, thisWeek.start)
+  const lastVisits = bucketByDay(allVisits, lastWeek.start)
+  const lastOrders = bucketByDay(allOrderDates, lastWeek.start)
+
+  const thisV = thisVisits.reduce((a, b) => a + b, 0)
+  const thisO = thisOrders.reduce((a, b) => a + b, 0)
+  const lastV = lastVisits.reduce((a, b) => a + b, 0)
+  const lastO = lastOrders.reduce((a, b) => a + b, 0)
+
+  const thisConv = thisV > 0 ? (thisO / thisV) * 100 : 0
+  const lastConv = lastV > 0 ? (lastO / lastV) * 100 : 0
+  const trendPts = thisConv - lastConv
+  const trendPct = lastConv > 0 ? ((thisConv - lastConv) / lastConv) * 100 : 0
+
+  const dailyThis = dailyConversion(thisVisits, thisOrders)
+  const dailyLast = dailyConversion(lastVisits, lastOrders)
+
+  // Insight text
+  let insight = ''
+  if (lastV === 0 && lastO === 0) {
+    insight = `📊 Your first weekly report is here. ${thisV} visits, ${thisO} orders. Keep sharing your store link — come back next week to see your trend.`
+  } else if (trendPts >= 0) {
+    const msgs = [
+      `📈 Conversion is up ${Math.abs(trendPct).toFixed(0)}% from last week. Your store is connecting with more buyers — keep sharing.`,
+      `🚀 More visitors are converting this week. +${Math.abs(trendPct).toFixed(0)}% vs last week. Your link is working.`,
+      `💪 Solid week. ${thisConv.toFixed(1)}% conversion — up from ${lastConv.toFixed(1)}%. The momentum is real.`,
+    ]
+    insight = msgs[Math.floor(Math.random() * msgs.length)]
+  } else {
+    // Troubleshooting insight based on data
+    if (thisV < lastV * 0.7) {
+      insight = `💡 Visits dropped ${Math.round((1 - thisV / lastV) * 100)}% this week. Try sharing your store link more often — every post and bio link counts.`
+    } else if (thisO === 0) {
+      insight = `💡 ${thisV} visits but no orders this week. Make sure your products have clear names, prices, and images. Buyers need to see what you're selling at a glance.`
+    } else {
+      insight = `💡 ${thisV} visits, ${thisO} orders this week. Conversion is a bit lower than last week, but consistency wins. Keep your store link visible — buyers come back.`
+    }
+  }
+
+  return {
+    thisWeek: { visits: thisV, orders: thisO, conversion: thisConv },
+    lastWeek: lastV > 0 || lastO > 0 ? { visits: lastV, orders: lastO, conversion: lastConv } : null,
+    trend: trendPts,
+    trendPct,
+    insight,
+    dailyThis,
+    dailyLast,
+  }
+}
+
 function platformMeta(platform: string) {
   const key = platform.toLowerCase()
   if (key.includes('instagram')) return { icon: '📸', label: 'Instagram', color: '#E4405F' }
@@ -61,6 +161,7 @@ function AnalyticsPage() {
   const [pendingOrders, setPendingOrders] = useState(0)
   const [repeatBuyers, setRepeatBuyers] = useState(0)
   const [recentActivity, setRecentActivity] = useState<RecentItem[]>([])
+  const [weeklyReport, setWeeklyReport] = useState<WeeklyReport | null>(null)
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -117,10 +218,14 @@ function AnalyticsPage() {
         const visitsSnap = await getDocs(collection(db, 'sellers', user.uid, 'visits'))
         let totalV = 0
         const visitCounts = new Map<string, number>()
+        const allVisits: { createdAt: Date | null; sourcePlatform: string }[] = []
         visitsSnap.docs.forEach(doc => {
-          const platform = (doc.data().sourcePlatform || 'Web').toLowerCase()
+          const data = doc.data()
+          const platform = (data.sourcePlatform || 'Web').toLowerCase()
           visitCounts.set(platform, (visitCounts.get(platform) || 0) + 1)
           totalV++
+          const ts = data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt instanceof Date ? data.createdAt : null
+          allVisits.push({ createdAt: ts, sourcePlatform: platform })
         })
 
         const stats: PlatformStat[] = []
@@ -181,6 +286,10 @@ function AnalyticsPage() {
           time: timeAgo(new Date(r.ts)),
         }))
         setRecentActivity(recent)
+
+        // Compute weekly report
+        const report = computeWeeklyReport(allVisits, allOrders.map(o => ({ createdAt: o.createdAt })))
+        setWeeklyReport(report)
       } catch (err) {
         console.error('Analytics load error:', err)
       } finally {
@@ -249,6 +358,83 @@ function AnalyticsPage() {
             Back to Dashboard
           </button>
         </div>
+
+        {/* Weekly Report Hero */}
+        {weeklyReport && (
+          <div style={{ marginBottom: '28px' }}>
+            <div style={{ background: 'linear-gradient(135deg, #111 0%, #0a1a0a 100%)', borderRadius: '16px', padding: '24px 28px', border: '1px solid #1a2a1a' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
+                {/* Left: Stats */}
+                <div style={{ flex: 1, minWidth: '200px' }}>
+                  <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#666', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: '600' }}>📊 Weekly Report</p>
+                  <p style={{ margin: '0 0 2px', fontSize: '36px', fontWeight: '900', color: green, letterSpacing: '-1px', lineHeight: '1.1' }}>
+                    {weeklyReport.thisWeek.conversion.toFixed(1)}%
+                  </p>
+                  <p style={{ margin: '0 0 6px', fontSize: '13px', color: '#888' }}>
+                    {weeklyReport.thisWeek.visits} visits · {weeklyReport.thisWeek.orders} orders this week
+                  </p>
+                  {weeklyReport.lastWeek && (
+                    <p style={{ margin: 0, fontSize: '13px', color: '#fff' }}>
+                      vs {weeklyReport.lastWeek.conversion.toFixed(1)}% last week{' '}
+                      <span style={{ color: weeklyReport.trend >= 0 ? green : amber, fontWeight: '700' }}>
+                        {weeklyReport.trend >= 0 ? '↑' : '↓'} {Math.abs(weeklyReport.trendPct).toFixed(0)}%
+                      </span>
+                    </p>
+                  )}
+                </div>
+
+                {/* Right: Sparkline */}
+                <div style={{ flex: 1, minWidth: '200px', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+                  <svg width="100%" height="56" viewBox="0 0 200 56" style={{ maxWidth: '280px' }}>
+                    {/* Grid lines */}
+                    <line x1="0" y1="0" x2="200" y2="0" stroke="#1a1a1a" strokeWidth="0.5" />
+                    <line x1="0" y1="28" x2="200" y2="28" stroke="#1a1a1a" strokeWidth="0.5" />
+                    <line x1="0" y1="55" x2="200" y2="55" stroke="#1a1a1a" strokeWidth="0.5" />
+                    {/* Day labels */}
+                    {DAYS.map((d, i) => (
+                      <text key={d} x={i * (200 / 6)} y="52" textAnchor="middle" fill="#444" fontSize="6" fontFamily="sans-serif">{d}</text>
+                    ))}
+                    {/* Line helpers */}
+                    {(() => {
+                      const maxVal = Math.max(
+                        ...weeklyReport.dailyThis,
+                        ...weeklyReport.dailyLast,
+                        1
+                      )
+                      const toY = (v: number) => 55 - (v / maxVal) * 45
+                      const toX = (i: number) => (i / 6) * 200
+
+                      const thisPath = weeklyReport.dailyThis.map((v, i) =>
+                        `${i === 0 ? 'M' : 'L'}${toX(i)} ${toY(v)}`
+                      ).join(' ')
+                      const lastPath = weeklyReport.dailyLast.map((v, i) =>
+                        `${i === 0 ? 'M' : 'L'}${toX(i)} ${toY(v)}`
+                      ).join(' ')
+
+                      return (
+                        <>
+                          {weeklyReport.lastWeek && (
+                            <path d={lastPath} fill="none" stroke="#444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
+                          )}
+                          <path d={thisPath} fill="none" stroke={green} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          {/* Dots on this week's line */}
+                          {weeklyReport.dailyThis.map((v, i) => (
+                            <circle key={i} cx={toX(i)} cy={toY(v)} r="2.5" fill={green} />
+                          ))}
+                        </>
+                      )
+                    })()}
+                  </svg>
+                </div>
+              </div>
+
+              {/* Insight */}
+              <div style={{ marginTop: '16px', padding: '10px 14px', background: 'rgba(173,255,47,0.06)', borderRadius: '10px', borderLeft: `3px solid ${green}` }}>
+                <p style={{ margin: 0, fontSize: '13px', color: '#ccc', lineHeight: '1.5' }}>{weeklyReport.insight}</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Needs Attention Row */}
         {(unreadMessages > 0 || pendingOrders > 0) && (
