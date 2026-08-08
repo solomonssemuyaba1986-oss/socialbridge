@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { collection, query, where, getDocs, addDoc, setDoc, doc } from 'firebase/firestore'
 import { db, auth } from './firebase'
-import { suppressNextSellerOrderAlert } from './orderAlerts.ts'
+import { suppressNextSellerOrderAlert } from './orderAlerts'
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, FacebookAuthProvider, OAuthProvider } from 'firebase/auth'
 import { CATEGORIES, getSubcategories } from './categories'
 import { notify } from './notifications'
@@ -10,6 +10,7 @@ import { useConversation } from './useConversation.ts'
 import { useGuestOTP } from './useGuestOTP.ts'
 import { useSellerStats, getSalesLabel, formatRating, renderStars, getBadgeStatusLabel } from './useSellerStats.ts'
 import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder.ts'
+import { initializeFlutterwavePayment, generateTxRef, AFRICAN_CURRENCIES } from './paymentService.ts'
 
 interface Seller {
   businessName: string
@@ -508,55 +509,78 @@ const handleOrder = async () => {
   if (!orderProduct || !seller) return
 
   const sourcePlatform = detectPlatform(searchParams)
-
   const buyerUid = auth.currentUser.uid
-  const { orderId } = await createBuyerOrder(sellerId, {
-    buyerName,
-    buyerUid,
-    productName: orderProduct.name,
-    productPrice: orderProduct.price,
-    quantity,
-    deliveryArea,
-    status: 'pending',
-    read: false,
-    sourcePlatform,
-    createdAt: new Date(),
-  })
+  const priceNumber = Number(String(orderProduct.price).replace(/,/g, '')) || 0
+  const totalAmount = priceNumber * Number(quantity || 1)
+  const txRef = generateTxRef()
+  const currency = 'UGX' // Default; extend per seller config later
 
-  await incrementProductOrderCount(
-    sellerId,
-    orderProduct.id,
-    orderProduct.orderCount || 0
+  // Open Flutterwave payment modal
+  initializeFlutterwavePayment(
+    {
+      publicKey: import.meta.env.VITE_FLUTTERWAVE_PUBLIC_KEY || '',
+      txRef,
+      amount: totalAmount,
+      currency,
+      country: AFRICAN_CURRENCIES[currency]?.country || 'UG',
+      customer: {
+        email: auth.currentUser.email || `${buyerName.replace(/\s/g, '').toLowerCase()}@rachett.user`,
+        phone_number: seller.whatsapp || '',
+        name: buyerName,
+      },
+      customizations: {
+        title: `Order: ${orderProduct.name}`,
+        description: `${seller.businessName} — ${orderProduct.name} ×${quantity}`,
+        logo: seller.logoUrl || `${window.location.origin}/logo.jpg`,
+      },
+      redirect_url: `${window.location.origin}/store/${seller.slug}`,
+    },
+    // onSuccess — save order as paid
+    async (result) => {
+      console.log('[Rachett Payment] Success:', result)
+      await createBuyerOrder(sellerId, {
+        buyerName,
+        buyerUid,
+        productName: orderProduct.name,
+        productPrice: orderProduct.price,
+        quantity,
+        deliveryArea,
+        status: 'paid',
+        read: false,
+        sourcePlatform,
+        createdAt: new Date(),
+        paymentMethod: result.paymentMethod || 'Flutterwave',
+        transactionId: result.transactionId,
+        flwRef: result.flwRef,
+        paymentStatus: 'completed',
+      })
+
+      await incrementProductOrderCount(sellerId, orderProduct.id, orderProduct.orderCount || 0)
+
+      if (auth.currentUser?.uid === sellerId) {
+        suppressNextSellerOrderAlert()
+      }
+
+      setOrderSuccess(true)
+      showFeedback('Payment successful! Your order is confirmed.', 'success')
+      setTimeout(() => {
+        setBuyerName('')
+        setQuantity('1')
+        setDeliveryArea('')
+        setMessage('')
+        setOrderProduct(null)
+        setOrderSuccess(false)
+      }, 3000)
+    },
+    // onClose — modal dismissed, nothing saved
+    () => {
+      showFeedback('Payment cancelled. You can try again.', 'info')
+    },
+    // onError — payment failed
+    (errorMsg) => {
+      showFeedback(errorMsg || notify.orderFailed, 'error')
+    }
   )
-
-  if (auth.currentUser?.uid === sellerId) {
-    suppressNextSellerOrderAlert()
-  }
-
-  const whatsappText =
-`🟢 NEW ORDER — Rachett
-
-Customer: ${buyerName}
-Product: ${orderProduct.name}
-Price: UGX ${orderProduct.price}
-Quantity: ${quantity}
-Total: UGX ${Number(orderProduct.price.replace(/,/g, '')) * Number(quantity)}
-Delivery Area: ${deliveryArea}
-Platform: ${sourcePlatform}
-${message ? `Message: ${message}
-` : ''}
-Order ID: #${orderId}`
-
-
-  const whatsappNumber = seller.whatsapp || ''
-  setOrderSuccess(true)
-  showFeedback(notify.orderSent, 'success')
-  setTimeout(() => {
-    window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappText)}`, '_blank')
-    setBuyerName(''); setQuantity('1'); setDeliveryArea(''); setMessage('')
-    setOrderProduct(null)
-    setOrderSuccess(false)
-  }, 1500)
 }
 
 const handleSendMessage = async () => {
