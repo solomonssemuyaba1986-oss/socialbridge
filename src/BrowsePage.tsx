@@ -416,16 +416,30 @@ function BrowsePage() {
           <>
             <p style={{ color: '#555', fontSize: '13px', marginBottom: '20px' }}>{filtered.length} products available</p>
             <div className="rt-products" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
-              {filtered.map(p => (
-                <div key={p.id} onClick={() => navigate(`/store/${p.sellerSlug}`)}
-                  style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222', cursor: 'pointer', position: 'relative' }}>
-                  <img src={p.imageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
-                    style={{ width: '100%', height: '160px', objectFit: 'cover', opacity: p.outOfStock ? 0.5 : 1 }} />
-                  <div style={{ padding: '12px' }}>
-                    <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: '#fff' }}>{p.name}</p>
-                    <p style={{ margin: '0 0 8px', color: '#555', fontSize: '12px' }}>{p.businessName}</p>
-                    <p style={{ margin: 0, fontWeight: '800', color: green, fontSize: '14px' }}>UGX {p.price}</p>
+                            {filtered.map(p => (
+                <div key={p.id}
+                  style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+                  <div onClick={() => navigate(`/store/${p.sellerSlug}`)} style={{ cursor: 'pointer' }}>
+                    <img src={p.imageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
+                      style={{ width: '100%', height: '160px', objectFit: 'cover', opacity: p.outOfStock ? 0.5 : 1 }} />
+                    <div style={{ padding: '12px' }}>
+                      <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: '#fff' }}>{p.name}</p>
+                      <p style={{ margin: '0 0 8px', color: '#555', fontSize: '12px' }}>{p.businessName}</p>
+                      <p style={{ margin: 0, fontWeight: '800', color: green, fontSize: '14px' }}>UGX {p.price}</p>
+                    </div>
                   </div>
+                  {!p.outOfStock && (
+                    <div style={{ display: 'flex', gap: '6px', padding: '0 12px 12px' }}>
+                      <button onClick={(e) => { e.stopPropagation(); navigate(`/store/${p.sellerSlug}?messageId=${p.id}`) }}
+                        style={{ flex: 1, padding: '8px', background: '#222', color: green, border: `1px solid ${green}`, borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' }}>
+                        Message
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); navigate(`/store/${p.sellerSlug}?productId=${p.id}`) }}
+                        style={{ flex: 1, padding: '8px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' }}>
+                        Buy Now
+                      </button>
+                    </div>
+                  )}
                   {p.outOfStock && (
                     <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '700', fontSize: '13px', textAlign: 'center', padding: '8px' }}>
                       Out of Stock
@@ -433,6 +447,7 @@ function BrowsePage() {
                   )}
                 </div>
               ))}
+
             </div>
           </>
         )}
