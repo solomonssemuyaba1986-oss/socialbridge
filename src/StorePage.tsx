@@ -320,6 +320,7 @@ function StorePage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const productDeepLinkId = searchParams.get('productId')
+const messageDeepLinkId = searchParams.get('messageId')
   const [seller, setSeller] = useState<Seller | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [isOwner, setIsOwner] = useState(false)
@@ -425,6 +426,23 @@ function StorePage() {
     }
   }, [productDeepLinkId, products, orderProduct])
 
+  useEffect(() => {
+    if (!messageProduct && messageDeepLinkId && products.length > 0) {
+      const deepProduct = products.find(p => p.id === messageDeepLinkId)
+      if (deepProduct) {
+        setMessageProduct(deepProduct)
+      }
+    }
+  }, [messageDeepLinkId, products, messageProduct])
+  useEffect(() => {
+    if (!messageProduct && messageDeepLinkId && products.length > 0) {
+      const deepProduct = products.find(p => p.id === messageDeepLinkId)
+      if (deepProduct) {
+        setMessageProduct(deepProduct)
+      }
+    }
+  }, [messageDeepLinkId, products, messageProduct])
+
   const fetchProducts = async (sid: string) => {
     try {
       console.log('StorePage: fetching products for seller', sid)
@@ -500,7 +518,7 @@ const handleImageUpload = async (file: File) => {
     fetchProducts(sellerId)
   }
 
-﻿const handleOrder = async () => {
+const handleOrder = async () => {
   if (!auth.currentUser) {
     setShowSignupSheet(true)
     return
