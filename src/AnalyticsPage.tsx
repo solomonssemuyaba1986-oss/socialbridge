@@ -5,6 +5,8 @@ import { db, auth } from './firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 
 const green = '#adff2f'
+const amber = '#ffaa00'
+const red = '#ff4444'
 
 interface PlatformStat {
   platform: string
@@ -12,6 +14,13 @@ interface PlatformStat {
   orders: number
   messages: number
   total: number
+}
+
+interface RecentItem {
+  type: 'order' | 'message'
+  from: string
+  detail: string
+  time: string
 }
 
 function platformMeta(platform: string) {
@@ -27,6 +36,19 @@ function platformMeta(platform: string) {
   return { icon: '🌐', label: platform || 'Web', color: '#888' }
 }
 
+function timeAgo(date: Date): string {
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  if (diffMin < 1) return 'Just now'
+  if (diffMin < 60) return `${diffMin}m ago`
+  const diffHr = Math.floor(diffMin / 60)
+  if (diffHr < 24) return `${diffHr}h ago`
+  const diffDay = Math.floor(diffHr / 24)
+  if (diffDay < 7) return `${diffDay}d ago`
+  return date.toLocaleDateString()
+}
+
 function AnalyticsPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -34,6 +56,10 @@ function AnalyticsPage() {
   const [platformStats, setPlatformStats] = useState<PlatformStat[]>([])
   const [totalOrders, setTotalOrders] = useState(0)
   const [totalMessages, setTotalMessages] = useState(0)
+  const [unreadMessages, setUnreadMessages] = useState(0)
+  const [pendingOrders, setPendingOrders] = useState(0)
+  const [repeatBuyers, setRepeatBuyers] = useState(0)
+  const [recentActivity, setRecentActivity] = useState<RecentItem[]>([])
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -42,21 +68,48 @@ function AnalyticsPage() {
         // Fetch orders
         const ordersSnap = await getDocs(collection(db, 'sellers', user.uid, 'orders'))
         const platformMap = new Map<string, { orders: number; messages: number }>()
+        let pendingCount = 0
+        const buyerIds = new Set<string>()
+        const allOrders: { buyerName: string; productName: string; createdAt: Date | null }[] = []
 
         ordersSnap.docs.forEach(doc => {
-          const platform = (doc.data().sourcePlatform || 'Web').toLowerCase()
+          const data = doc.data()
+          const platform = (data.sourcePlatform || 'Web').toLowerCase()
           const existing = platformMap.get(platform) || { orders: 0, messages: 0 }
           existing.orders += 1
           platformMap.set(platform, existing)
+
+          if (data.status === 'pending') pendingCount++
+          if (data.buyerUid) buyerIds.add(data.buyerUid)
+
+          const ts = data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt instanceof Date ? data.createdAt : null
+          allOrders.push({
+            buyerName: data.buyerName || 'Buyer',
+            productName: data.productName || '',
+            createdAt: ts,
+          })
         })
 
         // Fetch messages
         const messagesSnap = await getDocs(collection(db, 'sellers', user.uid, 'messages'))
+        let unreadCount = 0
+        const allMessages: { senderName: string; text: string; createdAt: Date | null }[] = []
+
         messagesSnap.docs.forEach(doc => {
-          const platform = (doc.data().sourcePlatform || 'Web').toLowerCase()
+          const data = doc.data()
+          const platform = (data.sourcePlatform || 'Web').toLowerCase()
           const existing = platformMap.get(platform) || { orders: 0, messages: 0 }
           existing.messages += 1
           platformMap.set(platform, existing)
+
+          if (data.read === false) unreadCount++
+
+          const ts = data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt instanceof Date ? data.createdAt : null
+          allMessages.push({
+            senderName: data.senderName || 'Buyer',
+            text: data.text || '',
+            createdAt: ts,
+          })
         })
 
         const stats: PlatformStat[] = []
@@ -80,6 +133,26 @@ function AnalyticsPage() {
         setPlatformStats(stats)
         setTotalOrders(totalO)
         setTotalMessages(totalM)
+        setUnreadMessages(unreadCount)
+        setPendingOrders(pendingCount)
+        setRepeatBuyers(totalO - buyerIds.size)
+
+        // Build recent activity feed (last 5 items, combined, sorted by time)
+        const recentRaw: { type: 'order' | 'message'; from: string; detail: string; ts: number }[] = []
+        for (const o of allOrders) {
+          if (o.createdAt) recentRaw.push({ type: 'order', from: o.buyerName, detail: `Ordered ${o.productName}`, ts: o.createdAt.getTime() })
+        }
+        for (const m of allMessages) {
+          if (m.createdAt) recentRaw.push({ type: 'message', from: m.senderName, detail: m.text.slice(0, 80) + (m.text.length > 80 ? '...' : ''), ts: m.createdAt.getTime() })
+        }
+        recentRaw.sort((a, b) => b.ts - a.ts)
+        const recent = recentRaw.slice(0, 5).map(r => ({
+          type: r.type,
+          from: r.from,
+          detail: r.detail,
+          time: timeAgo(new Date(r.ts)),
+        }))
+        setRecentActivity(recent)
       } catch (err) {
         console.error('Analytics load error:', err)
       } finally {
@@ -149,21 +222,66 @@ function AnalyticsPage() {
           </button>
         </div>
 
-        {/* Stats Row */}
-        <div className="rt-stats" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '32px' }}>
-          <div style={{ background: '#1a1a1a', borderRadius: '12px', padding: '24px', border: '1px solid #222' }}>
-            <p style={{ fontSize: '32px', fontWeight: '800', margin: '0 0 4px', color: green }}>{totalOrders + totalMessages}</p>
-            <p style={{ fontSize: '13px', color: '#888', margin: 0 }}>Total Interactions</p>
+        {/* Needs Attention Row */}
+        {(unreadMessages > 0 || pendingOrders > 0) && (
+          <div className="rt-attention" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
+            {unreadMessages > 0 && (
+              <div style={{ background: '#1a0a0a', borderRadius: '12px', padding: '16px 20px', border: `1px solid ${red}`, display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: `${red}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0 }}>💬</div>
+                <div>
+                  <p style={{ margin: 0, fontSize: '13px', color: '#aaa' }}>Unread messages</p>
+                  <p style={{ margin: 0, fontWeight: '800', fontSize: '22px', color: red }}>{unreadMessages}</p>
+                </div>
+              </div>
+            )}
+            {pendingOrders > 0 && (
+              <div style={{ background: '#1a1005', borderRadius: '12px', padding: '16px 20px', border: `1px solid ${amber}`, display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: `${amber}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0 }}>📦</div>
+                <div>
+                  <p style={{ margin: 0, fontSize: '13px', color: '#aaa' }}>Pending orders</p>
+                  <p style={{ margin: 0, fontWeight: '800', fontSize: '22px', color: amber }}>{pendingOrders}</p>
+                </div>
+              </div>
+            )}
           </div>
-          <div style={{ background: '#1a1a1a', borderRadius: '12px', padding: '24px', border: '1px solid #222' }}>
-            <p style={{ fontSize: '32px', fontWeight: '800', margin: '0 0 4px', color: green }}>{totalOrders}</p>
-            <p style={{ fontSize: '13px', color: '#888', margin: 0 }}>Orders</p>
+        )}
+
+        {/* Insight Cards */}
+        <div className="rt-insights" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '24px' }}>
+          <div style={{ background: '#1a1a1a', borderRadius: '12px', padding: '16px', border: '1px solid #222', textAlign: 'center' }}>
+            <p style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 2px', color: green }}>{totalOrders + totalMessages}</p>
+            <p style={{ fontSize: '11px', color: '#888', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Leads</p>
           </div>
-          <div style={{ background: '#1a1a1a', borderRadius: '12px', padding: '24px', border: '1px solid #222' }}>
-            <p style={{ fontSize: '32px', fontWeight: '800', margin: '0 0 4px', color: green }}>{totalMessages}</p>
-            <p style={{ fontSize: '13px', color: '#888', margin: 0 }}>Messages</p>
+          <div style={{ background: '#1a1a1a', borderRadius: '12px', padding: '16px', border: '1px solid #222', textAlign: 'center' }}>
+            <p style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 2px', color: green }}>{totalOrders}</p>
+            <p style={{ fontSize: '11px', color: '#888', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Orders</p>
+          </div>
+          <div style={{ background: '#1a1a1a', borderRadius: '12px', padding: '16px', border: '1px solid #222', textAlign: 'center' }}>
+            <p style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 2px', color: totalMessages > 0 && totalOrders > 0 ? (totalOrders / totalMessages >= 0.3 ? green : amber) : '#555' }}>
+              {totalMessages > 0 ? `1:${Math.max(1, Math.round(totalMessages / Math.max(1, totalOrders)))}` : '—'}
+            </p>
+            <p style={{ fontSize: '11px', color: '#888', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Msg → Order</p>
+          </div>
+          <div style={{ background: '#1a1a1a', borderRadius: '12px', padding: '16px', border: '1px solid #222', textAlign: 'center' }}>
+            <p style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 2px', color: repeatBuyers > 0 ? green : '#555' }}>{repeatBuyers}</p>
+            <p style={{ fontSize: '11px', color: '#888', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Repeat Buys</p>
           </div>
         </div>
+
+        {/* Top Platform Highlight */}
+        {platformStats.length > 0 && (
+          <div style={{ background: '#1a1a1a', borderRadius: '12px', padding: '16px 20px', border: '1px solid #222', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '24px' }}>{platformStats[0].icon}</span>
+            <div>
+              <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#fff' }}>
+                {platformStats[0].platform} is your #1 channel
+              </p>
+              <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#888' }}>
+                {platformStats[0].total} of {(totalOrders + totalMessages)} leads · {Math.round((platformStats[0].total / (totalOrders + totalMessages)) * 100)}%
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Platform Breakdown */}
         <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px' }}>📊 Platform Breakdown</h2>
@@ -197,6 +315,29 @@ function AnalyticsPage() {
               )
             })}
           </div>
+        )}
+
+        {/* Recent Activity */}
+        {recentActivity.length > 0 && (
+          <>
+            <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px' }}>🕐 Recent Activity</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '32px' }}>
+              {recentActivity.map((item, i) => (
+                <div key={i} style={{ background: '#1a1a1a', borderRadius: '10px', padding: '12px 16px', border: '1px solid #222', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '16px', flexShrink: 0 }}>{item.type === 'order' ? '📦' : '💬'}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ margin: 0, fontSize: '13px', fontWeight: '600', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {item.from}
+                    </p>
+                    <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#777', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {item.detail}
+                    </p>
+                  </div>
+                  <span style={{ fontSize: '11px', color: '#555', flexShrink: 0 }}>{item.time}</span>
+                </div>
+              ))}
+            </div>
+          </>
         )}
 
         {/* One link — auto-detects platform */}
