@@ -72,7 +72,7 @@ function Dashboard() {
     { label: 'Products', path: '/products', icon: '🛍️' },
     { label: 'Orders', path: '/orders', icon: '📦' },
     { label: 'Inbox', path: '/inbox', icon: '📩' },
-    { label: 'Analytics', path: '/dashboard', icon: '📈' },
+    { label: 'Analytics', path: '/analytics', icon: '📈' },
     { label: 'Marketing', path: '/dashboard', icon: '📣' },
     { label: 'Payouts', path: '/dashboard', icon: '💸' },
     { label: 'Settings', path: '/edit-store', icon: '⚙️' },
