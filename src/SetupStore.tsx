@@ -334,8 +334,8 @@ function SetupStore() {
           const processedFile = new File([processedBlob], 'logo.jpg', { type: 'image/jpeg' })
            const formData = new FormData()
            formData.append('file', processedFile)
-           formData.append('upload_preset', 'p2z65zrv')
-           const res = await fetch('https://api.cloudinary.com/v1_1/dzudmmuxg/image/upload', { method: 'POST', body: formData })
+           formData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'p2z65zrv')
+          const res = await fetch(`https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'dzudmmuxg'}/image/upload`, { method: 'POST', body: formData })
            const cloudData = await res.json()
            finalLogoUrl = cloudData.secure_url
            setUploadingLogo(false)
