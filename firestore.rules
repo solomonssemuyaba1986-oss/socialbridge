@@ -66,6 +66,11 @@ service cloud.firestore {
       }
     }
 
+    match /events/{eventId} {
+      allow create: if true;
+      allow read: if false;
+    }
+
     match /users/{userId} {
       allow read, write: if request.auth.uid == userId;
     }
