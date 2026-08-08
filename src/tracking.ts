@@ -1,4 +1,4 @@
-﻿import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from './firebase'
 
 /**
@@ -23,4 +23,28 @@ export function track(
     data: data || {},
     createdAt: serverTimestamp(),
   }).catch(() => {}) // silent — never let tracking break the UI
+}
+
+export function detectSource(): string {
+  if (typeof window === 'undefined') return 'Web'
+  const params = new URLSearchParams(window.location.search)
+  const rawSource = (params.get('source') || params.get('utm_source') || '').toLowerCase()
+  if (rawSource.includes('whatsapp')) return 'WhatsApp'
+  if (rawSource.includes('instagram')) return 'Instagram'
+  if (rawSource.includes('tiktok')) return 'TikTok'
+  if (rawSource.includes('telegram')) return 'Telegram'
+  if (rawSource.includes('twitter')) return 'Twitter'
+  if (rawSource.includes('facebook')) return 'Facebook'
+  if (rawSource.includes('email')) return 'Email'
+  if (rawSource.includes('web')) return 'Web'
+
+  const referrer = document.referrer.toLowerCase()
+  if (referrer.includes('whatsapp') || referrer.includes('wa.me') || referrer.includes('api.whatsapp.com')) return 'WhatsApp'
+  if (referrer.includes('instagram.com')) return 'Instagram'
+  if (referrer.includes('tiktok.com')) return 'TikTok'
+  if (referrer.includes('telegram.me') || referrer.includes('t.me')) return 'Telegram'
+  if (referrer.includes('twitter.com')) return 'Twitter'
+  if (referrer.includes('facebook.com')) return 'Facebook'
+  if (referrer.includes('mail.google.com') || referrer.includes('outlook.live.com') || referrer.includes('mail.yahoo.com')) return 'Email'
+  return 'Web'
 }
