@@ -9,7 +9,8 @@ import { notify } from './notifications'
 import { useConversation } from './useConversation.ts'
 import { useGuestOTP } from './useGuestOTP.ts'
 import { useSellerStats, getSalesLabel, formatRating, renderStars, getBadgeStatusLabel } from './useSellerStats.ts'
-import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder.ts'
+import { createBuyerOrder, incrementProductOrderCount } from '
+import { track } from './tracking'./createBuyerOrder.ts'
 
 interface Seller {
   businessName: string
@@ -396,6 +397,7 @@ const messageDeepLinkId = searchParams.get('messageId')
               sourcePlatform: platform,
               createdAt: new Date(),
             }).catch(() => {}) // fire-and-forget
+            track('store_visited', auth.currentUser?.uid || null, platform, { sellerSlug: slug })
           }
           await fetchProducts(docData.id)
           const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -551,6 +553,7 @@ const handleOrder = async () => {
     })
 
     await incrementProductOrderCount(sellerId, orderProduct.id, orderProduct.orderCount || 0)
+    track('order_placed', auth.currentUser?.uid || null, sourcePlatform, { productId: orderProduct.id, productName: orderProduct.name, sellerId })
 
     if (auth.currentUser?.uid === sellerId) {
       suppressNextSellerOrderAlert()
@@ -596,6 +599,7 @@ const handleSendMessage = async () => {
       auth.currentUser.displayName || 'Buyer'
     )
     console.log('Message sent')
+    track('message_sent', auth.currentUser?.uid || null, detectPlatform(searchParams), { productId: messageProduct.id, productName: messageProduct.name, sellerId })
     setMessageText('')
     setMessageProduct(null)
     showFeedback(notify.messageSent, 'success')
