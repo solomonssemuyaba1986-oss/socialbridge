@@ -89,18 +89,6 @@ function AnalyticsPage() {
     return () => unsubscribe()
   }, [navigate])
 
-  const storeBaseUrl = `${window.location.origin}/store/__SLUG__`
-
-  const trackingLinks = [
-    { platform: 'TikTok', icon: '🎵', param: 'tiktok', color: '#00F2EA' },
-    { platform: 'Instagram', icon: '📸', param: 'instagram', color: '#E4405F' },
-    { platform: 'WhatsApp', icon: '💬', param: 'whatsapp', color: '#25D366' },
-    { platform: 'Facebook', icon: '📘', param: 'facebook', color: '#4267B2' },
-    { platform: 'Telegram', icon: '✈️', param: 'telegram', color: '#2CA5E0' },
-    { platform: 'Twitter', icon: '🐦', param: 'twitter', color: '#1DA1F2' },
-    { platform: 'Email', icon: '✉️', param: 'email', color: '#999' },
-    { platform: 'Web (direct)', icon: '🌐', param: 'web', color: '#888' },
-  ]
 
   const navItems = [
     { label: 'Dashboard', path: '/dashboard', icon: '📊' },
@@ -211,32 +199,19 @@ function AnalyticsPage() {
           </div>
         )}
 
-        {/* Tracking Links */}
-        <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px' }}>🔗 Tracking Links</h2>
+        {/* One link — auto-detects platform */}
+        <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px' }}>🔗 Share Your Store</h2>
         <p style={{ color: '#888', fontSize: '13px', margin: '0 0 16px' }}>
-          Paste each link on the matching platform. Rachett tracks where every lead comes from — no APIs needed.
+          Paste this link anywhere — Instagram, TikTok, WhatsApp, everywhere. Rachett detects where traffic comes from automatically.
         </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '32px' }}>
-          {trackingLinks.map(link => (
-            <div key={link.param} style={{ background: '#1a1a1a', borderRadius: '12px', padding: '14px 20px', border: '1px solid #222', display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span style={{ fontSize: '20px', flexShrink: 0 }}>{link.icon}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: link.color }}>{link.platform}</p>
-                <p style={{ margin: 0, color: '#555', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {storeBaseUrl}?source={link.param}
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(`${window.location.origin}/store/__YOUR_SLUG__?source=${link.param}`)
-                  alert(`Link copied! Paste it on ${link.platform}.`)
-                }}
-                style={{ padding: '8px 14px', background: '#222', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', flexShrink: 0 }}>
-                Copy
-              </button>
-            </div>
-          ))}
-        </div>
+        <button
+          onClick={() => {
+            navigator.clipboard.writeText(`${window.location.origin}/store/__YOUR_SLUG__`)
+            alert('Link copied! Paste it anywhere you sell.')
+          }}
+          style={{ width: '100%', padding: '16px', background: green, color: '#000', border: 'none', borderRadius: '12px', fontWeight: '800', cursor: 'pointer', fontSize: '15px', marginBottom: '32px' }}>
+          📋 Copy Store Link
+        </button>
       </div>
     </div>
   )
