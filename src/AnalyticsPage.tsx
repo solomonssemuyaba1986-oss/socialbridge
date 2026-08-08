@@ -324,7 +324,7 @@ function AnalyticsPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
           <div style={{ background: green, width: 34, height: 34, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16, color: '#000' }}>R</div>
           <div>
-            <div style={{ fontWeight: 800, color: '#fff', fontSize: 16 }}>Rachett</div>
+            <div style={{ fontWeight: 800, color: '#fff', fontSize: 16 }}>rachett</div>
             <div style={{ color: '#777', fontSize: 12 }}>Analytics</div>
           </div>
         </div>
@@ -543,7 +543,7 @@ function AnalyticsPage() {
         )}
 
         {/* One link — auto-detects platform */}
-        <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px' }}>🔗 Share Your Store</h2>
+        <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px' }}>🔗 Share Your brand</h2>
         <p style={{ color: '#888', fontSize: '13px', margin: '0 0 16px' }}>
           Paste this link anywhere — Instagram, TikTok, WhatsApp, everywhere. Rachett detects where traffic comes from automatically.
         </p>
