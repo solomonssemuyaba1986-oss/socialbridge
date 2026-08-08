@@ -178,22 +178,29 @@ function AnalyticsPage() {
         ordersSnap.docs.forEach(doc => {
           const data = doc.data()
           const platform = (data.sourcePlatform || 'Web').toLowerCase()
-          const existing = platformMap.get(platform) || { orders: 0, messages: 0 }
-          existing.orders += 1
-          platformMap.set(platform, existing)
 
-          if (data.status === 'pending') pendingCount++
-          if (data.buyerUid) buyerIds.add(data.buyerUid)
+          if (data.status === 'fulfilled') {
+            const existing = platformMap.get(platform) || { orders: 0, messages: 0 }
+            existing.orders += 1
+            platformMap.set(platform, existing)
+            if (data.buyerUid) buyerIds.add(data.buyerUid)
+            const ts = data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt instanceof Date ? data.createdAt : null
+            allOrders.push({
+              buyerName: data.buyerName || 'Buyer',
+              productName: data.productName || '',
+              createdAt: ts,
+            })
+          }
 
-          const ts = data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt instanceof Date ? data.createdAt : null
-          allOrders.push({
+          if (data.status === 'pending' || !data.status) pendingCount++
+
+          const ts2 = data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt instanceof Date ? data.createdAt : null
+          allActivityOrders.push({
             buyerName: data.buyerName || 'Buyer',
             productName: data.productName || '',
-            createdAt: ts,
+            createdAt: ts2,
           })
-        })
-
-        // Fetch messages
+        })        // Fetch messages
         const messagesSnap = await getDocs(collection(db, 'sellers', user.uid, 'messages'))
         let unreadCount = 0
         const allMessages: { senderName: string; text: string; createdAt: Date | null }[] = []
