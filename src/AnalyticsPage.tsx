@@ -173,6 +173,7 @@ function AnalyticsPage() {
         let pendingCount = 0
         const buyerIds = new Set<string>()
         const allOrders: { buyerName: string; productName: string; createdAt: Date | null }[] = []
+        const allActivityOrders: { buyerName: string; productName: string; createdAt: Date | null }[] = []
 
         ordersSnap.docs.forEach(doc => {
           const data = doc.data()
@@ -272,7 +273,7 @@ function AnalyticsPage() {
 
         // Build recent activity feed (last 5 items, combined, sorted by time)
         const recentRaw: { type: 'order' | 'message'; from: string; detail: string; ts: number }[] = []
-        for (const o of allOrders) {
+        for (const o of allActivityOrders) {
           if (o.createdAt) recentRaw.push({ type: 'order', from: o.buyerName, detail: `Ordered ${o.productName}`, ts: o.createdAt.getTime() })
         }
         for (const m of allMessages) {
