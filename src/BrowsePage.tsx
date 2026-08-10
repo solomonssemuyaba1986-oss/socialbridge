@@ -477,9 +477,13 @@ function BrowsePage() {
                     </div>
                   </div>
                   {!p.outOfStock && (
-                    <div style={{ padding: '0 12px 12px' }}>
+                    <div style={{ display: 'flex', gap: '6px', padding: '0 12px 12px' }}>
+                      <button onClick={(e) => { e.stopPropagation(); track('product_viewed', userId, detectSource(), { productId: p.id, productName: p.name, sellerSlug: p.sellerSlug }); navigate(`/store/${p.sellerSlug}`) }}
+                        style={{ flex: 1, padding: '8px', background: '#222', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' }}>
+                        💬 Message
+                      </button>
                       <button onClick={(e) => { e.stopPropagation(); track('product_viewed', userId, detectSource(), { productId: p.id, productName: p.name, sellerSlug: p.sellerSlug }); navigate(`/store/${p.sellerSlug}?productId=${p.id}`) }}
-                        style={{ width: '100%', padding: '8px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' }}>
+                        style={{ flex: 1, padding: '8px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' }}>
                         Buy Now
                       </button>
                     </div>
