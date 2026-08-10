@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { collection, getDocs, query } from 'firebase/firestore'
+import { collection, getDocs, query, where } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebase'
 import { useNavigate } from 'react-router-dom'
@@ -37,6 +37,8 @@ function BrowsePage() {
   const [errorMsg, setErrorMsg] = useState<string>('')
   const [recentSearches, setRecentSearches] = useState<string[]>([])
   const [userId, setUserId] = useState<string | null>(null)
+  const [mySlug, setMySlug] = useState<string | null>(null)
+  const [ownerFilter, setOwnerFilter] = useState<'all' | 'mine' | 'not-mine'>('all')
   const { addToBag, isInBag, count: bagCount } = useBag()
   const navigate = useNavigate()
   const RECENT_SEARCH_LIMIT = 6
@@ -360,7 +362,13 @@ function BrowsePage() {
       </div>
 
       {/* Categories */}
-      <div className="rt-filters" style={{ padding: '20px 24px', borderBottom: '1px solid #1a1a1a', display: 'flex', gap: '8px', overflowX: 'auto' }}>
+      <select value={ownerFilter} onChange={e => setOwnerFilter(e.target.value as 'all' | 'mine' | 'not-mine')}
+        style={{ padding: '8px 14px', borderRadius: '20px', border: '1px solid #333', background: ownerFilter !== 'all' ? green : 'transparent', color: ownerFilter !== 'all' ? '#000' : '#aaa', fontWeight: ownerFilter !== 'all' ? '700' : '500', cursor: 'pointer', fontSize: '14px', whiteSpace: 'nowrap', marginRight: '8px' }}>
+        <option value="all">All Products</option>
+        <option value="mine">Mine Only</option>
+        <option value="not-mine">Hide Mine</option>
+      </select>
+        <div className="rt-filters" style={{ padding: '20px 24px', borderBottom: '1px solid #1a1a1a', display: 'flex', gap: '8px', overflowX: 'auto' }}>
         {categories.map(cat => (
           <button key={cat} onClick={() => { track('category_browsed', userId || null, detectSource(), { category: cat }); setActiveCategory(cat) }}
             style={{ padding: '8px 18px', borderRadius: '20px', border: `1px solid ${activeCategory === cat ? green : '#333'}`, background: activeCategory === cat ? green : 'transparent', color: activeCategory === cat ? '#000' : '#aaa', fontWeight: activeCategory === cat ? '700' : '500', cursor: 'pointer', fontSize: '14px', whiteSpace: 'nowrap' }}>
@@ -400,7 +408,10 @@ function BrowsePage() {
                   {popularProducts.map(p => (
                     <div key={p.id} onClick={() => navigate(`/store/${p.sellerSlug}`)}
                       style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222', cursor: 'pointer', position: 'relative' }}>
-                      <img src={p.imageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
+                      {p.sellerSlug === mySlug && mySlug && (
+                      <div style={{ position: 'absolute', top: '6px', left: '6px', background: green, color: '#000', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: '800', zIndex: 2 }}>Yours</div>
+                    )}
+                    <img src={p.imageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
                         style={{ width: '100%', height: '120px', objectFit: 'cover', opacity: p.outOfStock ? 0.5 : 1 }} />
                       <div style={{ padding: '10px' }}>
                         <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '12px', color: '#fff', lineHeight: '1.2' }}>{p.name}</p>
@@ -425,6 +436,7 @@ function BrowsePage() {
                 <div key={p.id}
                   style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222', position: 'relative', display: 'flex', flexDirection: 'column' }}>
                   <div onClick={() => { track('product_viewed', userId, detectSource(), { productId: p.id, productName: p.name, sellerSlug: p.sellerSlug }); navigate(`/store/${p.sellerSlug}`) }} style={{ cursor: 'pointer' }}>
+                    {p.sellerSlug === mySlug && mySlug && (<div style={{ position: 'absolute', top: '6px', left: '6px', background: green, color: '#000', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: '800', zIndex: 2 }}>Yours</div>)}
                     <img src={p.imageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
                       style={{ width: '100%', height: '160px', objectFit: 'cover', opacity: p.outOfStock ? 0.5 : 1 }} />
                     <div style={{ padding: '12px' }}>
@@ -457,7 +469,7 @@ function BrowsePage() {
           </>
         )}
       </div>
-      <button onClick={() => navigate("/inbox")}
+      <button onClick={() => navigate('/inbox')}
         style={{ position: "fixed", bottom: "24px", left: "24px", width: "48px", height: "48px", borderRadius: "50%", background: green, color: "#000", border: "none", cursor: "pointer", fontSize: "20px", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, boxShadow: "0 4px 16px rgba(173,255,47,0.3)" }}>
         💬
       </button>
