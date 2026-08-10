@@ -254,6 +254,7 @@ function BrowsePage() {
         </h1>
         <p style={{ color: '#666', fontSize: '15px', margin: '0 0 24px' }}>
           Every store here is run by a real social media seller. Browse, order, and they'll reach out to complete your purchase.
+        {bagCount > 0 && <button onClick={() => navigate('/bag')} style={{ position: 'absolute', top: '20px', right: '20px', background: '#1a1a1a', border: '1px solid #222', borderRadius: '12px', padding: '10px 14px', cursor: 'pointer', color: '#fff', fontSize: '18px', zIndex: 5 }}>🛒 <span style={{ position: 'absolute', top: '-6px', right: '-6px', background: green, color: '#000', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '800' }}>{bagCount}</span></button>}
         </p>
 
         {/* Search */}
@@ -456,6 +457,10 @@ function BrowsePage() {
           </>
         )}
       </div>
+      <button onClick={() => navigate("/inbox")}
+        style={{ position: "fixed", bottom: "24px", left: "24px", width: "48px", height: "48px", borderRadius: "50%", background: green, color: "#000", border: "none", cursor: "pointer", fontSize: "20px", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, boxShadow: "0 4px 16px rgba(173,255,47,0.3)" }}>
+        💬
+      </button>
     </div>
   )
 }
