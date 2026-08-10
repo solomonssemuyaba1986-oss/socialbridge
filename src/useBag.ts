@@ -1,5 +1,8 @@
 import { useState, useCallback, useEffect } from 'react'
 
+import { doc, setDoc, getDocs, collection, increment as firestoreIncrement } from 'firebase/firestore'
+import { db } from './firebase'
+
 export interface BagItem {
   productId: string
   productName: string
@@ -24,6 +27,35 @@ function loadBag(): BagItem[] {
 function saveBag(items: BagItem[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
 }
+export async function incrementBagCount(productId: string, delta: number) {
+  try {
+    const ref = doc(db, 'bagCounts', productId)
+    await setDoc(ref, { count: firestoreIncrement(delta) }, { merge: true })
+  } catch (e) {
+    console.warn('Failed to update bag count:', e)
+  }
+}
+
+export async function getBagCounts(productIds: string[]): Promise<Record<string, number>> {
+  if (productIds.length === 0) return {}
+  try {
+    const result: Record<string, number> = {}
+    const snap = await getDocs(collection(db, 'bagCounts'))
+    snap.forEach(doc => {
+      if (productIds.includes(doc.id)) {
+        result[doc.id] = doc.data().count || 0
+      }
+    })
+    productIds.forEach(id => {
+      if (!(id in result)) result[id] = 0
+    })
+    return result
+  } catch (e) {
+    console.warn('Failed to fetch bag counts:', e)
+    return {}
+  }
+}
+
 
 export function useBag() {
   const [items, setItems] = useState<BagItem[]>(loadBag)
@@ -35,12 +67,19 @@ export function useBag() {
   const addToBag = useCallback((item: Omit<BagItem, 'addedAt'>) => {
     setItems(prev => {
       if (prev.some(i => i.productId === item.productId)) return prev
+      incrementBagCount(item.productId, 1)
       return [...prev, { ...item, addedAt: Date.now() }]
     })
   }, [])
 
   const removeFromBag = useCallback((productId: string) => {
-    setItems(prev => prev.filter(i => i.productId !== productId))
+    setItems(prev => {
+      const next = prev.filter(i => i.productId !== productId)
+      if (next.length < prev.length) {
+        incrementBagCount(productId, -1)
+      }
+      return next
+    })
   }, [])
 
   const isInBag = useCallback((productId: string) => {
