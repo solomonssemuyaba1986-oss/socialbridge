@@ -9,6 +9,7 @@ import SetupStore from './SetupStore.tsx'
 import Onboarding from './Onboarding.tsx'
 import Dashboard from './Dashboard.tsx'
 import BrowsePage from './BrowsePage.tsx'
+import BagPage from './BagPage.tsx'
 import BulkUpload from './BulkUpload.tsx'
 import Inbox from './Inbox.tsx'
 import OrderHistory from './OrderHistory.tsx'
@@ -87,6 +88,7 @@ function App() {
       <Route path="/store/:slug" element={<StorePage />} />
       <Route path="/dashboard" element={signedIn ? <Dashboard /> : <Navigate to="/" />} />
       <Route path="/browse" element={<BrowsePage />} />
+      <Route path="/bag" element={<BagPage />} />
       <Route path="/bulk-upload" element={signedIn ? <BulkUploadWrapper /> : <Navigate to="/" />} />
       <Route path="/products" element={signedIn ? <ProductsPage /> : <Navigate to="/" />} />
       <Route path="/inbox" element={signedIn ? <Inbox /> : <Navigate to="/" />} />

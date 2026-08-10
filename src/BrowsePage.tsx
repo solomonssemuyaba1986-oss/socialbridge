@@ -4,6 +4,7 @@ import { onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebase'
 import { useNavigate } from 'react-router-dom'
 import { track, detectSource } from './tracking'
+import { useBag } from './useBag'
 import { getMainCategories } from './categories'
 import Fuse from 'fuse.js'
 
@@ -36,6 +37,7 @@ function BrowsePage() {
   const [errorMsg, setErrorMsg] = useState<string>('')
   const [recentSearches, setRecentSearches] = useState<string[]>([])
   const [userId, setUserId] = useState<string | null>(null)
+  const { addToBag, isInBag, count: bagCount } = useBag()
   const navigate = useNavigate()
   const RECENT_SEARCH_LIMIT = 6
 
@@ -432,9 +434,9 @@ function BrowsePage() {
                   </div>
                   {!p.outOfStock && (
                     <div style={{ display: 'flex', gap: '6px', padding: '0 12px 12px' }}>
-                      <button onClick={(e) => { e.stopPropagation(); navigate(`/store/${p.sellerSlug}?messageId=${p.id}`) }}
-                        style={{ flex: 1, padding: '8px', background: '#222', color: green, border: `1px solid ${green}`, borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' }}>
-                        Message
+                      <button onClick={(e) => { e.stopPropagation(); addToBag({ productId: p.id, productName: p.name, productPrice: p.price, imageUrl: p.imageUrl, sellerSlug: p.sellerSlug, businessName: p.businessName }) }}
+                        style={{ flex: 1, padding: '8px', background: isInBag(p.id) ? '#1a2a1a' : '#222', color: green, border: `1px solid ${green}`, borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' }}>
+                        {isInBag(p.id) ? '✓ In Bag' : 'Add to Bag'}
                       </button>
                       <button onClick={(e) => { e.stopPropagation(); track('product_viewed', userId, detectSource(), { productId: p.id, productName: p.name, sellerSlug: p.sellerSlug }); navigate(`/store/${p.sellerSlug}?productId=${p.id}`) }}
                         style={{ flex: 1, padding: '8px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' }}>
