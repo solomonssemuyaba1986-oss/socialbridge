@@ -11,6 +11,7 @@ export interface BagItem {
   sellerSlug: string
   businessName: string
   addedAt: number
+  quantity: number
 }
 
 const STORAGE_KEY = 'rachett_bag'
@@ -18,7 +19,10 @@ const STORAGE_KEY = 'rachett_bag'
 function loadBag(): BagItem[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : []
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    // Migrate old items without quantity
+    return parsed.map((item: BagItem) => ({ ...item, quantity: item.quantity || 1 }))
   } catch {
     return []
   }
@@ -64,11 +68,11 @@ export function useBag() {
     saveBag(items)
   }, [items])
 
-  const addToBag = useCallback((item: Omit<BagItem, 'addedAt'>) => {
+  const addToBag = useCallback((item: Omit<BagItem, 'addedAt' | 'quantity'>) => {
     setItems(prev => {
       if (prev.some(i => i.productId === item.productId)) return prev
       incrementBagCount(item.productId, 1)
-      return [...prev, { ...item, addedAt: Date.now() }]
+      return [...prev, { ...item, addedAt: Date.now(), quantity: 1 }]
     })
   }, [])
 
@@ -82,11 +86,15 @@ export function useBag() {
     })
   }, [])
 
+  const setQuantity = useCallback((productId: string, quantity: number) => {
+    setItems(prev => prev.map(i => i.productId === productId ? { ...i, quantity: Math.max(1, quantity) } : i))
+  }, [])
+
   const isInBag = useCallback((productId: string) => {
     return items.some(i => i.productId === productId)
   }, [items])
 
   const clearBag = useCallback(() => setItems([]), [])
 
-  return { items, addToBag, removeFromBag, isInBag, clearBag, count: items.length }
+  return { items, addToBag, removeFromBag, isInBag, setQuantity, clearBag, count: items.length }
 }
