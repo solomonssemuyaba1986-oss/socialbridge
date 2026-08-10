@@ -8,6 +8,7 @@ import { CATEGORIES, getSubcategories } from './categories'
 import { notify } from './notifications'
 import { useConversation } from './useConversation.ts'
 import { useGuestOTP } from './useGuestOTP.ts'
+import { useBag } from './useBag'
 import { useSellerStats, getSalesLabel, formatRating, renderStars, getBadgeStatusLabel } from './useSellerStats.ts'
 import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder.ts'
 import { track } from './tracking'
@@ -320,6 +321,7 @@ function StorePage() {
   const { slug } = useParams()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+  const { count: bagCount } = useBag()
   const productDeepLinkId = searchParams.get('productId')
 const messageDeepLinkId = searchParams.get('messageId')
   const [seller, setSeller] = useState<Seller | null>(null)
@@ -891,6 +893,17 @@ const handleSignupForAction = async (provider: any) => {
           Powered by <span style={{ color: green, fontWeight: '700' }}>Rachett</span>
         </p>
       </div>
+
+      {/* Floating Bag */}
+      <button onClick={() => navigate('/bag')}
+        style={{ position: 'fixed', bottom: '24px', right: '24px', width: '56px', height: '56px', borderRadius: '50%', background: green, color: '#000', border: 'none', cursor: 'pointer', fontSize: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, boxShadow: '0 4px 16px rgba(173,255,47,0.4)' }}>
+        🛍️
+        {bagCount > 0 && (
+          <span style={{ position: 'absolute', top: '-4px', right: '-4px', background: '#ff4444', color: '#fff', borderRadius: '50%', width: '22px', height: '22px', fontSize: '11px', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #0f0f0f' }}>
+            {bagCount}
+          </span>
+        )}
+      </button>
 
       {/* Order Modal */}
       {orderProduct && (
