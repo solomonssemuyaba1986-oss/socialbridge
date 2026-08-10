@@ -62,6 +62,13 @@ function BrowsePage() {
     }
   }
 
+  const formatBagCount = (n: number) => {
+    if (n < 1000) return String(n)
+    if (n < 10000) return (n / 1000).toFixed(1) + 'K'
+    if (n < 1000000) return Math.round(n / 1000) + 'K'
+    return (n / 1000000).toFixed(1) + 'M'
+  }
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUserId(user ? user.uid : null)
@@ -458,7 +465,7 @@ function BrowsePage() {
                     {p.sellerSlug === mySlug && mySlug && (<div style={{ position: 'absolute', top: '6px', left: '6px', background: green, color: '#000', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: '800', zIndex: 2 }}>Yours</div>)}
                     <button onClick={(e) => { e.stopPropagation(); handleToggleBag(p) }}
                       style={{ position: 'absolute', top: '6px', right: '6px', background: isInBag(p.id) ? green : 'rgba(0,0,0,0.6)', color: isInBag(p.id) ? '#000' : '#fff', border: 'none', borderRadius: '8px', padding: '2px 7px', cursor: 'pointer', fontSize: '11px', fontWeight: '700', zIndex: 2, display: 'flex', alignItems: 'center', gap: '3px', backdropFilter: 'blur(4px)', lineHeight: 1.4 }}>
-                      🛍️ {(bagCounts[p.id] || 0)}
+                      🛍️ {formatBagCount(bagCounts[p.id] || 0)}
                     </button>
 
                     <img src={p.imageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
