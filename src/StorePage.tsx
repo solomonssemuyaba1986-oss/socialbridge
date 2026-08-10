@@ -9,8 +9,8 @@ import { notify } from './notifications'
 import { useConversation } from './useConversation.ts'
 import { useGuestOTP } from './useGuestOTP.ts'
 import { useSellerStats, getSalesLabel, formatRating, renderStars, getBadgeStatusLabel } from './useSellerStats.ts'
-import { createBuyerOrder, incrementProductOrderCount } from '
-import { track } from './tracking'./createBuyerOrder.ts'
+import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder.ts'
+import { track } from './tracking'
 
 interface Seller {
   businessName: string
