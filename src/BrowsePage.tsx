@@ -1,10 +1,10 @@
 import { useEffect, useState, useMemo } from 'react'
-import { collection, getDocs, query, where } from 'firebase/firestore'
+import { collection, getDocs, query } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebase'
 import { useNavigate } from 'react-router-dom'
 import { track, detectSource } from './tracking'
-import { useBag } from './useBag'
+import { useBag, getBagCounts } from './useBag'
 import { getMainCategories } from './categories'
 import Fuse from 'fuse.js'
 
@@ -37,11 +37,30 @@ function BrowsePage() {
   const [errorMsg, setErrorMsg] = useState<string>('')
   const [recentSearches, setRecentSearches] = useState<string[]>([])
   const [userId, setUserId] = useState<string | null>(null)
-  const [mySlug, setMySlug] = useState<string | null>(null)
+  const [mySlug] = useState<string | null>(null)
   const [ownerFilter, setOwnerFilter] = useState<'all' | 'mine' | 'not-mine'>('all')
-  const { addToBag, isInBag, count: bagCount } = useBag()
+  const { addToBag, removeFromBag, isInBag, items: bagItems, count: bagCount } = useBag()
   const navigate = useNavigate()
+  const [bagCounts, setBagCounts] = useState<Record<string, number>>({})
+  const [showBagDrawer, setShowBagDrawer] = useState(false)
   const RECENT_SEARCH_LIMIT = 6
+
+  // Fetch bag counts for displayed products
+  useEffect(() => {
+    const ids = filtered.map(p => p.id)
+    if (ids.length === 0) return
+    getBagCounts(ids).then(setBagCounts)
+  }, [filtered])
+
+  const handleToggleBag = (p: Product) => {
+    if (isInBag(p.id)) {
+      removeFromBag(p.id)
+      setBagCounts(prev => ({ ...prev, [p.id]: Math.max(0, (prev[p.id] || 0) - 1) }))
+    } else {
+      addToBag({ productId: p.id, productName: p.name, productPrice: p.price, imageUrl: p.imageUrl, sellerSlug: p.sellerSlug, businessName: p.businessName })
+      setBagCounts(prev => ({ ...prev, [p.id]: (prev[p.id] || 0) + 1 }))
+    }
+  }
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -435,8 +454,13 @@ function BrowsePage() {
                             {filtered.map(p => (
                 <div key={p.id}
                   style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-                  <div onClick={() => { track('product_viewed', userId, detectSource(), { productId: p.id, productName: p.name, sellerSlug: p.sellerSlug }); navigate(`/store/${p.sellerSlug}`) }} style={{ cursor: 'pointer' }}>
+                  <div onClick={() => { track('product_viewed', userId, detectSource(), { productId: p.id, productName: p.name, sellerSlug: p.sellerSlug }); navigate(`/store/${p.sellerSlug}`) }} style={{ cursor: 'pointer', position: 'relative' }}>
                     {p.sellerSlug === mySlug && mySlug && (<div style={{ position: 'absolute', top: '6px', left: '6px', background: green, color: '#000', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: '800', zIndex: 2 }}>Yours</div>)}
+                    <button onClick={(e) => { e.stopPropagation(); handleToggleBag(p) }}
+                      style={{ position: 'absolute', top: '6px', right: '6px', background: isInBag(p.id) ? green : 'rgba(0,0,0,0.6)', color: isInBag(p.id) ? '#000' : '#fff', border: 'none', borderRadius: '8px', padding: '2px 7px', cursor: 'pointer', fontSize: '11px', fontWeight: '700', zIndex: 2, display: 'flex', alignItems: 'center', gap: '3px', backdropFilter: 'blur(4px)', lineHeight: 1.4 }}>
+                      🛍️ {(bagCounts[p.id] || 0)}
+                    </button>
+
                     <img src={p.imageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
                       style={{ width: '100%', height: '160px', objectFit: 'cover', opacity: p.outOfStock ? 0.5 : 1 }} />
                     <div style={{ padding: '12px' }}>
@@ -446,13 +470,9 @@ function BrowsePage() {
                     </div>
                   </div>
                   {!p.outOfStock && (
-                    <div style={{ display: 'flex', gap: '6px', padding: '0 12px 12px' }}>
-                      <button onClick={(e) => { e.stopPropagation(); addToBag({ productId: p.id, productName: p.name, productPrice: p.price, imageUrl: p.imageUrl, sellerSlug: p.sellerSlug, businessName: p.businessName }) }}
-                        style={{ flex: 1, padding: '8px', background: isInBag(p.id) ? '#1a2a1a' : '#222', color: green, border: `1px solid ${green}`, borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' }}>
-                        {isInBag(p.id) ? '✓ In Bag' : 'Add to Bag'}
-                      </button>
+                    <div style={{ padding: '0 12px 12px' }}>
                       <button onClick={(e) => { e.stopPropagation(); track('product_viewed', userId, detectSource(), { productId: p.id, productName: p.name, sellerSlug: p.sellerSlug }); navigate(`/store/${p.sellerSlug}?productId=${p.id}`) }}
-                        style={{ flex: 1, padding: '8px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' }}>
+                        style={{ width: '100%', padding: '8px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' }}>
                         Buy Now
                       </button>
                     </div>
@@ -469,10 +489,51 @@ function BrowsePage() {
           </>
         )}
       </div>
-      <button onClick={() => navigate('/inbox')}
-        style={{ position: "fixed", bottom: "24px", left: "24px", width: "48px", height: "48px", borderRadius: "50%", background: green, color: "#000", border: "none", cursor: "pointer", fontSize: "20px", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, boxShadow: "0 4px 16px rgba(173,255,47,0.3)" }}>
-        💬
+      <button onClick={() => setShowBagDrawer(!showBagDrawer)}
+        style={{ position: 'fixed', bottom: '24px', right: '24px', width: '56px', height: '56px', borderRadius: '50%', background: green, color: '#000', border: 'none', cursor: 'pointer', fontSize: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, boxShadow: '0 4px 16px rgba(173,255,47,0.4)' }}>
+        🛍️
+        {bagCount > 0 && (
+          <span style={{ position: 'absolute', top: '-4px', right: '-4px', background: '#ff4444', color: '#fff', borderRadius: '50%', width: '22px', height: '22px', fontSize: '11px', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #0f0f0f' }}>
+            {bagCount}
+          </span>
+        )}
       </button>
+
+      {/* Bag Drawer */}
+      {showBagDrawer && (
+        <>
+          <div onClick={() => setShowBagDrawer(false)}
+            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', zIndex: 100 }} />
+          <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: '#1a1a1a', borderRadius: '16px 16px 0 0', zIndex: 101, maxHeight: '60vh', overflowY: 'auto', padding: '20px', border: '1px solid #222' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, color: '#fff', fontSize: '16px', fontWeight: '800' }}>Your Bag ({bagCount})</h3>
+              <button onClick={() => setShowBagDrawer(false)}
+                style={{ background: 'transparent', border: 'none', color: '#555', fontSize: '20px', cursor: 'pointer' }}>✕</button>
+            </div>
+            {bagItems.length === 0 ? (
+              <p style={{ color: '#555', fontSize: '14px', textAlign: 'center', padding: '40px 0' }}>Nothing bagged yet. Tap 🛍️ on any product.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {bagItems.map(item => (
+                  <div key={item.productId} style={{ display: 'flex', gap: '12px', background: '#0f0f0f', borderRadius: '10px', padding: '10px', alignItems: 'center', border: '1px solid #222' }}>
+                    <img src={item.imageUrl || 'https://placehold.co/60x60/1a1a1a/333333'} alt={item.productName}
+                      style={{ width: '56px', height: '56px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ margin: '0 0 2px', color: '#fff', fontSize: '13px', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.productName}</p>
+                      <p style={{ margin: 0, color: '#555', fontSize: '11px' }}>{item.businessName}</p>
+                      <p style={{ margin: 0, color: green, fontSize: '13px', fontWeight: '700' }}>UGX {item.productPrice}</p>
+                    </div>
+                    <button onClick={() => handleToggleBag({ id: item.productId, name: item.productName, price: item.productPrice, imageUrl: item.imageUrl, sellerSlug: item.sellerSlug, businessName: item.businessName, description: '' })}
+                      style={{ background: 'transparent', border: 'none', color: '#ff4444', cursor: 'pointer', fontSize: '18px', padding: '4px' }}>
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }
