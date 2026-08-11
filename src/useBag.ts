@@ -70,27 +70,22 @@ export function useBag() {
     saveBag(items)
   }, [items])
 
-  // Auth + cloud sync: when signed in, live-listen to the Firestore bag
+  // Auth + cloud sync: when signed in, live-listen to the Firestore bag.
+  // Also runs a light safety-net refresh so the bag catches up even if
+  // the realtime stream stalls (e.g. background tab, flaky connection).
   useEffect(() => {
     let unsubFirestore: (() => void) | null = null
+    let refreshTimer: number | null = null
 
     const unsubAuth = onAuthStateChanged(auth, (user) => {
       if (unsubFirestore) { unsubFirestore(); unsubFirestore = null }
+      if (refreshTimer !== null) { window.clearInterval(refreshTimer); refreshTimer = null }
       uidRef.current = user?.uid || null
 
       if (user) {
-        // First snapshot: merge local (guest) items into the cloud bag,
-        // then keep live-listening so changes from other devices appear instantly.
         let first = true
-        unsubFirestore = onSnapshot(collection(db, 'users', user.uid, 'bag'), (snap) => {
-          const remote: BagItem[] = []
-          snap.forEach(docSnap => {
-            const data = docSnap.data() as BagItem
-            if (data && data.productId) {
-              remote.push({ ...data, quantity: data.quantity || 1 })
-            }
-          })
 
+        const applyRemote = (remote: BagItem[]) => {
           const local = loadBag()
           const merged = new Map<string, BagItem>()
           // Local first, remote wins for same productId (cloud is source of truth)
@@ -109,8 +104,44 @@ export function useBag() {
               }
             })
           }
-          setItems(Array.from(merged.values()))
-        })
+
+          const next = Array.from(merged.values())
+          setItems(prev => {
+            if (prev.length === next.length && prev.every((item, idx) =>
+              item.productId === next[idx].productId &&
+              item.quantity === next[idx].quantity
+            )) return prev
+            return next
+          })
+        }
+
+        const collectRemote = (snap: { forEach: (cb: (d: { data: () => unknown }) => void) => void }) => {
+          const remote: BagItem[] = []
+          snap.forEach(docSnap => {
+            const data = docSnap.data() as BagItem
+            if (data && data.productId) {
+              remote.push({ ...data, quantity: data.quantity || 1 })
+            }
+          })
+          return remote
+        }
+
+        // Real-time listener
+        unsubFirestore = onSnapshot(
+          collection(db, 'users', user.uid, 'bag'),
+          (snap) => applyRemote(collectRemote(snap)),
+          (err) => console.warn('Bag realtime listener error:', err)
+        )
+
+        // Safety-net refresh (catches up within ~5s if realtime stalls)
+        refreshTimer = window.setInterval(async () => {
+          try {
+            const snap = await getDocs(collection(db, 'users', user.uid, 'bag'))
+            applyRemote(collectRemote(snap))
+          } catch (err) {
+            console.warn('Bag refresh failed:', err)
+          }
+        }, 5000)
       } else {
         // Signed out: fall back to the local guest bag
         setItems(loadBag())
@@ -120,6 +151,7 @@ export function useBag() {
     return () => {
       unsubAuth()
       if (unsubFirestore) unsubFirestore()
+      if (refreshTimer !== null) window.clearInterval(refreshTimer)
     }
   }, [])
 
