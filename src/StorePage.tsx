@@ -10,6 +10,7 @@ import { useConversation } from './useConversation.ts'
 import { useGuestOTP } from './useGuestOTP.ts'
 import { useBag } from './useBag'
 import { useSellerStats, getSalesLabel, formatRating, renderStars, getBadgeStatusLabel } from './useSellerStats.ts'
+import { QUICK_REPLIES } from './quickReplies'
 import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder.ts'
 import { track } from './tracking'
 
@@ -344,6 +345,7 @@ const messageDeepLinkId = searchParams.get('messageId')
   const [orderProduct, setOrderProduct] = useState<Product | null>(null)
   const [messageProduct, setMessageProduct] = useState<Product | null>(null)
   const [messageText, setMessageText] = useState('')
+  const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [feedbackMessage, setFeedbackMessage] = useState('')
   const [feedbackType, setFeedbackType] = useState<'success' | 'error' | 'info'>('success')
   const [feedbackVisible, setFeedbackVisible] = useState(false)
@@ -603,6 +605,7 @@ const handleSendMessage = async () => {
     console.log('Message sent')
     track('message_sent', auth.currentUser?.uid || null, detectPlatform(searchParams), { productId: messageProduct.id, productName: messageProduct.name, sellerId })
     setMessageText('')
+    setShowQuickReplies(false)
     setMessageProduct(null)
     showFeedback(notify.messageSent, 'success')
   } catch (err: any) {
@@ -964,6 +967,24 @@ const handleSignupForAction = async (provider: any) => {
               <img src={messageProduct.imageUrl} alt={messageProduct.name}
                 style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '6px', marginBottom: '8px' }} />
               <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '13px', color: '#fff', textAlign: 'left' }}>{messageProduct.name}</p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: showQuickReplies ? '12px' : '16px' }}>
+              <button onClick={() => setShowQuickReplies(!showQuickReplies)}
+                style={{ padding: '6px 12px', background: showQuickReplies ? '#1a2a1a' : '#111', color: green, border: `1px solid ${green}`, borderRadius: '20px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                ⚡ Quick replies {showQuickReplies ? '▲' : '▼'}
+              </button>
+            </div>
+            {showQuickReplies && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px', background: '#111', borderRadius: '10px', padding: '10px', border: '1px solid #2a2a2a' }}>
+                {QUICK_REPLIES.map(q => (
+                  <button key={q} onClick={() => { setMessageText(q); setShowQuickReplies(false) }}
+                    style={{ textAlign: 'left', padding: '9px 12px', background: '#1a1a1a', color: '#ddd', border: '1px solid #2a2a2a', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                    {q}
+                  </button>
+                ))}
+              </div>
+            )}
+
               <p style={{ margin: 0, color: green, fontSize: '13px', fontWeight: '700', textAlign: 'left' }}>UGX {messageProduct.price}</p>
             </div>
 
@@ -1040,6 +1061,7 @@ const handleSignupForAction = async (provider: any) => {
                           setTimeout(() => {
                             setMessageProduct(null)
                             setMessageText('')
+                            setShowQuickReplies(false)
                             setGuestName('')
                             setGuestPhone('')
                             setGuestOtpInput('')
@@ -1079,7 +1101,7 @@ const handleSignupForAction = async (provider: any) => {
                 </div>
 
                 {/* Sign in option */}
-                <button onClick={() => { setShowSignupSheet(true); setMessageProduct(null) }}
+                <button onClick={() => { setShowSignupSheet(true); setShowQuickReplies(false); setMessageProduct(null) }}
                   style={{ width: '100%', padding: '12px', background: 'transparent', color: '#aaa', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', marginBottom: '12px' }}>
                   Sign in with Google
                 </button>
@@ -1087,7 +1109,7 @@ const handleSignupForAction = async (provider: any) => {
             )}
 
             {/* Cancel Button */}
-            <button onClick={() => { setMessageProduct(null); setMessageText(''); resetOTP(); setGuestName(''); setGuestPhone(''); setGuestOtpInput('') }}
+            <button onClick={() => { setMessageProduct(null); setMessageText(''); setShowQuickReplies(false); resetOTP(); setGuestName(''); setGuestPhone(''); setGuestOtpInput('') }}
               style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
               Cancel
             </button>
