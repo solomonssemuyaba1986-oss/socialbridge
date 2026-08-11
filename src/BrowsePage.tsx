@@ -639,11 +639,11 @@ function BrowsePage() {
                   </div>
                   {!p.outOfStock && (
                     <div style={{ display: 'flex', gap: '6px', padding: '0 12px 12px' }}>
-                      <button onClick={(e) => { e.stopPropagation(); track('product_viewed', userId, detectSource(), { productId: p.id, productName: p.name, sellerSlug: p.sellerSlug }); navigate(`/store/${p.sellerSlug}`) }}
+                      <button onClick={(e) => { e.stopPropagation(); setMessageProduct(p) }}
                         style={{ flex: 1, padding: '8px', background: '#222', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' }}>
                         💬 Message
                       </button>
-                      <button onClick={(e) => { e.stopPropagation(); track('product_viewed', userId, detectSource(), { productId: p.id, productName: p.name, sellerSlug: p.sellerSlug }); navigate(`/store/${p.sellerSlug}?productId=${p.id}`) }}
+                      <button onClick={(e) => { e.stopPropagation(); setOrderProduct(p) }}
                         style={{ flex: 1, padding: '8px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' }}>
                         Buy Now
                       </button>
