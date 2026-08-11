@@ -7,7 +7,7 @@ function BagPage() {
   const navigate = useNavigate()
   const { items, removeFromBag, clearBag, setQuantity, count } = useBag()
 
-  const total = items.reduce((sum, i) => sum + (parseInt(i.productPrice) || 0) * i.quantity, 0)
+  const total = items.reduce((sum, i) => sum + (Number(String(i.productPrice).replace(/[^0-9]/g, '')) || 0) * i.quantity, 0)
 
   if (count === 0) {
     return (
