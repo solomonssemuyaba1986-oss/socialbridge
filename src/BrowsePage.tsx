@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { collection, getDocs, query } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebase'
@@ -14,6 +14,7 @@ interface Product {
   price: string
   description: string
   imageUrl: string
+  images?: string[]
   sellerSlug: string
   businessName: string
   category?: string
@@ -42,6 +43,9 @@ function BrowsePage() {
   const { addToBag, removeFromBag, isInBag, count: bagCount } = useBag()
   const navigate = useNavigate()
   const [bagCounts, setBagCounts] = useState<Record<string, number>>({})
+  const [surveyProduct, setSurveyProduct] = useState<Product | null>(null)
+  const [surveyImageIndex, setSurveyImageIndex] = useState(0)
+  const clickTimerRef = useRef<number | null>(null)
   const RECENT_SEARCH_LIMIT = 6
 
   // Fetch bag counts for displayed products
@@ -66,6 +70,37 @@ function BrowsePage() {
     if (n < 10000) return (n / 1000).toFixed(1) + 'K'
     if (n < 1000000) return Math.round(n / 1000) + 'K'
     return (n / 1000000).toFixed(1) + 'M'
+  }
+
+  const handleCardClick = (p: Product) => {
+    if (clickTimerRef.current !== null) {
+      // Second tap within window → double-tap, open survey
+      clearTimeout(clickTimerRef.current)
+      clickTimerRef.current = null
+      setSurveyImageIndex(0)
+      setSurveyProduct(p)
+      track('product_surveyed', userId, detectSource(), { productId: p.id, productName: p.name, sellerSlug: p.sellerSlug })
+      return
+    }
+    // First tap → wait for possible second tap
+    clickTimerRef.current = window.setTimeout(() => {
+      clickTimerRef.current = null
+      track('product_viewed', userId, detectSource(), { productId: p.id, productName: p.name, sellerSlug: p.sellerSlug })
+      navigate(`/store/${p.sellerSlug}`)
+    }, 250)
+  }
+
+  const getSurveyImages = (p: Product) => {
+    if (p.images && p.images.length > 0) return p.images
+    return p.imageUrl ? [p.imageUrl] : []
+  }
+
+  const closeSurvey = () => {
+    setSurveyProduct(null)
+    if (clickTimerRef.current !== null) {
+      clearTimeout(clickTimerRef.current)
+      clickTimerRef.current = null
+    }
   }
 
   useEffect(() => {
@@ -459,7 +494,7 @@ function BrowsePage() {
                             {filtered.map(p => (
                 <div key={p.id}
                   style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-                  <div onClick={() => { track('product_viewed', userId, detectSource(), { productId: p.id, productName: p.name, sellerSlug: p.sellerSlug }); navigate(`/store/${p.sellerSlug}`) }} style={{ cursor: 'pointer', position: 'relative' }}>
+                  <div onClick={() => handleCardClick(p)} style={{ cursor: 'pointer', position: 'relative' }}>
                     {p.sellerSlug === mySlug && mySlug && (<div style={{ position: 'absolute', top: '6px', left: '6px', background: green, color: '#000', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: '800', zIndex: 2 }}>Yours</div>)}
                     <button onClick={(e) => { e.stopPropagation(); handleToggleBag(p) }}
                       style={{ position: 'absolute', top: '6px', right: '6px', background: isInBag(p.id) ? green : 'rgba(0,0,0,0.6)', color: isInBag(p.id) ? '#000' : '#fff', border: 'none', borderRadius: '8px', padding: '2px 7px', cursor: 'pointer', fontSize: '11px', fontWeight: '700', zIndex: 2, display: 'flex', alignItems: 'center', gap: '3px', backdropFilter: 'blur(4px)', lineHeight: 1.4 }}>
@@ -468,6 +503,11 @@ function BrowsePage() {
 
                     <img src={p.imageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
                       style={{ width: '100%', height: '160px', objectFit: 'cover', opacity: p.outOfStock ? 0.5 : 1 }} />
+                    {getSurveyImages(p).length > 1 && (
+                      <div style={{ position: 'absolute', bottom: '6px', right: '6px', background: 'rgba(0,0,0,0.6)', color: '#fff', padding: '2px 7px', borderRadius: '12px', fontSize: '10px', fontWeight: '700', zIndex: 2, backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', gap: '3px', lineHeight: 1.4 }}>
+                        📷 {getSurveyImages(p).length}
+                      </div>
+                    )}
                     <div style={{ padding: '12px' }}>
                       <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: '#fff' }}>{p.name}</p>
                       <p style={{ margin: '0 0 8px', color: '#555', fontSize: '12px' }}>{p.businessName}</p>
@@ -498,6 +538,72 @@ function BrowsePage() {
           </>
         )}
       </div>
+
+      {/* Product Survey Modal */}
+      {surveyProduct && (() => {
+        const surveyImages = getSurveyImages(surveyProduct)
+        const currentImg = surveyImages[surveyImageIndex] || surveyProduct.imageUrl || ''
+        return (
+          <div onClick={closeSurvey}
+            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.92)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
+            <div onClick={e => e.stopPropagation()}
+              style={{ background: '#1a1a1a', borderRadius: '16px', padding: '20px', width: '100%', maxWidth: '420px', border: '1px solid #222', maxHeight: '92vh', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <span style={{ color: '#888', fontSize: '12px', fontWeight: '600' }}>Product details</span>
+                <button onClick={closeSurvey}
+                  style={{ background: 'transparent', border: 'none', color: '#555', fontSize: '20px', cursor: 'pointer', padding: '0 4px' }}>✕</button>
+              </div>
+
+              {/* Survey Image */}
+              <div style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', marginBottom: '14px' }}>
+                <img src={currentImg || 'https://placehold.co/600x400/1a1a1a/333333'} alt={surveyProduct.name}
+                  style={{ width: '100%', height: '280px', objectFit: 'cover', display: 'block' }} />
+                {surveyImages.length > 1 && (
+                  <>
+                    <button onClick={() => setSurveyImageIndex(prev => (prev === 0 ? surveyImages.length - 1 : prev - 1))}
+                      style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.6)', border: 'none', color: '#fff', borderRadius: '50%', width: '36px', height: '36px', cursor: 'pointer', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      ‹
+                    </button>
+                    <button onClick={() => setSurveyImageIndex(prev => (prev === surveyImages.length - 1 ? 0 : prev + 1))}
+                      style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.6)', border: 'none', color: '#fff', borderRadius: '50%', width: '36px', height: '36px', cursor: 'pointer', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      ›
+                    </button>
+                    <div style={{ position: 'absolute', bottom: '10px', right: '10px', background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '700' }}>
+                      {surveyImageIndex + 1}/{surveyImages.length}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <h2 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: '800', color: '#fff' }}>{surveyProduct.name}</h2>
+              <p style={{ margin: '0 0 8px', color: '#888', fontSize: '13px' }}>{surveyProduct.businessName}</p>
+              <p style={{ margin: '0 0 12px', fontWeight: '800', fontSize: '18px', color: green }}>UGX {surveyProduct.price}</p>
+              {surveyProduct.description && (
+                <p style={{ margin: '0 0 16px', color: '#aaa', fontSize: '13px', lineHeight: 1.6 }}>{surveyProduct.description}</p>
+              )}
+
+              {/* Actions */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <button onClick={() => handleToggleBag(surveyProduct)}
+                  style={{ padding: '12px', background: isInBag(surveyProduct.id) ? '#1a2a1a' : '#222', color: green, border: `1px solid ${green}`, borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '14px' }}>
+                  {isInBag(surveyProduct.id) ? '✓ In Bag — Tap to Remove' : `🛍️ Add to Bag (${formatBagCount(bagCounts[surveyProduct.id] || 0)} bagged)`}
+                </button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button onClick={() => navigate(`/store/${surveyProduct.sellerSlug}`)}
+                    style={{ flex: 1, padding: '12px', background: '#222', color: '#fff', border: '1px solid #333', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '14px' }}>
+                    💬 Message
+                  </button>
+                  <button onClick={() => navigate(`/store/${surveyProduct.sellerSlug}?productId=${surveyProduct.id}`)}
+                    style={{ flex: 1, padding: '12px', background: green, color: '#000', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '14px' }}>
+                    Buy Now
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       <button onClick={() => navigate('/bag')}
         style={{ position: 'fixed', bottom: '24px', right: '24px', width: '56px', height: '56px', borderRadius: '50%', background: green, color: '#000', border: 'none', cursor: 'pointer', fontSize: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, boxShadow: '0 4px 16px rgba(173,255,47,0.4)' }}>
         🛍️
