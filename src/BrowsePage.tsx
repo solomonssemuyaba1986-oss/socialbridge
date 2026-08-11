@@ -7,6 +7,7 @@ import { track, detectSource } from './tracking'
 import { useBag, getBagCounts } from './useBag'
 import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder'
 import { useGuestOTP } from './useGuestOTP'
+import { QUICK_REPLIES } from './quickReplies'
 import { getMainCategories } from './categories'
 import Fuse from 'fuse.js'
 
@@ -56,13 +57,14 @@ function BrowsePage() {
   const [deliveryArea, setDeliveryArea] = useState('')
   const [orderMessage, setOrderMessage] = useState('')
   const [messageText, setMessageText] = useState('')
+  const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [guestName, setGuestName] = useState('')
   const [guestPhone, setGuestPhone] = useState('')
   const [guestOtpInput, setGuestOtpInput] = useState('')
   const [guestMessageSent, setGuestMessageSent] = useState(false)
   const { state: otpState, requestOTP, verifyOTP, reset: resetOTP } = useGuestOTP()
   const clickTimerRef = useRef<number | null>(null)
-  const RECENT_SEARCH_LIMIT = 6
+  const RECENT_SEARCH_LIMIT = 11
 
   // Fetch bag counts for displayed products
   useEffect(() => {
@@ -179,6 +181,7 @@ function BrowsePage() {
           setTimeout(() => {
             setMessageProduct(null)
             setMessageText('')
+            setShowQuickReplies(false)
             setGuestName('')
             setGuestPhone('')
             setGuestOtpInput('')
@@ -207,6 +210,7 @@ function BrowsePage() {
       })
       track('message_sent', auth.currentUser.uid, detectSource(), { productId: messageProduct.id, productName: messageProduct.name, sellerId: messageProduct.sellerId })
       setMessageText('')
+      setShowQuickReplies(false)
       setMessageProduct(null)
       alert('Message sent! The seller will reply soon.')
     } catch (err) {
@@ -218,6 +222,7 @@ function BrowsePage() {
   const closeMessageModal = () => {
     setMessageProduct(null)
     setMessageText('')
+    setShowQuickReplies(false)
     setGuestName('')
     setGuestPhone('')
     setGuestOtpInput('')
@@ -786,6 +791,24 @@ function BrowsePage() {
               <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '13px', color: '#fff', textAlign: 'left' }}>{messageProduct.name}</p>
               <p style={{ margin: 0, color: green, fontSize: '13px', fontWeight: '700', textAlign: 'left' }}>UGX {messageProduct.price}</p>
             </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: showQuickReplies ? '12px' : '16px' }}>
+              <button onClick={() => setShowQuickReplies(!showQuickReplies)}
+                style={{ padding: '6px 12px', background: showQuickReplies ? '#1a2a1a' : '#111', color: green, border: `1px solid ${green}`, borderRadius: '20px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                ⚡ Quick replies {showQuickReplies ? '▲' : '▼'}
+              </button>
+            </div>
+            {showQuickReplies && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px', background: '#111', borderRadius: '10px', padding: '10px', border: '1px solid #2a2a2a' }}>
+                {QUICK_REPLIES.map(q => (
+                  <button key={q} onClick={() => { setMessageText(q); setShowQuickReplies(false) }}
+                    style={{ textAlign: 'left', padding: '9px 12px', background: '#1a1a1a', color: '#ddd', border: '1px solid #2a2a2a', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                    {q}
+                  </button>
+                ))}
+              </div>
+            )}
+
 
             {auth.currentUser ? (
               <>
