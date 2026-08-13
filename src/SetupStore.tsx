@@ -57,6 +57,27 @@ function SetupStore() {
   const [phoneOtpLoading, setPhoneOtpLoading] = useState(false)
   const [phoneOtpError, setPhoneOtpError] = useState('')
 
+  // Multi-step onboarding
+  const [step, setStep] = useState(1)
+  const totalSteps = 4
+
+  const goNext = (to: number) => {
+    if (to === 2) {
+      if (!businessName.trim()) { setErrors(e => ({ ...e, businessName: 'Business name is required' })); return }
+      if (storeHandle.length < 3) { setErrors(e => ({ ...e, submit: 'Choose a store handle (at least 3 characters) to continue.' })); return }
+    }
+    if (to === 3) {
+      if (whatsapp.length !== 9) { setErrors(e => ({ ...e, whatsapp: 'Enter your 9-digit Uganda WhatsApp number to continue.' })); return }
+      if (!phoneVerified) { setErrors(e => ({ ...e, submit: 'Verify your phone number before continuing.' })); return }
+    }
+    if (to === 4) {
+      if (!nationality) { setErrors(e => ({ ...e, nationality: 'Select your nationality to continue.' })); return }
+    }
+    setErrors({})
+    setStep(to)
+    window.scrollTo(0, 0)
+  }
+
   const navigate = useNavigate()
 
   const sanitizeInput = (input: string, maxLength: number = 100): string => {
@@ -410,6 +431,18 @@ function SetupStore() {
           </div>
         )}
 
+        {/* Step Progress */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px' }}>
+          {[1, 2, 3, 4].map(n => (
+            <div key={n} style={{ flex: 1, height: '6px', borderRadius: '3px', background: step >= n ? '#1a1a1a' : '#e5e5e5' }} />
+          ))}
+        </div>
+        <p style={{ fontSize: '13px', color: '#888', margin: '0 0 20px', fontWeight: '600' }}>
+          Step {step} of {totalSteps} — {step === 1 ? 'Your store' : step === 2 ? 'Verify your phone' : step === 3 ? 'About you' : 'Finish up'}
+        </p>
+
+        {step === 1 && (
+          <>
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Business Name</label>
         <input value={businessName} onChange={e => setBusinessName(e.target.value)}
           placeholder="e.g. Zara Cosmetics"
@@ -453,6 +486,17 @@ function SetupStore() {
         {errors.bio && <p style={{ color: '#c33', fontSize: '12px', margin: '4px 0 16px' }}>{errors.bio}</p>}
         {!errors.bio && <div style={{ marginBottom: '16px' }} />}
 
+          </>
+        )}
+        {step === 1 && (
+          <button onClick={() => goNext(2)}
+            style={{ width: '100%', padding: '14px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: 'pointer', marginTop: '8px' }}>
+            Continue →
+          </button>
+        )}
+
+        {step === 2 && (
+          <>
         {/* Phone OTP Verification */}
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>WhatsApp Number</label>
         <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>Uganda number — we add 256 automatically. You must verify this number.</p>
@@ -524,6 +568,23 @@ function SetupStore() {
           Your number is for verification only — never shared without your permission.
         </p>
 
+          </>
+        )}
+        {step === 2 && (
+          <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+            <button onClick={() => setStep(1)}
+              style={{ flex: 1, padding: '14px', background: '#f0f0f0', color: '#333', border: '1px solid #ddd', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}>
+              ← Back
+            </button>
+            <button onClick={() => goNext(3)}
+              style={{ flex: 2, padding: '14px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}>
+              Continue →
+            </button>
+          </div>
+        )}
+
+        {step === 3 && (
+          <>
         {/* Nationality Dropdown */}
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Nationality</label>
         <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>Select your country of citizenship</p>
@@ -621,6 +682,23 @@ function SetupStore() {
         {errors.idDocument && <p style={{ color: '#c33', fontSize: '12px', margin: '4px 0 16px' }}>{errors.idDocument}</p>}
         {!errors.idDocument && <div style={{ marginBottom: '16px' }} />}
 
+          </>
+        )}
+        {step === 3 && (
+          <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+            <button onClick={() => setStep(2)}
+              style={{ flex: 1, padding: '14px', background: '#f0f0f0', color: '#333', border: '1px solid #ddd', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}>
+              ← Back
+            </button>
+            <button onClick={() => goNext(4)}
+              style={{ flex: 2, padding: '14px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}>
+              Continue →
+            </button>
+          </div>
+        )}
+
+        {step === 4 && (
+          <>
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Email</label>
         <input value={email} onChange={e => setEmail(e.target.value)}
           placeholder="you@example.com"
@@ -646,10 +724,18 @@ function SetupStore() {
         </div>
         {logoPreview && <div style={{ marginBottom: '12px' }}><img src={logoPreview} alt="logo preview" style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 8 }} /></div>}
 
-        <button onClick={handleSubmit} disabled={loading || uploadingLogo || uploadingId || !isFormReady}
-          style={{ width: '100%', padding: '14px', background: loading || uploadingLogo || uploadingId || !isFormReady ? '#ccc' : '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: loading || uploadingLogo || uploadingId || !isFormReady ? 'not-allowed' : 'pointer', marginTop: '8px' }}>
-          {loading || uploadingLogo || uploadingId ? 'Creating...' : 'Create My Store'}
-        </button>
+        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+          <button onClick={() => setStep(3)}
+            style={{ flex: 1, padding: '14px', background: '#f0f0f0', color: '#333', border: '1px solid #ddd', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}>
+            ← Back
+          </button>
+          <button onClick={handleSubmit} disabled={loading || uploadingLogo || uploadingId || !isFormReady}
+            style={{ flex: 2, padding: '14px', background: loading || uploadingLogo || uploadingId || !isFormReady ? '#ccc' : '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: loading || uploadingLogo || uploadingId || !isFormReady ? 'not-allowed' : 'pointer' }}>
+            {loading || uploadingLogo || uploadingId ? 'Creating...' : 'Create My Store'}
+          </button>
+        </div>
+          </>
+        )}
       </div>
     </div>
   )
