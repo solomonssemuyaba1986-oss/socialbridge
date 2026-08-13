@@ -1,13 +1,193 @@
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { collection, getDocs, query, where, addDoc, serverTimestamp } from 'firebase/firestore'
+import { db, auth } from './firebase'
+import { track, detectSource } from './tracking'
 import { useBag } from './useBag'
+import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder'
+import { useGuestOTP } from './useGuestOTP'
+import { QUICK_REPLIES } from './quickReplies'
 
 const green = '#adff2f'
+
+interface BagTarget {
+  id: string
+  name: string
+  price: string
+  description: string
+  imageUrl: string
+  sellerSlug: string
+  sellerId: string
+  businessName: string
+  orderCount?: number
+}
 
 function BagPage() {
   const navigate = useNavigate()
   const { items, removeFromBag, clearBag, setQuantity, count } = useBag()
 
+  const [orderTarget, setOrderTarget] = useState<BagTarget | null>(null)
+  const [messageTarget, setMessageTarget] = useState<BagTarget | null>(null)
+  const [orderSuccess, setOrderSuccess] = useState(false)
+  const [buyerName, setBuyerName] = useState('')
+  const [quantity, setQuantity] = useState('1')
+  const [deliveryArea, setDeliveryArea] = useState('')
+  const [orderMessage, setOrderMessage] = useState('')
+  const [messageText, setMessageText] = useState('')
+  const [showQuickReplies, setShowQuickReplies] = useState(false)
+  const [guestName, setGuestName] = useState('')
+  const [guestPhone, setGuestPhone] = useState('')
+  const [guestOtpInput, setGuestOtpInput] = useState('')
+  const [guestMessageSent, setGuestMessageSent] = useState(false)
+  const { state: otpState, requestOTP, verifyOTP, reset: resetOTP } = useGuestOTP()
+  const sellerIdCache = useRef<Map<string, string>>(new Map())
+
   const total = items.reduce((sum, i) => sum + (Number(String(i.productPrice).replace(/[^0-9]/g, '')) || 0) * i.quantity, 0)
+
+  const toTarget = (item: typeof items[number]): BagTarget => ({
+    id: item.productId,
+    name: item.productName,
+    price: item.productPrice,
+    description: '',
+    imageUrl: item.imageUrl,
+    sellerSlug: item.sellerSlug,
+    sellerId: item.sellerId,
+    businessName: item.businessName,
+  })
+
+  const resolveSellerId = async (slug: string, cached: string): Promise<string> => {
+    if (cached) return cached
+    if (sellerIdCache.current.has(slug)) return sellerIdCache.current.get(slug)!
+    try {
+      const snap = await getDocs(query(collection(db, 'sellers'), where('slug', '==', slug)))
+      if (!snap.empty) {
+        const id = snap.docs[0].id
+        sellerIdCache.current.set(slug, id)
+        return id
+      }
+    } catch (err) {
+      console.error('resolveSellerId error:', err)
+    }
+    return ''
+  }
+
+  const openOrder = async (item: typeof items[number]) => {
+    const sid = await resolveSellerId(item.sellerSlug, item.sellerId)
+    if (!sid) { alert('Could not find this seller. They may have closed their store.'); return }
+    setOrderTarget(toTarget(item))
+    setBuyerName('')
+    setQuantity('1')
+    setDeliveryArea('')
+    setOrderMessage('')
+    setOrderSuccess(false)
+  }
+
+  const openMessage = async (item: typeof items[number]) => {
+    const sid = await resolveSellerId(item.sellerSlug, item.sellerId)
+    if (!sid) { alert('Could not find this seller. They may have closed their store.'); return }
+    setMessageTarget(toTarget(item))
+    setMessageText('')
+    setShowQuickReplies(false)
+    setGuestName('')
+    setGuestPhone('')
+    setGuestOtpInput('')
+    setGuestMessageSent(false)
+    resetOTP()
+  }
+
+  const handleOrder = async () => {
+    if (!auth.currentUser) {
+      navigate('/', { state: { scrollToProviders: true } })
+      return
+    }
+    if (!buyerName.trim() || !deliveryArea.trim() || !orderTarget) return
+    const sourcePlatform = detectSource()
+    try {
+      await createBuyerOrder(orderTarget.sellerId, {
+        buyerName: buyerName.trim(),
+        buyerUid: auth.currentUser.uid,
+        productName: orderTarget.name,
+        productPrice: orderTarget.price,
+        quantity,
+        deliveryArea: deliveryArea.trim(),
+        status: 'pending',
+        read: false,
+        sourcePlatform,
+        createdAt: new Date(),
+      })
+      await incrementProductOrderCount(orderTarget.sellerId, orderTarget.id, orderTarget.orderCount || 0)
+      track('order_placed', auth.currentUser.uid, sourcePlatform, { productId: orderTarget.id, productName: orderTarget.name, sellerId: orderTarget.sellerId })
+      setOrderSuccess(true)
+      setTimeout(() => {
+        setOrderTarget(null)
+        setOrderSuccess(false)
+      }, 2500)
+    } catch (err) {
+      console.error('Order failed:', err)
+      alert('Failed to place order. Try again.')
+    }
+  }
+
+  const closeMessageModal = () => {
+    setMessageTarget(null)
+    setMessageText('')
+    setShowQuickReplies(false)
+    setGuestName('')
+    setGuestPhone('')
+    setGuestOtpInput('')
+    setGuestMessageSent(false)
+    resetOTP()
+  }
+
+  const handleSendMessage = async () => {
+    if (!messageText.trim() || !messageTarget) return
+    if (!auth.currentUser) {
+      // Guest flow
+      if (otpState.step === 'verified') {
+        try {
+          const guestId = `guest_${otpState.phone.replace(/\D/g, '')}`
+          await addDoc(collection(db, 'sellers', messageTarget.sellerId, 'messages'), {
+            senderName: guestName,
+            senderUid: guestId,
+            senderPhone: otpState.phone,
+            productName: messageTarget.name,
+            productPrice: messageTarget.price,
+            text: messageText.trim(),
+            read: false,
+            sourcePlatform: detectSource(),
+            verified: true,
+            createdAt: serverTimestamp(),
+          })
+          setGuestMessageSent(true)
+          setTimeout(() => closeMessageModal(), 1500)
+        } catch (err) {
+          console.error('Guest message error:', err)
+          alert('Failed to send message. Try again.')
+        }
+      }
+      return
+    }
+    // Signed-in flow
+    try {
+      await addDoc(collection(db, 'sellers', messageTarget.sellerId, 'messages'), {
+        senderName: auth.currentUser.displayName || 'Buyer',
+        senderUid: auth.currentUser.uid,
+        receiverUid: messageTarget.sellerId,
+        productName: messageTarget.name,
+        productPrice: messageTarget.price,
+        text: messageText.trim(),
+        read: false,
+        sourcePlatform: detectSource(),
+        createdAt: serverTimestamp(),
+      })
+      track('message_sent', auth.currentUser.uid, detectSource(), { productId: messageTarget.id, productName: messageTarget.name, sellerId: messageTarget.sellerId })
+      closeMessageModal()
+      alert('Message sent! The seller will reply soon.')
+    } catch (err) {
+      console.error('Message error:', err)
+      alert('Failed to send message. Try again.')
+    }
+  }
 
   if (count === 0) {
     return (
@@ -53,11 +233,11 @@ function BagPage() {
                   <button onClick={() => setQuantity(item.productId, item.quantity + 1)}
                     style={{ width: '28px', height: '28px', background: '#222', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
                 </div>
-                <button onClick={() => navigate(`/store/${item.sellerSlug}`)}
+                <button onClick={() => openMessage(item)}
                   style={{ padding: '6px 12px', background: '#222', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '11px', whiteSpace: 'nowrap' }}>
                   💬 Message
                 </button>
-                <button onClick={() => navigate(`/store/${item.sellerSlug}?productId=${item.productId}`)}
+                <button onClick={() => openOrder(item)}
                   style={{ padding: '6px 12px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '11px', whiteSpace: 'nowrap' }}>
                   Buy Now
                 </button>
@@ -76,6 +256,161 @@ function BagPage() {
           <span style={{ fontWeight: '800', fontSize: '18px', color: green }}>UGX {total.toLocaleString()}</span>
         </div>
       </div>
+
+      {/* Order Modal */}
+      {orderTarget && (
+        <div onClick={() => { setOrderTarget(null); setOrderSuccess(false) }}
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222', textAlign: 'center' }}>
+            {orderSuccess ? (
+              <div>
+                <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '28px', color: '#000', fontWeight: '800' }}>
+                  ✓
+                </div>
+                <h3 style={{ color: '#fff', fontWeight: '800', fontSize: '18px', margin: '0 0 8px' }}>Order Sent!</h3>
+                <p style={{ color: '#888', fontSize: '14px', margin: 0 }}>The seller will contact you to confirm delivery.</p>
+              </div>
+            ) : (
+              <>
+                <h3 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: '800', color: '#fff', textAlign: 'left' }}>
+                  Order {orderTarget.name}
+                </h3>
+                <p style={{ margin: '0 0 24px', color: green, fontSize: '14px', fontWeight: '700', textAlign: 'left' }}>
+                  UGX {orderTarget.price} each
+                </p>
+                <input placeholder="Your name" value={buyerName} onChange={e => setBuyerName(e.target.value)}
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+                <input placeholder="Quantity" value={quantity} onChange={e => setQuantity(e.target.value)} type="number" min="1"
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+                <input placeholder="Delivery area e.g. Nakawa, Kampala" value={deliveryArea} onChange={e => setDeliveryArea(e.target.value)}
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+                <textarea placeholder="Write a message to the seller (optional)" value={orderMessage} onChange={e => setOrderMessage(e.target.value)}
+                  style={{ width: '100%', minHeight: '80px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '20px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
+                <button onClick={handleOrder}
+                  style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
+                  Send Order
+                </button>
+                <button onClick={() => { setOrderTarget(null); setOrderSuccess(false) }}
+                  style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
+                  Cancel
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Message Modal */}
+      {messageTarget && (
+        <div onClick={closeMessageModal}
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222', textAlign: 'center' }}>
+            <h3 style={{ margin: '0 0 16px', fontSize: '16px', fontWeight: '800', color: '#fff', textAlign: 'left' }}>
+              Message about {messageTarget.name}
+            </h3>
+            <div style={{ marginBottom: '20px', padding: '12px', background: '#111', borderRadius: '8px', border: '1px solid #333' }}>
+              <img src={messageTarget.imageUrl || 'https://placehold.co/300x120/1a1a1a/333333'} alt={messageTarget.name}
+                style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '6px', marginBottom: '8px' }} />
+              <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '13px', color: '#fff', textAlign: 'left' }}>{messageTarget.name}</p>
+              <p style={{ margin: 0, color: green, fontSize: '13px', fontWeight: '700', textAlign: 'left' }}>UGX {messageTarget.price}</p>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: showQuickReplies ? '12px' : '16px' }}>
+              <button onClick={() => setShowQuickReplies(!showQuickReplies)}
+                style={{ padding: '6px 12px', background: showQuickReplies ? '#1a2a1a' : '#111', color: green, border: `1px solid ${green}`, borderRadius: '20px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                ⚡ Quick replies {showQuickReplies ? '▲' : '▼'}
+              </button>
+            </div>
+            {showQuickReplies && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px', background: '#111', borderRadius: '10px', padding: '10px', border: '1px solid #2a2a2a' }}>
+                {QUICK_REPLIES.map(q => (
+                  <button key={q} onClick={() => { setMessageText(q); setShowQuickReplies(false) }}
+                    style={{ textAlign: 'left', padding: '9px 12px', background: '#1a1a1a', color: '#ddd', border: '1px solid #2a2a2a', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                    {q}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {auth.currentUser ? (
+              <>
+                <textarea placeholder="Write your message..." value={messageText} onChange={e => setMessageText(e.target.value)}
+                  style={{ width: '100%', minHeight: '100px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '20px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
+                <button onClick={handleSendMessage}
+                  style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
+                  Send Message
+                </button>
+              </>
+            ) : (
+              <>
+                {guestMessageSent ? (
+                  <div>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: '24px', color: '#000', fontWeight: '800' }}>
+                      ✓
+                    </div>
+                    <p style={{ color: '#fff', fontSize: '15px', fontWeight: '700', margin: '0 0 4px' }}>Message Sent!</p>
+                    <p style={{ color: '#888', fontSize: '13px', margin: 0 }}>The seller will reply soon.</p>
+                  </div>
+                ) : otpState.step === 'idle' || otpState.step === 'error' ? (
+                  <>
+                    <p style={{ color: '#888', fontSize: '13px', marginBottom: '16px', textAlign: 'left' }}>
+                      No account needed. Just verify your phone to message the seller.
+                    </p>
+                    <input placeholder="Your name" value={guestName} onChange={e => setGuestName(e.target.value)}
+                      style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+                    <input placeholder="Phone number e.g. 0771234567" value={guestPhone} onChange={e => setGuestPhone(e.target.value)}
+                      style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+                    <textarea placeholder="Write your message..." value={messageText} onChange={e => setMessageText(e.target.value)}
+                      style={{ width: '100%', minHeight: '80px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '20px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
+                    {otpState.error && <p style={{ color: '#ff4444', fontSize: '12px', marginBottom: '12px' }}>{otpState.error}</p>}
+                    <button onClick={() => requestOTP(guestPhone)} disabled={otpState.loading || !guestName.trim() || !guestPhone.trim()}
+                      style={{ width: '100%', padding: '14px', background: (otpState.loading || !guestName.trim() || !guestPhone.trim()) ? '#333' : green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (otpState.loading || !guestName.trim() || !guestPhone.trim()) ? 'not-allowed' : 'pointer', fontSize: '15px', marginBottom: '12px' }}>
+                      {otpState.loading ? 'Sending code...' : 'Send Verification Code'}
+                    </button>
+                  </>
+                ) : otpState.step === 'otp' ? (
+                  <>
+                    <p style={{ color: '#888', fontSize: '13px', marginBottom: '16px', textAlign: 'left' }}>
+                      A 6-digit code was sent to <strong style={{ color: '#fff' }}>{otpState.phone}</strong>. Enter it below.
+                    </p>
+                    <input placeholder="Enter 6-digit code" value={guestOtpInput} onChange={e => setGuestOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '20px', background: '#111', color: '#fff', textAlign: 'center', letterSpacing: '8px' }} />
+                    {otpState.error && <p style={{ color: '#ff4444', fontSize: '12px', marginBottom: '12px' }}>{otpState.error}</p>}
+                    <button onClick={async () => {
+                      const verified = await verifyOTP(guestOtpInput, guestName)
+                      if (verified) await handleSendMessage()
+                    }} disabled={otpState.loading || guestOtpInput.length !== 6}
+                      style={{ width: '100%', padding: '14px', background: (otpState.loading || guestOtpInput.length !== 6) ? '#333' : green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (otpState.loading || guestOtpInput.length !== 6) ? 'not-allowed' : 'pointer', fontSize: '15px', marginBottom: '12px' }}>
+                      {otpState.loading ? 'Verifying...' : 'Verify & Send'}
+                    </button>
+                    <button onClick={resetOTP}
+                      style={{ width: '100%', padding: '8px', background: 'transparent', color: '#888', border: 'none', cursor: 'pointer', fontSize: '13px', marginBottom: '12px' }}>
+                      ← Use a different number
+                    </button>
+                  </>
+                ) : null}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '16px 0' }}>
+                  <div style={{ flex: 1, height: '1px', background: '#222' }} />
+                  <span style={{ color: '#555', fontSize: '12px' }}>OR</span>
+                  <div style={{ flex: 1, height: '1px', background: '#222' }} />
+                </div>
+                <button onClick={() => { navigate('/', { state: { scrollToProviders: true } }); closeMessageModal() }}
+                  style={{ width: '100%', padding: '12px', background: 'transparent', color: '#aaa', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', marginBottom: '12px' }}>
+                  Sign in with Google
+                </button>
+              </>
+            )}
+
+            <button onClick={closeMessageModal}
+              style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
