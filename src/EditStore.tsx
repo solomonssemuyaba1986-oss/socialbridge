@@ -353,10 +353,13 @@ function EditStore() {
           {loading || uploadingId ? 'Saving...' : 'Save'}
         </button>
 
-        <button onClick={() => {
-          if (window.confirm('Are you sure you want to sign out from Rachett?')) {
-            auth.signOut()
-            navigate('/')
+        <button onClick={async () => {
+          try {
+            await auth.signOut()
+            window.location.href = '/'
+          } catch (err) {
+            console.error('Sign out failed:', err)
+            alert('Could not sign out. Try again.')
           }
         }}
           style={{ width: '100%', padding: '10px', marginTop: '16px', background: '#ff4444', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: '600', cursor: 'pointer', fontSize: '14px' }}>
