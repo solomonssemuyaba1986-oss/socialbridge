@@ -38,7 +38,9 @@ function TopNav() {
           <span style={{ fontWeight: 800, fontSize: 16, color: '#fff' }}>Rachett</span>
         </div>
 
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button onClick={() => navigate('/feedback')} style={{ background: 'transparent', color: green, border: '1px solid #2a2a2a', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>💡 Feedback</button>
+
           {!user && (
             <>
               <button onClick={() => setShowLoginModal(true)}
