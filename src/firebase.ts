@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore } from "firebase/firestore";
 import { getAuth, GoogleAuthProvider, FacebookAuthProvider, OAuthProvider, PhoneAuthProvider, RecaptchaVerifier, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { getStorage } from "firebase/storage";
 
@@ -16,7 +16,12 @@ const firebaseConfig = {
 console.log('Firebase config:', { projectId: firebaseConfig.projectId, authDomain: firebaseConfig.authDomain, apiKeySet: !!firebaseConfig.apiKey });
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+// Long-polling transport is far more reliable on mobile networks where carriers
+// kill idle streaming connections (avoids "WebChannelConnection ... transport errored"
+// and keeps realtime listeners like the bag/inbox synced without long retry delays).
+export const db = initializeFirestore(app, {
+  experimentalAutoDetectLongPolling: true,
+});
 export const auth = getAuth(app);
 
 // Ensure auth persistence (remember signed-in users across reloads).
