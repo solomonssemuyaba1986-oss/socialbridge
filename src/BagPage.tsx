@@ -30,7 +30,7 @@ function BagPage() {
   const [messageTarget, setMessageTarget] = useState<BagTarget | null>(null)
   const [orderSuccess, setOrderSuccess] = useState(false)
   const [buyerName, setBuyerName] = useState('')
-  const [quantity, setQuantity] = useState('1')
+  const [orderQty, setOrderQty] = useState('1')
   const [deliveryArea, setDeliveryArea] = useState('')
   const [orderMessage, setOrderMessage] = useState('')
   const [messageText, setMessageText] = useState('')
@@ -76,7 +76,7 @@ function BagPage() {
     if (!sid) { alert('Could not find this seller. They may have closed their store.'); return }
     setOrderTarget(toTarget(item))
     setBuyerName('')
-    setQuantity('1')
+    setOrderQty('1')
     setDeliveryArea('')
     setOrderMessage('')
     setOrderSuccess(false)
@@ -108,7 +108,7 @@ function BagPage() {
         buyerUid: auth.currentUser.uid,
         productName: orderTarget.name,
         productPrice: orderTarget.price,
-        quantity,
+        quantity: orderQty,
         deliveryArea: deliveryArea.trim(),
         status: 'pending',
         read: false,
@@ -281,7 +281,7 @@ function BagPage() {
                 </p>
                 <input placeholder="Your name" value={buyerName} onChange={e => setBuyerName(e.target.value)}
                   style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
-                <input placeholder="Quantity" value={quantity} onChange={e => setQuantity(e.target.value)} type="number" min="1"
+                <input placeholder="Quantity" value={orderQty} onChange={e => setOrderQty(e.target.value)} type="number" min="1"
                   style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
                 <input placeholder="Delivery area e.g. Nakawa, Kampala" value={deliveryArea} onChange={e => setDeliveryArea(e.target.value)}
                   style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
