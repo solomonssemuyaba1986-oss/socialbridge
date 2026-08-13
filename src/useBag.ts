@@ -10,6 +10,7 @@ export interface BagItem {
   productPrice: string
   imageUrl: string
   sellerSlug: string
+  sellerId: string
   businessName: string
   addedAt: number
   quantity: number
@@ -22,8 +23,12 @@ function loadBag(): BagItem[] {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return []
     const parsed = JSON.parse(raw)
-    // Migrate old items without quantity
-    return parsed.map((item: BagItem) => ({ ...item, quantity: item.quantity || 1 }))
+    // Migrate old items without quantity/sellerId
+    return parsed.map((item: Partial<BagItem>) => ({
+      ...item,
+      quantity: item.quantity || 1,
+      sellerId: item.sellerId || '',
+    })) as BagItem[]
   } catch {
     return []
   }
