@@ -125,7 +125,7 @@ export function useBag() {
           snap.forEach(docSnap => {
             const data = docSnap.data() as BagItem
             if (data && data.productId) {
-              remote.push({ ...data, quantity: data.quantity || 1 })
+              remote.push({ ...data, quantity: data.quantity || 1, sellerId: data.sellerId || '' })
             }
           })
           return remote
