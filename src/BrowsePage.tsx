@@ -78,7 +78,7 @@ function BrowsePage() {
       removeFromBag(p.id)
       setBagCounts(prev => ({ ...prev, [p.id]: Math.max(0, (prev[p.id] || 0) - 1) }))
     } else {
-      addToBag({ productId: p.id, productName: p.name, productPrice: p.price, imageUrl: p.imageUrl, sellerSlug: p.sellerSlug, businessName: p.businessName })
+      addToBag({ productId: p.id, productName: p.name, productPrice: p.price, imageUrl: p.imageUrl, sellerSlug: p.sellerSlug, sellerId: p.sellerId, businessName: p.businessName })
       setBagCounts(prev => ({ ...prev, [p.id]: (prev[p.id] || 0) + 1 }))
     }
   }
