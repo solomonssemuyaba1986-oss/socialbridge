@@ -8,6 +8,7 @@ import { useSellerMessages } from './useSellerMessages'
 import { useSellerConversations } from './useSellerConversations'
 import { useBuyerConversations } from './useBuyerConversations'
 import { notify } from './notifications'
+import LoadingScreen from './LoadingScreen'
 
 interface Seller {
   businessName: string
@@ -131,9 +132,7 @@ function Dashboard() {
 
   // Status update functions moved to Orders page — dashboard is view-only
   if (loading) return (
-    <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <p style={{ color: '#555', fontFamily: 'sans-serif' }}>Loading...</p>
-    </div>
+    <LoadingScreen message="Warming up your store..." />
   )
 
   if (!seller) return (
