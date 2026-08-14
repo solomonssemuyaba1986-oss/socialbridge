@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import {
-  collection, doc, addDoc, setDoc, getDoc, increment,
+  collection, doc, addDoc, setDoc, getDoc, increment, updateDoc,
   query, orderBy, onSnapshot, serverTimestamp
 } from 'firebase/firestore'
-import { db } from './firebase'
+import { onAuthStateChanged } from 'firebase/auth'
+import { db, auth } from './firebase'
 
 export function getConversationId(sellerId: string, buyerId: string) {
   return [sellerId, buyerId].sort().join('_')
@@ -35,8 +36,24 @@ export function useConversation(sellerId: string | null, buyerId: string | null)
       orderBy('createdAt', 'asc')
     )
     const unsub = onSnapshot(q, (snap) => {
-      setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      setMessages(list)
       setLoading(false)
+
+      // Read receipt: mark the other party's messages as seen (chat is open = read).
+      const myUid = auth.currentUser?.uid
+      if (myUid) {
+        const unreadByOther = list.filter(
+          (m: any) => m.senderId && m.senderId !== myUid && m.status !== 'seen'
+        )
+        if (unreadByOther.length > 0) {
+          unreadByOther.forEach((m: any) => {
+            updateDoc(doc(db, 'conversations', conversationId, 'messages', m.id), { status: 'seen' }).catch(err => {
+              console.warn('Failed to mark message seen:', err)
+            })
+          })
+        }
+      }
     })
     return unsub
   }, [conversationId])
