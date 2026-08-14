@@ -15,6 +15,7 @@ interface Seller {
   bio: string
   slug: string
   whatsapp?: string
+  logoUrl?: string
   recoveryEmail?: string
   recoveryEmailVerified?: boolean
   recoveryEmailPromptCount?: number
@@ -160,7 +161,7 @@ function Dashboard() {
 
   // Status update functions moved to Orders page — dashboard is view-only
   if (loading) return (
-    <LoadingScreen message="Warming up your store..." />
+    <LoadingScreen message="Warming up your store..." logo={seller?.logoUrl} />
   )
 
   if (!seller) return (
