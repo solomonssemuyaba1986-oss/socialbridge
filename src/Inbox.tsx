@@ -58,6 +58,7 @@ type Thread = {
   unreadCount: number
   verified?: boolean
   platformIcon?: string
+  platformLabel?: string
   guestPhone?: string
   kind: 'buyer' | 'seller' | 'guest'
   buyerConvo?: BuyerConversation
@@ -141,6 +142,7 @@ function Inbox() {
         unreadCount: isUnreadMessage(m) ? 1 : 0,
         verified: !!(m.verified && m.senderPhone),
         platformIcon: platformMeta(m.sourcePlatform).icon,
+        platformLabel: platformMeta(m.sourcePlatform).label,
         guestPhone: m.senderPhone ? maskPhone(m.senderPhone) : undefined,
         kind: 'guest',
         guest: m,
@@ -261,6 +263,9 @@ function Inbox() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
                         <p style={{ margin: 0, fontWeight: '700', fontSize: '15px', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {t.name}
+                          {t.kind === 'guest' && (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', marginLeft: '8px', background: '#2a2a2a', color: '#ccc', fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '999px', border: '1px solid #444' }}>👤 GUEST</span>
+                          )}
                           {t.verified && (
                             <span style={{ display: 'inline-flex', alignItems: 'center', marginLeft: '8px', background: '#0d2a0d', color: green, fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '999px', border: `1px solid ${green}` }}>✓</span>
                           )}
@@ -278,7 +283,9 @@ function Inbox() {
                         )}
                       </div>
                       {t.guestPhone && (
-                        <p style={{ margin: '2px 0 0', color: '#555', fontSize: '11px' }}>📱 {t.guestPhone}</p>
+                        <p style={{ margin: '2px 0 0', color: '#555', fontSize: '11px' }}>
+                          {t.platformLabel ? `via ${t.platformLabel}` : ''}{t.platformLabel ? ' · ' : ''}📱 {t.guestPhone}
+                        </p>
                       )}
                     </div>
                   </div>
