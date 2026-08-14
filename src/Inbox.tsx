@@ -277,7 +277,7 @@ function Inbox() {
                           {t.preview}
                         </p>
                         {t.unreadCount > 0 && (
-                          <div style={{ background: '#ff4444', color: '#fff', borderRadius: '999px', minWidth: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '800', padding: '0 6px', flexShrink: 0, boxSizing: 'border-box' }}>
+                          <div style={{ background: green, color: '#000', borderRadius: '999px', minWidth: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '800', padding: '0 6px', flexShrink: 0, boxSizing: 'border-box' }}>
                             {t.unreadCount}
                           </div>
                         )}
