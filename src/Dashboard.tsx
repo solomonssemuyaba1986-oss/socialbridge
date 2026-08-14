@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback} from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { doc, getDoc, collection, getDocs, updateDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
@@ -29,10 +29,19 @@ interface Product {
   imageUrl: string
 }
 
+// Session cache so revisiting the dashboard renders instantly (no re-loading screen)
+let cachedDashboard: { uid: string; seller: Seller; products: Product[] } | null = null
+let dashboardLoadedOnce = false
+
 function Dashboard() {
-  const [seller, setSeller] = useState<Seller | null>(null)
-  const [products, setProducts] = useState<Product[]>([])
-  const [loading, setLoading] = useState(true)
+  const initialCache = (() => {
+    const me = auth.currentUser?.uid
+    if (dashboardLoadedOnce && cachedDashboard && cachedDashboard.uid === me) return cachedDashboard
+    return null
+  })()
+  const [seller, setSeller] = useState<Seller | null>(initialCache?.seller || null)
+  const [products, setProducts] = useState<Product[]>(initialCache?.products || [])
+  const [loading, setLoading] = useState(!initialCache)
   const [userId, setUserId] = useState<string>('')
   const navigate = useNavigate()
   const location = useLocation()
@@ -97,10 +106,21 @@ function Dashboard() {
 
   const totalMessageUnread = unreadMessagesCount + unreadSellerConvoCount + unreadBuyerConvoCount
 
-  // Spotlight — dim screen and focus on orders badge when new orders exist
+  // Spotlight — only dims the screen when a NEW order arrives while on the dashboard.
+  // (Existing unread orders never re-trigger it on revisit.)
   const [showSpotlight, setShowSpotlight] = useState(false)
+  const prevUnreadRef = useRef(0)
+  const hasLoadedRef = useRef(false)
   useEffect(() => {
-    if (unreadCount > 0) {
+    if (!hasLoadedRef.current) {
+      // First load: record the baseline, don't spotlight existing orders
+      hasLoadedRef.current = true
+      prevUnreadRef.current = unreadCount
+      return
+    }
+    const prev = prevUnreadRef.current
+    prevUnreadRef.current = unreadCount
+    if (unreadCount > prev) {
       setShowSpotlight(true)
       const timer = window.setTimeout(() => setShowSpotlight(false), 3000)
       return () => window.clearTimeout(timer)
@@ -118,7 +138,11 @@ function Dashboard() {
           const data = docSnap.data() as Seller
           setSeller(data)
           const prodSnap = await getDocs(collection(db, 'sellers', user.uid, 'products'))
-          setProducts(prodSnap.docs.map(d => ({ id: d.id, ...d.data() } as Product)))
+          const prodList = prodSnap.docs.map(d => ({ id: d.id, ...d.data() } as Product))
+          setProducts(prodList)
+          // Cache for instant render on next visit
+          cachedDashboard = { uid: user.uid, seller: data, products: prodList }
+          dashboardLoadedOnce = true
         }
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Failed to load dashboard'
