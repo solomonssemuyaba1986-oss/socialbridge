@@ -197,7 +197,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
             const statusStyles: Record<string, { color: string; label: string }> = {
               sent: { color: '#adff2f', label: 'Sent' },
               delivered: { color: '#3399ff', label: 'Delivered' },
-              seen: { color: '#a457ff', label: 'Seen' },
+              seen: { color: '#00e5ff', label: 'Seen' },
             }
             const statusInfo = statusStyles[status] || statusStyles.sent
             const isSeller = m.senderId === sellerId
