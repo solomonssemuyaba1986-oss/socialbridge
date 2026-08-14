@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import {
-  collection, doc, addDoc, setDoc, getDoc,
+  collection, doc, addDoc, setDoc, getDoc, increment,
   query, orderBy, onSnapshot, serverTimestamp
 } from 'firebase/firestore'
 import { db } from './firebase'
@@ -15,9 +15,9 @@ export async function markConversationRead(
   sellerId: string,
   buyerId: string
 ) {
-  const patch: Record<string, boolean> = {}
-  if (userId === sellerId) patch.unreadBySeller = false
-  if (userId === buyerId) patch.unreadByBuyer = false
+  const patch: Record<string, unknown> = {}
+  if (userId === sellerId) { patch.unreadBySeller = false; patch.unreadBySellerCount = 0 }
+  if (userId === buyerId) { patch.unreadByBuyer = false; patch.unreadByBuyerCount = 0 }
   if (Object.keys(patch).length === 0) return
   await setDoc(doc(db, 'conversations', conversationId), patch, { merge: true })
 }
@@ -53,15 +53,20 @@ export function useConversation(sellerId: string | null, buyerId: string | null)
         lastMessage: text,
         lastMessageAt: serverTimestamp(),
         unreadBySeller: senderId === buyerId,
-        unreadByBuyer: senderId === sellerId
+        unreadByBuyer: senderId === sellerId,
+        unreadBySellerCount: senderId === buyerId ? 1 : 0,
+        unreadByBuyerCount: senderId === sellerId ? 1 : 0
       })
     } else {
-      await setDoc(convoRef, {
+      const patch: Record<string, unknown> = {
         lastMessage: text,
         lastMessageAt: serverTimestamp(),
         unreadBySeller: senderId === buyerId,
         unreadByBuyer: senderId === sellerId
-      }, { merge: true })
+      }
+      if (senderId === buyerId) patch.unreadBySellerCount = increment(1)
+      if (senderId === sellerId) patch.unreadByBuyerCount = increment(1)
+      await setDoc(convoRef, patch, { merge: true })
     }
 
     await addDoc(collection(db, 'conversations', conversationId, 'messages'), {
