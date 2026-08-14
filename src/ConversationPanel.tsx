@@ -175,7 +175,22 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
 
       <div ref={listRef} style={{ maxHeight: 420, overflowY: 'auto', padding: 12, background: '#0a0a0a', borderRadius: 14, border: '1px solid #222', display: 'flex', flexDirection: 'column', gap: 12 }}>
         {loading ? (
-          <div style={{ color: '#666' }}>Loading conversation…</div>
+          <>
+            <style>{`
+              @keyframes rt-shimmer {
+                0% { opacity: 0.4 }
+                50% { opacity: 1 }
+                100% { opacity: 0.4 }
+              }
+            `}</style>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 4 }}>
+              {[0, 1, 2, 3].map(i => (
+                <div key={i} style={{ display: 'flex', justifyContent: i % 2 === 0 ? 'flex-start' : 'flex-end' }}>
+                  <div style={{ width: '60%', height: 34, borderRadius: 12, background: 'rgba(173,255,47,0.07)', animation: 'rt-shimmer 1.6s linear infinite' }} />
+                </div>
+              ))}
+            </div>
+          </>
         ) : messages.length === 0 ? (
           <div style={{ color: '#666' }}>No messages yet</div>
         ) : (
