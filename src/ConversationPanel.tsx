@@ -28,6 +28,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
   const [deliveryArea, setDeliveryArea] = useState('')
   const [orderMessage, setOrderMessage] = useState('')
   const [orderSuccess, setOrderSuccess] = useState(false)
+  const [orderRef, setOrderRef] = useState('')
   const [feedbackMessage, setFeedbackMessage] = useState('')
   const [feedbackType, setFeedbackType] = useState<'success' | 'error' | 'info'>('success')
   const [feedbackVisible, setFeedbackVisible] = useState(false)
@@ -61,7 +62,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
     }
 
     try {
-      await createBuyerOrder(sellerId, {
+      const { orderId } = await createBuyerOrder(sellerId, {
         buyerName: buyerNameOrder,
         buyerUid: buyerId,
         productName,
@@ -78,6 +79,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
         await incrementProductOrderCount(sellerId, productId, orderCount || 0)
       }
 
+      setOrderRef(orderId || '')
       setOrderSuccess(true)
       showFeedback(notify.orderSent, 'success')
       setTimeout(() => {
@@ -216,7 +218,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
         {auth.currentUser && auth.currentUser.uid === buyerId && buyerId !== sellerId && productName && productPrice && (
           <button onClick={() => setShowOrderModal(true)}
             style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '12px', fontWeight: '700', cursor: 'pointer', fontSize: '15px' }}>
-            Buy Now — UGX {productPrice}
+            Place Order — UGX {productPrice}
           </button>
         )}
       </div>
@@ -237,8 +239,10 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
                 <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '28px', color: '#000', fontWeight: '800' }}>
                   ✓
                 </div>
-                <h3 style={{ color: '#fff', fontWeight: '800', fontSize: '18px', margin: '0 0 8px' }}>Order Sent!</h3>
-                <p style={{ color: '#888', fontSize: '14px', margin: 0 }}>Order sent! The seller will respond in your Inbox.</p>
+                <h3 style={{ color: '#fff', fontWeight: '800', fontSize: '18px', margin: '0 0 8px' }}>Order Placed!</h3>
+                <p style={{ color: '#888', fontSize: '14px', margin: 0 }}>
+                  Ref: <span style={{ color: green, fontWeight: '800' }}>{orderRef || 'RT-...'}</span> — {sellerName || 'the seller'} will confirm in your Inbox.
+                </p>
               </div>
             ) : (
               <>
