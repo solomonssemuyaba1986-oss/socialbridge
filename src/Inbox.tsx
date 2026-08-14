@@ -1,11 +1,12 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getDoc, doc } from 'firebase/firestore'
+import { getDoc, doc, updateDoc } from 'firebase/firestore'
 import { db, auth } from './firebase'
 import { useSellerMessages, isUnreadMessage, type SellerMessage } from './useSellerMessages'
 import { useSellerConversations, type SellerConversation } from './useSellerConversations'
 import { useBuyerConversations, type BuyerConversation } from './useBuyerConversations'
 import ConversationPanel from './ConversationPanel'
+import { markConversationRead } from './useConversation'
 
 const green = '#adff2f'
 
@@ -54,6 +55,7 @@ type Thread = {
   timeValue: number
   timeLabel: string
   unread: boolean
+  unreadCount: number
   verified?: boolean
   platformIcon?: string
   guestPhone?: string
@@ -107,6 +109,7 @@ function Inbox() {
         timeValue: c.lastMessageAt?.toDate?.()?.getTime() || 0,
         timeLabel: formatTime(c.lastMessageAt),
         unread: !!c.unreadByBuyer,
+        unreadCount: c.unreadByBuyerCount || (c.unreadByBuyer ? 1 : 0),
         kind: 'buyer',
         buyerConvo: c,
       })
@@ -121,6 +124,7 @@ function Inbox() {
         timeValue: c.lastMessageAt?.toDate?.()?.getTime() || 0,
         timeLabel: formatTime(c.lastMessageAt),
         unread: !!c.unreadBySeller,
+        unreadCount: c.unreadBySellerCount || (c.unreadBySeller ? 1 : 0),
         kind: 'seller',
         sellerConvo: c,
       })
@@ -134,6 +138,7 @@ function Inbox() {
         timeValue: m.createdAt?.toDate?.()?.getTime() || 0,
         timeLabel: formatTime(m.createdAt),
         unread: isUnreadMessage(m),
+        unreadCount: isUnreadMessage(m) ? 1 : 0,
         verified: !!(m.verified && m.senderPhone),
         platformIcon: platformMeta(m.sourcePlatform).icon,
         guestPhone: m.senderPhone ? maskPhone(m.senderPhone) : undefined,
@@ -151,7 +156,25 @@ function Inbox() {
   const selected = threads.find(t => t.key === selectedKey) || null
 
   const openChat = (key: string) => {
+    const closing = selectedKey === key
     setSelectedKey(prev => (prev === key ? null : key))
+    if (closing) return
+
+    // Mark read on open
+    const t = threads.find(x => x.key === key)
+    if (!t) return
+    const myUid = auth.currentUser?.uid
+    if (!myUid) return
+
+    if (t.kind === 'buyer' && t.buyerConvo) {
+      const c = t.buyerConvo
+      markConversationRead(c.id, myUid, c.sellerId, c.buyerId).catch(err => console.warn('mark read failed:', err))
+    } else if (t.kind === 'seller' && t.sellerConvo) {
+      const c = t.sellerConvo
+      markConversationRead(c.id, myUid, c.sellerId, c.buyerId).catch(err => console.warn('mark read failed:', err))
+    } else if (t.kind === 'guest' && t.guest && t.guest.read !== true) {
+      updateDoc(doc(db, 'sellers', myUid, 'messages', t.guest.id), { read: true }).catch(err => console.warn('mark guest read failed:', err))
+    }
   }
 
   const chatProps = selected ? (() => {
@@ -218,7 +241,7 @@ function Inbox() {
               return (
                 <div key={t.key}>
                   <div onClick={() => openChat(t.key)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '12px', background: isSelected ? '#1a2a1a' : t.unread ? '#152015' : '#1a1a1a', borderRadius: isSelected ? '12px 12px 0 0' : '12px', padding: '14px 16px', border: `1px solid ${isSelected ? green : t.unread ? green : '#222'}`, cursor: 'pointer' }}>
+                    style={{ display: 'flex', alignItems: 'center', gap: '12px', background: isSelected ? '#1a2a1a' : '#1a1a1a', borderRadius: isSelected ? '12px 12px 0 0' : '12px', padding: '14px 16px', border: `1px solid ${isSelected ? green : '#222'}`, cursor: 'pointer' }}>
                     <div style={{ position: 'relative', flexShrink: 0 }}>
                       {t.avatarUrl ? (
                         <img src={t.avatarUrl} alt={t.name}
@@ -244,9 +267,16 @@ function Inbox() {
                         </p>
                         <span style={{ color: '#555', fontSize: '11px', flexShrink: 0 }}>{t.timeLabel}</span>
                       </div>
-                      <p style={{ margin: '2px 0 0', color: t.unread ? '#ddd' : '#888', fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {t.preview}
-                      </p>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                        <p style={{ margin: '2px 0 0', color: t.unread ? '#fff' : '#888', fontSize: '13px', fontWeight: t.unread ? 700 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
+                          {t.preview}
+                        </p>
+                        {t.unreadCount > 0 && (
+                          <div style={{ background: '#ff4444', color: '#fff', borderRadius: '999px', minWidth: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '800', padding: '0 6px', flexShrink: 0, boxSizing: 'border-box' }}>
+                            {t.unreadCount}
+                          </div>
+                        )}
+                      </div>
                       {t.guestPhone && (
                         <p style={{ margin: '2px 0 0', color: '#555', fontSize: '11px' }}>📱 {t.guestPhone}</p>
                       )}
