@@ -918,7 +918,7 @@ const handleSignupForAction = async (provider: any) => {
                   ✓
                 </div>
                 <h3 style={{ color: '#fff', fontWeight: '800', fontSize: '18px', margin: '0 0 8px' }}>Order Sent!</h3>
-                <p style={{ color: '#888', fontSize: '14px', margin: 0 }}>Opening WhatsApp...</p>
+                <p style={{ color: '#888', fontSize: '14px', margin: 0 }}>Order sent to {seller?.businessName || 'the seller'}! They'll confirm soon.</p>
               </div>
             ) : (
               <>
@@ -938,7 +938,7 @@ const handleSignupForAction = async (provider: any) => {
                   style={{ width: '100%', minHeight: '100px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '24px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
                 <button onClick={handleOrder}
                   style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
-                  Send Order on WhatsApp
+                  Send Order
                 </button>
                 <a href={`tel:+${seller.whatsapp}`}
                   style={{ display: 'block', width: '100%', padding: '14px', background: 'transparent', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', marginBottom: '12px', textAlign: 'center', textDecoration: 'none', boxSizing: 'border-box' }}>
