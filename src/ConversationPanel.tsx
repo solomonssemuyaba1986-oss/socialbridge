@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 import { useConversation } from './useConversation'
+import { QUICK_REPLIES, SELLER_QUICK_REPLIES } from './quickReplies'
 import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder'
 import { auth, db } from './firebase'
 import { notify } from './notifications'
@@ -114,20 +115,9 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
     }
   }
 
-  const quickReplies = [
-    'Yes, I can reserve it for you now.',
-    'I have one ready to ship today.',
-    'Would you like delivery or pickup?',
-    'Can I get your exact address for delivery?',
-    'I can bundle it with another item if you want.',
-    'This is the last piece available, grab it now.',
-    'waiting for your order, its your move.',
-    'Thanks! I will confirm your order in a minute.',
-    'I can hold it for you until this evening.',
-    'Do you want the same color or a different one?',
-    'I can offer free delivery for this order.',
-    'yes, thanks for reaching on to me, what would you want to purchase?'
-  ]
+  // Role-based quick replies: sellers see seller replies, buyers see buyer questions
+  const isSellerViewing = auth.currentUser?.uid === sellerId
+  const quickReplies = isSellerViewing ? SELLER_QUICK_REPLIES : QUICK_REPLIES
 
   useEffect(() => {
     const el = listRef.current
