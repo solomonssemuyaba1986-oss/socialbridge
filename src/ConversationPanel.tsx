@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 import { useConversation } from './useConversation'
 import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder'
-import { auth } from './firebase'
+import { auth, db } from './firebase'
 import { notify } from './notifications'
 
 const green = '#adff2f'
@@ -19,7 +20,7 @@ type Props = {
 }
 
 export default function ConversationPanel({ sellerId, buyerId, sellerName, buyerName, productName, productPrice, productImage, productId, orderCount }: Props) {
-  const { messages, loading, sendMessage } = useConversation(sellerId, buyerId)
+  const { messages, loading, sendMessage, conversationId } = useConversation(sellerId, buyerId)
   const [text, setText] = useState('')
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [showOrderModal, setShowOrderModal] = useState(false)
@@ -82,6 +83,26 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
       setOrderRef(orderId || '')
       setOrderSuccess(true)
       showFeedback(notify.orderSent, 'success')
+
+      // Persist an order confirmation into the chat thread (visible to both sides)
+      if (conversationId) {
+        try {
+          await addDoc(collection(db, 'conversations', conversationId, 'messages'), {
+            senderId: buyerId,
+            type: 'order',
+            text: `📦 Order placed — Ref: ${orderId || ''}`,
+            orderId: orderId || '',
+            productName,
+            productPrice,
+            quantity,
+            status: 'sent',
+            createdAt: serverTimestamp(),
+          })
+        } catch (err) {
+          console.warn('Failed to write order message:', err)
+        }
+      }
+
       setTimeout(() => {
         setBuyerNameOrder(''); setQuantity('1'); setDeliveryArea(''); setOrderMessage('')
         setShowOrderModal(false)
@@ -169,6 +190,19 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
           <div style={{ color: '#666' }}>No messages yet</div>
         ) : (
           messages.map((m: any) => {
+            if (m.type === 'order') {
+              return (
+                <div key={m.id} style={{ display: 'flex', justifyContent: 'center', margin: '4px 0' }}>
+                  <div style={{ background: '#12210d', border: `1px solid ${green}`, borderRadius: '12px', padding: '12px 16px', maxWidth: '90%', textAlign: 'center' }}>
+                    <div style={{ fontSize: 18 }}>📦</div>
+                    <div style={{ fontWeight: 800, fontSize: 13, color: green }}>Order Placed</div>
+                    <div style={{ fontSize: 12, color: '#fff', fontWeight: 700, marginTop: 4 }}>Ref: {m.orderId || 'RT-...'}</div>
+                    <div style={{ fontSize: 12, color: '#aaa', marginTop: 2 }}>{m.productName} · UGX {m.productPrice} × {m.quantity}</div>
+                    <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>{sellerName || 'The seller'} will confirm in your Inbox</div>
+                  </div>
+                </div>
+              )
+            }
             const status = m.status || 'sent'
             const statusStyles: Record<string, { color: string; label: string }> = {
               sent: { color: '#adff2f', label: 'Sent' },
