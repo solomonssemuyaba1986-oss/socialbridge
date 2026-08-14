@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { doc, getDoc, collection, getDocs, updateDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
@@ -32,6 +32,10 @@ interface Product {
 // Session cache so revisiting the dashboard renders instantly (no re-loading screen)
 let cachedDashboard: { uid: string; seller: Seller; products: Product[] } | null = null
 let dashboardLoadedOnce = false
+
+// Spotlight baseline — survives remounts so existing unread orders never re-trigger it
+let dashboardBaselineSet = false
+let dashboardUnreadBaseline = 0
 
 function Dashboard() {
   const initialCache = (() => {
@@ -99,33 +103,33 @@ function Dashboard() {
     }
   }, [])
 
-  const { orders, unreadCount } = useSellerOrders(playNewOrderAlert)
+  const { orders, unreadCount, loading: ordersLoading } = useSellerOrders(playNewOrderAlert)
   const { unreadCount: unreadMessagesCount } = useSellerMessages()
   const { unreadCount: unreadSellerConvoCount } = useSellerConversations()
   const { unreadCount: unreadBuyerConvoCount } = useBuyerConversations()
 
   const totalMessageUnread = unreadMessagesCount + unreadSellerConvoCount + unreadBuyerConvoCount
 
-  // Spotlight — only dims the screen when a NEW order arrives while on the dashboard.
-  // (Existing unread orders never re-trigger it on revisit.)
+  // Spotlight — dims the screen ONLY when a genuinely NEW order arrives.
+  // Baseline survives page revisits, so existing unread orders never re-trigger it.
   const [showSpotlight, setShowSpotlight] = useState(false)
-  const prevUnreadRef = useRef(0)
-  const hasLoadedRef = useRef(false)
   useEffect(() => {
-    if (!hasLoadedRef.current) {
-      // First load: record the baseline, don't spotlight existing orders
-      hasLoadedRef.current = true
-      prevUnreadRef.current = unreadCount
+    if (ordersLoading) return
+    if (!dashboardBaselineSet) {
+      // First real load: record the current unread count as the baseline — no spotlight
+      dashboardBaselineSet = true
+      dashboardUnreadBaseline = unreadCount
       return
     }
-    const prev = prevUnreadRef.current
-    prevUnreadRef.current = unreadCount
-    if (unreadCount > prev) {
+    if (unreadCount > dashboardUnreadBaseline) {
       setShowSpotlight(true)
       const timer = window.setTimeout(() => setShowSpotlight(false), 3000)
       return () => window.clearTimeout(timer)
     }
-  }, [unreadCount])
+    if (unreadCount < dashboardUnreadBaseline) {
+      dashboardUnreadBaseline = unreadCount
+    }
+  }, [unreadCount, ordersLoading])
 
   // Inbox notification sounds return in the native mobile app.
   useEffect(() => {
