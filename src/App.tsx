@@ -19,6 +19,7 @@ import AnalyticsPage from './AnalyticsPage.tsx'
 import FeedbackPage from './FeedbackPage.tsx'
 import TopNav from './TopNav.tsx'
 import Splash from './Splash.tsx'
+import LoadingScreen from './LoadingScreen.tsx'
 
 function BulkUploadWrapper() {
   const navigate = useNavigate()
@@ -70,9 +71,7 @@ function App() {
   }
 
   if (loading) return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#0f0f0f' }}>
-      <p style={{ color: '#555', fontFamily: 'sans-serif' }}>Loading...</p>
-    </div>
+    <LoadingScreen message="Getting everything ready for you..." />
   )
 
   return (
