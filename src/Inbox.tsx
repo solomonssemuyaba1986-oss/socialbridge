@@ -7,6 +7,7 @@ import { useSellerConversations, type SellerConversation } from './useSellerConv
 import { useBuyerConversations, type BuyerConversation } from './useBuyerConversations'
 import ConversationPanel from './ConversationPanel'
 import { markConversationRead } from './useConversation'
+import LoadingScreen from './LoadingScreen'
 
 const green = '#adff2f'
 
@@ -197,9 +198,7 @@ function Inbox() {
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p style={{ color: '#555', fontFamily: 'sans-serif' }}>Loading inbox...</p>
-      </div>
+      <LoadingScreen variant="rows" message="Loading your conversations..." />
     )
   }
 
