@@ -213,7 +213,9 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: '#666' }}>
                   <span>{m.createdAt?.toDate ? m.createdAt.toDate().toLocaleString() : 'Now'}</span>
-                  <span style={{ color: statusInfo.color, fontWeight: 700 }}>{statusInfo.label}</span>
+                  {isMe && (
+                    <span style={{ color: statusInfo.color, fontWeight: 700 }}>{statusInfo.label}</span>
+                  )}
                 </div>
               </div>
             )
