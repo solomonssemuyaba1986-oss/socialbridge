@@ -9,6 +9,7 @@ import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder
 import { useGuestOTP } from './useGuestOTP'
 import { QUICK_REPLIES } from './quickReplies'
 import { getMainCategories } from './categories'
+import LoadingScreen from './LoadingScreen'
 import Fuse from 'fuse.js'
 
 interface Product {
@@ -567,7 +568,7 @@ function BrowsePage() {
       {/* Products */}
       <div className="rt-container" style={{ maxWidth: '800px', margin: '0 auto', padding: '32px 16px' }}>
         {loading ? (
-          <p style={{ textAlign: 'center', color: '#555' }}>Loading products...</p>
+          <LoadingScreen message="Fetching products for you..." />
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 20px' }}>
             <div style={{ fontSize: '48px', marginBottom: '16px' }}>🛍️</div>
