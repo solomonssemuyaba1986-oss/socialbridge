@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { getDoc, doc } from 'firebase/firestore'
+import { db, auth } from './firebase'
 import { useSellerMessages, isUnreadMessage, type SellerMessage } from './useSellerMessages'
 import { useSellerConversations, type SellerConversation } from './useSellerConversations'
 import { useBuyerConversations, type BuyerConversation } from './useBuyerConversations'
 import ConversationPanel from './ConversationPanel'
-import { auth } from './firebase'
 
 const green = '#adff2f'
 
@@ -48,6 +49,7 @@ type Thread = {
   key: string
   name: string
   avatarText: string
+  avatarUrl?: string
   preview: string
   timeValue: number
   timeLabel: string
@@ -67,6 +69,31 @@ function Inbox() {
   const { conversations: buyerConversations, unreadCount: unreadBuyerConversations, loading: buyerConversationsLoading } = useBuyerConversations()
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'unread'>('all')
+  const [logoMap, setLogoMap] = useState<Record<string, string>>({})
+
+  // Fetch store logos for the "other party" in each conversation (if they're Rachett sellers)
+  useEffect(() => {
+    const ids = new Set<string>()
+    buyerConversations.forEach(c => { if (c.sellerId) ids.add(c.sellerId) })
+    sellerConversations.forEach(c => { if (c.buyerId) ids.add(c.buyerId) })
+
+    const fetchLogos = async () => {
+      const next: Record<string, string> = {}
+      await Promise.all(Array.from(ids).map(async id => {
+        try {
+          const snap = await getDoc(doc(db, 'sellers', id))
+          if (snap.exists()) {
+            const data = snap.data()
+            if (data.logoUrl) next[id] = data.logoUrl
+          }
+        } catch (err) {
+          console.warn('Failed to fetch seller logo:', err)
+        }
+      }))
+      setLogoMap(prev => ({ ...prev, ...next }))
+    }
+    fetchLogos()
+  }, [buyerConversations, sellerConversations])
 
   const threads: Thread[] = useMemo(() => {
     const list: Thread[] = []
@@ -75,6 +102,7 @@ function Inbox() {
         key: `buyer-${c.id}`,
         name: c.sellerName || 'Seller',
         avatarText: (c.sellerName || 'S').charAt(0).toUpperCase(),
+        avatarUrl: logoMap[c.sellerId],
         preview: `You: ${c.lastMessage || ''}`,
         timeValue: c.lastMessageAt?.toDate?.()?.getTime() || 0,
         timeLabel: formatTime(c.lastMessageAt),
@@ -88,6 +116,7 @@ function Inbox() {
         key: `seller-${c.id}`,
         name: c.buyerName || 'Buyer',
         avatarText: (c.buyerName || 'B').charAt(0).toUpperCase(),
+        avatarUrl: logoMap[c.buyerId],
         preview: c.lastMessage || '',
         timeValue: c.lastMessageAt?.toDate?.()?.getTime() || 0,
         timeLabel: formatTime(c.lastMessageAt),
@@ -114,7 +143,7 @@ function Inbox() {
     })
     list.sort((a, b) => b.timeValue - a.timeValue)
     return list
-  }, [buyerConversations, sellerConversations, messages])
+  }, [buyerConversations, sellerConversations, messages, logoMap])
 
   const totalUnread = unreadMessages + unreadSellerConversations + unreadBuyerConversations
   const loading = messagesLoading || conversationsLoading || buyerConversationsLoading
@@ -191,9 +220,14 @@ function Inbox() {
                   <div onClick={() => openChat(t.key)}
                     style={{ display: 'flex', alignItems: 'center', gap: '12px', background: isSelected ? '#1a2a1a' : t.unread ? '#152015' : '#1a1a1a', borderRadius: isSelected ? '12px 12px 0 0' : '12px', padding: '14px 16px', border: `1px solid ${isSelected ? green : t.unread ? green : '#222'}`, cursor: 'pointer' }}>
                     <div style={{ position: 'relative', flexShrink: 0 }}>
-                      <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: avatarColor(t.name), display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '800', fontSize: '18px' }}>
-                        {t.avatarText}
-                      </div>
+                      {t.avatarUrl ? (
+                        <img src={t.avatarUrl} alt={t.name}
+                          style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', border: `2px solid ${isSelected ? green : '#333'}` }} />
+                      ) : (
+                        <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: avatarColor(t.name), display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '800', fontSize: '18px' }}>
+                          {t.avatarText}
+                        </div>
+                      )}
                       {t.platformIcon && (
                         <div style={{ position: 'absolute', bottom: '-2px', right: '-2px', background: '#0f0f0f', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', border: '1px solid #333' }}>
                           {t.platformIcon}
