@@ -3,7 +3,6 @@ import {
   collection, doc, addDoc, setDoc, getDoc, increment, updateDoc,
   query, orderBy, onSnapshot, serverTimestamp
 } from 'firebase/firestore'
-import { onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebase'
 
 export function getConversationId(sellerId: string, buyerId: string) {
