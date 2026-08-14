@@ -12,6 +12,7 @@ export interface SellerConversation {
   lastMessage: string
   lastMessageAt: any
   unreadBySeller: boolean
+  unreadBySellerCount?: number
   productName?: string
   productPrice?: string
   productImage?: string
