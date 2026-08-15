@@ -5,6 +5,7 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore'
 import { ref, uploadBytes } from 'firebase/storage'
 import { COUNTRIES } from './countries'
 import { notify } from './notifications'
+import ConfirmDialog from './ConfirmDialog'
 
 function EditStore() {
   const [businessName, setBusinessName] = useState('')
@@ -17,6 +18,7 @@ function EditStore() {
   const [logoUrl, setLogoUrl] = useState('')
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
+  const [confirmSignOut, setConfirmSignOut] = useState(false)
 
   // Location
   const [location, setLocation] = useState('')
@@ -353,18 +355,29 @@ function EditStore() {
           {loading || uploadingId ? 'Saving...' : 'Save'}
         </button>
 
-        <button onClick={async () => {
-          try {
-            await auth.signOut()
-            window.location.href = '/'
-          } catch (err) {
-            console.error('Sign out failed:', err)
-            alert('Could not sign out. Try again.')
-          }
-        }}
+        <button onClick={() => setConfirmSignOut(true)}
           style={{ width: '100%', padding: '10px', marginTop: '16px', background: '#ff4444', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: '600', cursor: 'pointer', fontSize: '14px' }}>
           Sign Out
         </button>
+
+        <ConfirmDialog
+          open={confirmSignOut}
+          title="Sign out of rachett?"
+          message="You'll need to sign in again to manage your store. Are you sure you want to leave?"
+          confirmLabel="Sign out"
+          cancelLabel="Stay signed in"
+          onConfirm={async () => {
+            setConfirmSignOut(false)
+            try {
+              await auth.signOut()
+              window.location.href = '/'
+            } catch (err) {
+              console.error('Sign out failed:', err)
+              alert('Could not sign out. Try again.')
+            }
+          }}
+          onClose={() => setConfirmSignOut(false)}
+        />
       </div>
     </div>
   )
