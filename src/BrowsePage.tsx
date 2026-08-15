@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
-import { collection, getDocs, query, addDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, getDocs, query, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebase'
 import { useNavigate } from 'react-router-dom'
@@ -43,7 +43,7 @@ function BrowsePage() {
   const [errorMsg, setErrorMsg] = useState<string>('')
   const [recentSearches, setRecentSearches] = useState<string[]>([])
   const [userId, setUserId] = useState<string | null>(null)
-  const [mySlug] = useState<string | null>(null)
+  const [mySlug, setMySlug] = useState<string | null>(null)
   const [ownerFilter, setOwnerFilter] = useState<'all' | 'mine' | 'not-mine'>('all')
   const { addToBag, removeFromBag, isInBag, count: bagCount } = useBag()
   const navigate = useNavigate()
@@ -66,6 +66,18 @@ function BrowsePage() {
   const { state: otpState, requestOTP, verifyOTP, reset: resetOTP } = useGuestOTP()
   const clickTimerRef = useRef<number | null>(null)
   const RECENT_SEARCH_LIMIT = 11
+
+  // Load the signed-in user's store slug so the "Yours" badge + "Mine" filter work
+  useEffect(() => {
+    const u = auth.currentUser
+    if (!u) {
+      setMySlug(null)
+      return
+    }
+    getDoc(doc(db, 'sellers', u.uid)).then(snap => {
+      if (snap.exists()) setMySlug(snap.data().slug || null)
+    }).catch(() => {})
+  }, [])
 
   // Fetch bag counts for displayed products
   useEffect(() => {
