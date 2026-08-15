@@ -163,18 +163,6 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onRefresh }: an
     setIsOutOfStock(newStatus)
   }
 
-  const storeLink = `${window.location.origin}${window.location.pathname}`
-  const getProductUrl = () => `${storeLink}?productId=${p.id}`
-  const getCaption = () =>
-    `${p.name} — UGX ${p.price}\nSee more from this seller at ${storeLink}\n${getProductUrl()}`
-
-  const shareToWhatsApp = () => window.open(`https://wa.me/?text=${encodeURIComponent(getCaption())}`, '_blank')
-  const shareToTelegram = () => window.open(`https://t.me/share/url?url=${encodeURIComponent(getProductUrl())}&text=${encodeURIComponent(getCaption())}`, '_blank')
-  const shareToTwitter = () => window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(getCaption())}`, '_blank')
-  const shareToFacebook = () => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(getProductUrl())}`, '_blank')
-  const copyCaption = async () => { await navigator.clipboard.writeText(getCaption()); alert(notify.storeLinkCopied) }
-
-
   return (
     <div style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: `1px solid ${isOutOfStock ? '#333' : '#222'}`, position: 'relative', opacity: isOutOfStock && !isOwner ? 0.7 : 1 }}>
 
@@ -271,13 +259,6 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onRefresh }: an
                   style={{ width: '100%', padding: '8px', background: isOutOfStock ? '#1a2a1a' : 'transparent', color: isOutOfStock ? green : '#ff4444', border: `1px solid ${isOutOfStock ? green : '#ff4444'}`, borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', marginBottom: '6px' }}>
                   {isOutOfStock ? '✓ Back in Stock' : 'Mark Out of Stock'}
                 </button>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' }}>
-                  <button onClick={shareToWhatsApp} style={{ flex: '1 1 48%', padding: '8px', background: '#25D366', border: 'none', color: '#000', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>WhatsApp</button>
-                  <button onClick={shareToTelegram} style={{ flex: '1 1 48%', padding: '8px', background: '#2CA5E0', border: 'none', color: '#000', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>Telegram</button>
-                  <button onClick={shareToTwitter} style={{ flex: '1 1 48%', padding: '8px', background: '#1DA1F2', border: 'none', color: '#000', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>Twitter</button>
-                  <button onClick={shareToFacebook} style={{ flex: '1 1 48%', padding: '8px', background: '#4267B2', border: 'none', color: '#fff', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>Facebook</button>
-                  <button onClick={copyCaption} style={{ width: '100%', padding: '8px', marginTop: '6px', background: '#444', border: 'none', color: '#fff', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>Copy caption</button>
-                </div>
                 <button onClick={handleDelete}
                   style={{ width: '100%', padding: '8px', background: 'transparent', color: '#555', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
                   Delete
