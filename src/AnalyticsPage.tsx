@@ -191,7 +191,7 @@ function AnalyticsPage() {
             const ts = data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt instanceof Date ? data.createdAt : null
             allOrders.push({ buyerName: data.buyerName || 'Buyer', productName: data.productName || '', createdAt: ts })
           }
-          if (data.status === 'pending' || !data.status) pendingCount++
+          if (!['fulfilled', 'out_of_stock', 'needs_details'].includes(data.status)) pendingCount++
           const ts2 = data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt instanceof Date ? data.createdAt : null
           allActivityOrders.push({ buyerName: data.buyerName || 'Buyer', productName: data.productName || '', createdAt: ts2 })
         })
