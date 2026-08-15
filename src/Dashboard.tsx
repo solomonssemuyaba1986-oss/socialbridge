@@ -454,9 +454,16 @@ function Dashboard() {
         ) : (
           <div className="rt-products" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             {products.map(p => (
-              <div key={p.id} style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222' }}>
+              <div key={p.id} onClick={() => navigate('/products')}
+                style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222', position: 'relative', cursor: 'pointer' }}>
                 <img src={p.imageUrl || 'https://placehold.co/300x200'} alt={p.name}
                   style={{ width: '100%', height: '140px', objectFit: 'cover' }} />
+                {/* Quick edit pencil */}
+                <button onClick={(e) => { e.stopPropagation(); navigate(`/products?edit=${p.id}`) }}
+                  title={`Edit ${p.name}`}
+                  style={{ position: 'absolute', top: '8px', right: '8px', width: '32px', height: '32px', borderRadius: '999px', background: 'rgba(0,0,0,0.7)', border: '1px solid #333', color: '#fff', cursor: 'pointer', fontSize: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
+                  ✏️
+                </button>
                 <div style={{ padding: '12px' }}>
                   <p style={{ margin: '0 0 4px', fontWeight: '600', fontSize: '14px' }}>{p.name}</p>
                   <p style={{ margin: 0, fontWeight: '700', color: green, fontSize: '14px' }}>UGX {p.price}</p>
