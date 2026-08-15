@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { auth, db, storage } from './firebase'
-import { collection, doc, getDocs, query, setDoc, where } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore'
 import { ref, uploadBytes } from 'firebase/storage'
 import { useNavigate } from 'react-router-dom'
 import { COUNTRIES } from './countries'
+import AuthModal from './AuthModal'
 
 const OTP_SERVER_URL = import.meta.env.VITE_OTP_SERVER_URL || 'http://localhost:3001'
 
@@ -39,6 +40,7 @@ function SetupStore() {
   const [locationLoading, setLocationLoading] = useState(false)
   const [errors, setErrors] = useState<SetupFormErrors>({})
   const [loading, setLoading] = useState(false)
+  const [showAuthModal, setShowAuthModal] = useState(false)
   const [showWhatsapp, setShowWhatsapp] = useState(true)
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [logoPreview, setLogoPreview] = useState('')
@@ -79,6 +81,15 @@ function SetupStore() {
   }
 
   const navigate = useNavigate()
+
+  // If a signed-in user already has a store, don't let /setup overwrite it
+  useEffect(() => {
+    const u = auth.currentUser
+    if (!u) return
+    getDoc(doc(db, 'sellers', u.uid)).then(snap => {
+      if (snap.exists()) navigate('/dashboard')
+    }).catch(() => {})
+  }, [navigate])
 
   const sanitizeInput = (input: string, maxLength: number = 100): string => {
     return input.trim().slice(0, maxLength).replace(/<[^>]*>/g, '')
@@ -322,7 +333,8 @@ function SetupStore() {
     if (!validateForm()) return
     const user = auth.currentUser
     if (!user) {
-      setErrors({ submit: 'Not signed in. Please sign in again.' })
+      // Guest: open the sign-in popup — their filled-in store stays safe
+      setShowAuthModal(true)
       return
     }
     setLoading(true)
@@ -414,6 +426,21 @@ function SetupStore() {
       console.error('Setup error:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleAuthSuccess = () => {
+    setShowAuthModal(false)
+    const u = auth.currentUser
+    if (u) {
+      // Re-run submit — now signed in, store gets created under the new account
+      void handleSubmit()
+    } else {
+      // Auth state settling — retry once shortly after
+      setTimeout(() => {
+        const u2 = auth.currentUser
+        if (u2) void handleSubmit()
+      }, 300)
     }
   }
 
@@ -736,6 +763,14 @@ function SetupStore() {
         </div>
           </>
         )}
+
+      <AuthModal
+        open={showAuthModal}
+        title="Create your account"
+        subtitle="Sign in to save your store — your details are already filled in and safe."
+        onSuccess={handleAuthSuccess}
+        onClose={() => setShowAuthModal(false)}
+      />
       </div>
     </div>
   )
