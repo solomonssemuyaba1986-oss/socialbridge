@@ -390,6 +390,13 @@ function BrowsePage() {
       result = result.filter(p => p.category === activeCategory)
     }
 
+    // Apply owner filter (mine / not mine)
+    if (ownerFilter === 'mine') {
+      result = result.filter(p => p.sellerSlug === mySlug && mySlug)
+    } else if (ownerFilter === 'not-mine') {
+      result = result.filter(p => p.sellerSlug !== mySlug || !mySlug)
+    }
+
     // Apply out-of-stock filter
     if (hideOutOfStock) {
       result = result.filter(p => !p.outOfStock)
@@ -433,7 +440,7 @@ function BrowsePage() {
     }
 
     setFiltered(result)
-  }, [activeCategory, search, products, sortBy, priceRange, hideOutOfStock])
+  }, [activeCategory, search, products, sortBy, priceRange, hideOutOfStock, ownerFilter, mySlug])
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
@@ -609,7 +616,7 @@ function BrowsePage() {
                     <div key={p.id} onClick={() => navigate(`/store/${p.sellerSlug}`)}
                       style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222', cursor: 'pointer', position: 'relative' }}>
                       {p.sellerSlug === mySlug && mySlug && (
-                      <div style={{ position: 'absolute', top: '6px', left: '6px', background: green, color: '#000', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: '800', zIndex: 2 }}>Yours</div>
+                      <div style={{ position: 'absolute', top: '6px', left: '6px', background: green, color: '#000', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: '800', zIndex: 2 }}>Yours</div>
                     )}
                     <img src={p.imageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
                         style={{ width: '100%', height: '120px', objectFit: 'cover', opacity: p.outOfStock ? 0.5 : 1 }} />
@@ -636,7 +643,7 @@ function BrowsePage() {
                 <div key={p.id}
                   style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222', position: 'relative', display: 'flex', flexDirection: 'column' }}>
                   <div onClick={() => handleCardClick(p)} style={{ cursor: 'pointer', position: 'relative' }}>
-                    {p.sellerSlug === mySlug && mySlug && (<div style={{ position: 'absolute', top: '6px', left: '6px', background: green, color: '#000', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: '800', zIndex: 2 }}>Yours</div>)}
+                    {p.sellerSlug === mySlug && mySlug && (<div style={{ position: 'absolute', top: '6px', left: '6px', background: green, color: '#000', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: '800', zIndex: 2 }}>Yours</div>)}
                     <button onClick={(e) => { e.stopPropagation(); handleToggleBag(p) }}
                       style={{ position: 'absolute', top: '6px', right: '6px', background: isInBag(p.id) ? green : 'rgba(0,0,0,0.6)', color: isInBag(p.id) ? '#000' : '#fff', border: 'none', borderRadius: '8px', padding: '2px 7px', cursor: 'pointer', fontSize: '11px', fontWeight: '700', zIndex: 2, display: 'flex', alignItems: 'center', gap: '3px', backdropFilter: 'blur(4px)', lineHeight: 1.4 }}>
                       🛍️ {formatBagCount(bagCounts[p.id] || 0)}
