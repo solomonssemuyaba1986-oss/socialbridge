@@ -1,14 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
 import { signInWithPopup, signInWithRedirect, signInWithPhoneNumber } from 'firebase/auth'
 import type { AuthProvider, ConfirmationResult } from 'firebase/auth'
-import { auth, db, googleProvider, facebookProvider, appleProvider, createRecaptchaVerifier } from './firebase'
+import { auth, googleProvider, facebookProvider, appleProvider, createRecaptchaVerifier } from './firebase'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore'
 import { notify } from './notifications'
 import { COUNTRY_CODES, type CountryCode } from './countryCodes'
 import RecoveryModal from './RecoveryModal'
-
-const OTP_SERVER_URL = import.meta.env.VITE_OTP_SERVER_URL || 'http://localhost:3001'
 
 interface SavedUser {
   displayName: string | null
