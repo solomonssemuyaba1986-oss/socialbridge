@@ -31,9 +31,9 @@ service cloud.firestore {
           && request.resource.data.buyerUid != sellerId
           && request.resource.data.status == 'pending';
         allow update: if request.auth.uid == sellerId
-          && resource.data.status == 'pending'
+          && resource.data.status in ['pending', 'paid', 'awaiting_payment', 'needs_details']
           && request.resource.data.status in ['fulfilled', 'out_of_stock', 'needs_details'];
-        allow delete: if false;
+        allow delete: if request.auth.uid == sellerId;
       }
 
       match /visits/{visitId} {
