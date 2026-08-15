@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
 import { signInWithPopup, signInWithRedirect, signInWithPhoneNumber } from 'firebase/auth'
 import type { AuthProvider, ConfirmationResult } from 'firebase/auth'
-import { auth, googleProvider, facebookProvider, appleProvider, createRecaptchaVerifier } from './firebase'
+import { auth, db, googleProvider, facebookProvider, appleProvider, createRecaptchaVerifier } from './firebase'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { doc, getDoc } from 'firebase/firestore'
 import { notify } from './notifications'
+import { rememberUser } from './userMemory'
 import { COUNTRY_CODES, type CountryCode } from './countryCodes'
 import RecoveryModal from './RecoveryModal'
 
@@ -69,7 +71,8 @@ function SignIn() {
     setAuthLoading(true)
     try {
       await signInWithPopup(auth, provider)
-      navigate('/onboarding')
+      rememberUser(auth.currentUser)
+      void routeAfterSignIn()
     } catch (error: unknown) {
       console.error('Provider sign-in error:', error)
       const err = error as { code?: string }
@@ -97,7 +100,8 @@ function SignIn() {
     setAuthLoading(true)
     try {
       await signInWithPopup(auth, googleProvider)
-      navigate('/onboarding')
+      rememberUser(auth.currentUser)
+      void routeAfterSignIn()
     } catch (error: unknown) {
       console.error('Re-auth error:', error)
       alert(notify.signInFailed)
@@ -109,6 +113,22 @@ function SignIn() {
   const handleUseDifferentAccount = () => {
     localStorage.removeItem('rachett_last_user')
     setSavedUser(null)
+  }
+
+  // Returning users with a store go straight to their dashboard.
+  const routeAfterSignIn = async () => {
+    const u = auth.currentUser
+    if (!u) {
+      navigate('/onboarding')
+      return
+    }
+    try {
+      const snap = await getDoc(doc(db, 'sellers', u.uid))
+      if (snap.exists()) navigate('/dashboard')
+      else navigate('/onboarding')
+    } catch {
+      navigate('/onboarding')
+    }
   }
 
   const ensureTerms = (): boolean => {
@@ -176,7 +196,8 @@ function SignIn() {
     setPhoneOtpError('')
     try {
       await confirmationResult.confirm(phoneOtp)
-      navigate('/onboarding')
+      rememberUser(auth.currentUser)
+      void routeAfterSignIn()
     } catch (err: any) {
       console.error('Phone OTP verify error:', err)
       if (err?.code === 'auth/invalid-verification-code') {
