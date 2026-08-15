@@ -111,8 +111,8 @@ function Dashboard() {
 
   const totalMessageUnread = unreadMessagesCount + unreadSellerConvoCount + unreadBuyerConvoCount
 
-  // Pending = orders not yet confirmed (not fulfilled / out of stock).
-  const pendingOrders = orders.filter(o => !['fulfilled', 'out_of_stock'].includes(o.status || ''))
+  // Waiting = orders you haven't worked on yet (not confirmed, out of stock, or needs details).
+  const pendingOrders = orders.filter(o => !['fulfilled', 'out_of_stock', 'needs_details'].includes(o.status || ''))
 
   // Spotlight — dims the screen ONLY when a genuinely NEW pending order arrives.
   // Baseline survives page revisits, so existing pending orders never re-trigger it.
