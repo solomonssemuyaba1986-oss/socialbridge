@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { doc, getDoc, collection, getDocs, updateDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
@@ -104,33 +104,46 @@ function Dashboard() {
     }
   }, [])
 
-  const { orders, unreadCount, loading: ordersLoading } = useSellerOrders(playNewOrderAlert)
+  const { orders, loading: ordersLoading } = useSellerOrders()
   const { unreadCount: unreadMessagesCount } = useSellerMessages()
   const { unreadCount: unreadSellerConvoCount } = useSellerConversations()
   const { unreadCount: unreadBuyerConvoCount } = useBuyerConversations()
 
   const totalMessageUnread = unreadMessagesCount + unreadSellerConvoCount + unreadBuyerConvoCount
 
-  // Spotlight — dims the screen ONLY when a genuinely NEW order arrives.
-  // Baseline survives page revisits, so existing unread orders never re-trigger it.
+  // Pending = orders not yet confirmed (not fulfilled / out of stock).
+  const pendingOrders = orders.filter(o => !['fulfilled', 'out_of_stock'].includes(o.status || ''))
+
+  // Spotlight — dims the screen ONLY when a genuinely NEW pending order arrives.
+  // Baseline survives page revisits, so existing pending orders never re-trigger it.
   const [showSpotlight, setShowSpotlight] = useState(false)
   useEffect(() => {
     if (ordersLoading) return
     if (!dashboardBaselineSet) {
-      // First real load: record the current unread count as the baseline — no spotlight
+      // First real load: record the current pending count as the baseline — no spotlight
       dashboardBaselineSet = true
-      dashboardUnreadBaseline = unreadCount
+      dashboardUnreadBaseline = pendingOrders.length
       return
     }
-    if (unreadCount > dashboardUnreadBaseline) {
+    if (pendingOrders.length > dashboardUnreadBaseline) {
       setShowSpotlight(true)
       const timer = window.setTimeout(() => setShowSpotlight(false), 3000)
       return () => window.clearTimeout(timer)
     }
-    if (unreadCount < dashboardUnreadBaseline) {
-      dashboardUnreadBaseline = unreadCount
+    if (pendingOrders.length < dashboardUnreadBaseline) {
+      dashboardUnreadBaseline = pendingOrders.length
     }
-  }, [unreadCount, ordersLoading])
+  }, [pendingOrders.length, ordersLoading])
+
+  // Sound — fires only when the pending (not-yet-confirmed) order count increases.
+  const prevPendingRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (ordersLoading) return
+    if (prevPendingRef.current !== null && pendingOrders.length > prevPendingRef.current) {
+      playNewOrderAlert()
+    }
+    prevPendingRef.current = pendingOrders.length
+  }, [pendingOrders.length, ordersLoading, playNewOrderAlert])
 
   // Inbox notification sounds return in the native mobile app.
   useEffect(() => {
@@ -171,7 +184,6 @@ function Dashboard() {
   )
 
   const storeLink = `${window.location.origin}/store/${seller.slug}`
-  const pendingOrders = orders.filter(o => !['fulfilled', 'out_of_stock'].includes(o.status || ''))
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', display: 'flex' }}>
@@ -253,7 +265,7 @@ function Dashboard() {
         </div>
         <div className="rt-container" style={{ maxWidth: '100%', margin: '0', padding: 0 }}>
 
-        {unreadCount > 0 && (
+        {pendingOrders.length > 0 && (
           <div
             onClick={() => navigate('/orders')}
             style={{
@@ -269,7 +281,7 @@ function Dashboard() {
             }}>
             <div>
               <p style={{ margin: '0 0 4px', color: green, fontWeight: '800', fontSize: '15px' }}>
-                {unreadCount} new order{unreadCount !== 1 ? 's' : ''} waiting
+                {pendingOrders.length} order{pendingOrders.length !== 1 ? 's' : ''} waiting for you
               </p>
               <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>
                 Tap to open and see who ordered what
