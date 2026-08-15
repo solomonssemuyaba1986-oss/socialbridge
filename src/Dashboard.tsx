@@ -57,6 +57,12 @@ function Dashboard() {
   const [recoverySending, setRecoverySending] = useState(false)
   const [recoverySent, setRecoverySent] = useState(false)
   const [bannerDismissed, setBannerDismissed] = useState(false)
+  // Show a warm greeting once per browser session
+  const [showWelcome, setShowWelcome] = useState(() => {
+    if (sessionStorage.getItem('rachett_welcomed')) return false
+    sessionStorage.setItem('rachett_welcomed', '1')
+    return true
+  })
 
   const needsRecoveryEmail = seller?.recoveryEmail !== undefined 
     && seller.recoveryEmail === '' 
@@ -145,6 +151,13 @@ function Dashboard() {
     prevPendingRef.current = pendingOrders.length
   }, [pendingOrders.length, ordersLoading, playNewOrderAlert])
 
+  // Auto-hide the welcome greeting after a few seconds
+  useEffect(() => {
+    if (!showWelcome) return
+    const t = window.setTimeout(() => setShowWelcome(false), 4000)
+    return () => window.clearTimeout(t)
+  }, [showWelcome])
+
   // Inbox notification sounds return in the native mobile app.
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -174,7 +187,7 @@ function Dashboard() {
 
   // Status update functions moved to Orders page — dashboard is view-only
   if (loading) return (
-    <LoadingScreen message="Warming up your store..." logo={seller?.logoUrl} />
+    <LoadingScreen message={auth.currentUser?.displayName ? `Welcome back, ${auth.currentUser.displayName}! 👋` : 'Warming up your store...'} logo={seller?.logoUrl} />
   )
 
   if (!seller) return (
@@ -264,6 +277,13 @@ function Dashboard() {
           </div>
         </div>
         <div className="rt-container" style={{ maxWidth: '100%', margin: '0', padding: 0 }}>
+
+        {showWelcome && auth.currentUser?.displayName && (
+          <div style={{ background: '#1a2a1a', border: `1px solid ${green}`, borderRadius: '12px', padding: '16px 20px', marginBottom: '24px', textAlign: 'center' }}>
+            <p style={{ margin: 0, color: '#fff', fontWeight: '800', fontSize: '15px' }}>👋 Welcome back, {auth.currentUser.displayName}!</p>
+            <p style={{ margin: '4px 0 0', color: '#888', fontSize: '13px' }}>Here's what's happening with your store.</p>
+          </div>
+        )}
 
         {pendingOrders.length > 0 && (
           <div
