@@ -72,14 +72,14 @@ function OrderHistory() {
   ]
 
   const filtered = orders.filter(o => {
-    if (filter === 'pending') return o.status === 'pending' || !o.status || o.status === 'needs_details' || o.status === 'paid' || o.status === 'awaiting_payment'
+    if (filter === 'pending') return o.status === 'pending' || !o.status || o.status === 'paid' || o.status === 'awaiting_payment'
     if (filter === 'fulfilled') return o.status === 'fulfilled'
     if (filter === 'out_of_stock') return o.status === 'out_of_stock'
     return true
   })
 
   const selected = filtered.find(o => o.id === selectedId) ?? null
-  const pendingCount = orders.filter(o => o.status === 'pending' || !o.status || o.status === 'needs_details' || o.status === 'paid' || o.status === 'awaiting_payment').length
+  const pendingCount = orders.filter(o => o.status === 'pending' || !o.status || o.status === 'paid' || o.status === 'awaiting_payment').length
 
   if (loading) {
     return (
