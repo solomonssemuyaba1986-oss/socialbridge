@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { onAuthStateChanged, getRedirectResult } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
@@ -32,6 +32,7 @@ function BulkUploadWrapper() {
 }
 
 function App() {
+  const location = useLocation()
   const [loading, setLoading] = useState(true)
   const [slug, setSlug] = useState<string | null>(null)
   const [signedIn, setSignedIn] = useState(false)
@@ -79,7 +80,7 @@ function App() {
 
   return (
     <>
-      <TopNav />
+      {location.pathname !== '/terms' && <TopNav />}
       <Routes>
       <Route path="/" element={
         !signedIn ? <SignIn /> :
