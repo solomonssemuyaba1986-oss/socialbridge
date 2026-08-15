@@ -1,6 +1,7 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 function TermsPage() {
+  const navigate = useNavigate()
   return (
     <>
       <style>{`
@@ -214,7 +215,12 @@ function TermsPage() {
         }
       `}</style>
       <nav>
-        <div className="logo-box">r</div>
+        <button
+          onClick={() => navigate('/')}
+          aria-label="Back to sign in"
+          className="logo-box"
+          style={{ cursor: 'pointer', border: 'none', lineHeight: 1 }}
+        >←</button>
         <span className="logo-text">rachett</span>
       </nav>
 
