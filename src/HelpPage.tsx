@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
+import { db, auth } from './firebase'
 
 const green = '#adff2f'
 const SUPPORT_WHATSAPP = (import.meta.env.VITE_SUPPORT_WHATSAPP || '').trim()
+const FORMSPREE_ID = (import.meta.env.VITE_FORMSPREE_ID || '').trim()
 
 type FaqItem = { q: string; a: string }
 type FaqSection = { icon: string; title: string; items: FaqItem[] }
@@ -87,8 +90,70 @@ const FAQ_SECTIONS: FaqSection[] = [
 function HelpPage() {
   const navigate = useNavigate()
   const [openKey, setOpenKey] = useState<string | null>(null)
+  const [issue, setIssue] = useState('')
+  const [issueName, setIssueName] = useState('')
+  const [issueContact, setIssueContact] = useState('')
+  const [sending, setSending] = useState(false)
+  const [issueSent, setIssueSent] = useState(false)
+  const [issueError, setIssueError] = useState('')
 
   const toggle = (key: string) => setOpenKey(openKey === key ? null : key)
+
+  const submitIssue = async () => {
+    const text = issue.trim()
+    if (!text) {
+      setIssueError('Please describe your issue before sending.')
+      return
+    }
+    setSending(true)
+    setIssueError('')
+
+    const payload = {
+      role: 'user',
+      category: 'Help Request',
+      message: text,
+      name: issueName.trim(),
+      contact: issueContact.trim(),
+      page: window.location.href,
+      submittedAt: new Date().toISOString(),
+      userEmail: auth.currentUser?.email || '',
+    }
+
+    let emailed = false
+    if (FORMSPREE_ID) {
+      try {
+        const res = await fetch(`https://formspree.io/f/${FORMSPREE_ID}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(payload),
+        })
+        emailed = res.ok
+      } catch (err) {
+        console.error('Formspree error:', err)
+      }
+    }
+
+    let saved = false
+    if (auth.currentUser) {
+      try {
+        await addDoc(collection(db, 'feedback'), {
+          ...payload,
+          uid: auth.currentUser.uid,
+          createdAt: serverTimestamp(),
+        })
+        saved = true
+      } catch (err) {
+        console.error('Help request save error:', err)
+      }
+    }
+
+    setSending(false)
+    if (emailed || saved) {
+      setIssueSent(true)
+    } else {
+      setIssueError('Sorry, we could not send your question right now. Please try again later.')
+    }
+  }
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '24px 16px 60px' }}>
@@ -140,6 +205,49 @@ function HelpPage() {
           >
             Recover your account
           </button>
+        </div>
+
+        <div style={{ background: '#1a1a1a', border: '1px solid #222', borderRadius: 12, padding: '20px', marginBottom: 24 }}>
+          <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 800 }}>❓ Can't find your answer?</h3>
+          <p style={{ margin: '0 0 16px', color: '#888', fontSize: 13 }}>Describe your issue and we'll get back to you.</p>
+
+          {issueSent ? (
+            <div style={{ textAlign: 'center', padding: '12px 0' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: '22px', color: '#000', fontWeight: '800' }}>✓</div>
+              <p style={{ margin: 0, color: '#ccc', fontSize: 14, fontWeight: 700 }}>Sent! We'll get back to you.</p>
+            </div>
+          ) : (
+            <>
+              <textarea
+                placeholder="Describe your issue or question..."
+                value={issue}
+                onChange={e => setIssue(e.target.value)}
+                style={{ width: '100%', minHeight: '110px', padding: '12px', borderRadius: '10px', border: '1px solid #333', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical', marginBottom: '12px' }}
+              />
+              <input
+                placeholder="Your name (optional)"
+                value={issueName}
+                onChange={e => setIssueName(e.target.value)}
+                style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #333', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', marginBottom: '12px' }}
+              />
+              <input
+                placeholder="Phone or email (so we can reply)"
+                value={issueContact}
+                onChange={e => setIssueContact(e.target.value)}
+                style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #333', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', marginBottom: '16px' }}
+              />
+
+              {issueError && <p style={{ color: '#ff4444', fontSize: '13px', margin: '0 0 12px' }}>{issueError}</p>}
+
+              <button
+                onClick={submitIssue}
+                disabled={sending}
+                style={{ width: '100%', padding: '13px', background: sending ? '#333' : green, color: '#000', border: 'none', borderRadius: '10px', fontWeight: '800', cursor: sending ? 'not-allowed' : 'pointer', fontSize: '14px' }}
+              >
+                {sending ? 'Sending...' : 'Send my question'}
+              </button>
+            </>
+          )}
         </div>
 
         <div style={{ background: '#1a1a1a', border: '1px solid #222', borderRadius: 12, padding: '20px', textAlign: 'center' }}>
