@@ -88,7 +88,7 @@ function App() {
         <Navigate to="/onboarding" />
       } />
       <Route path="/onboarding" element={<Onboarding />} />
-      <Route path="/setup" element={signedIn ? <SetupStore /> : <Navigate to="/" />} />
+      <Route path="/setup" element={<SetupStore />} />
       <Route path="/store/:slug" element={<StorePage />} />
       <Route path="/dashboard" element={signedIn ? <Dashboard /> : <Navigate to="/" />} />
       <Route path="/browse" element={<BrowsePage />} />
