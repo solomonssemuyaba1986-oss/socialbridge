@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useSellerOrders, type SellerOrder } from './useSellerOrders.ts'
-import { updateDoc, doc } from 'firebase/firestore'
+import { updateDoc, doc, deleteDoc } from 'firebase/firestore'
 import { db } from './firebase'
+import ConfirmDialog from './ConfirmDialog'
 
 const green = '#adff2f'
 
@@ -43,10 +44,23 @@ function OrderHistory() {
   const { orders, loading, userId } = useSellerOrders()
   const [filter, setFilter] = useState<'all' | 'pending' | 'fulfilled' | 'out_of_stock'>('pending')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<SellerOrder | null>(null)
 
   const updateOrderStatus = async (orderId: string, status: string) => {
     if (!userId) return
     await updateDoc(doc(db, 'sellers', userId, 'orders', orderId), { status, read: true })
+  }
+
+  const handleDeleteOrder = async () => {
+    if (!userId || !deleteTarget) return
+    try {
+      await deleteDoc(doc(db, 'sellers', userId, 'orders', deleteTarget.id))
+    } catch (err) {
+      console.error('Delete order failed:', err)
+      alert('Could not delete this order. Try again.')
+    } finally {
+      setDeleteTarget(null)
+    }
   }
 
   const navItems = [
@@ -58,14 +72,14 @@ function OrderHistory() {
   ]
 
   const filtered = orders.filter(o => {
-    if (filter === 'pending') return o.status === 'pending' || !o.status || o.status === 'needs_details'
+    if (filter === 'pending') return o.status === 'pending' || !o.status || o.status === 'needs_details' || o.status === 'paid' || o.status === 'awaiting_payment'
     if (filter === 'fulfilled') return o.status === 'fulfilled'
     if (filter === 'out_of_stock') return o.status === 'out_of_stock'
     return true
   })
 
   const selected = filtered.find(o => o.id === selectedId) ?? null
-  const pendingCount = orders.filter(o => o.status === 'pending' || !o.status || o.status === 'needs_details').length
+  const pendingCount = orders.filter(o => o.status === 'pending' || !o.status || o.status === 'needs_details' || o.status === 'paid' || o.status === 'awaiting_payment').length
 
   if (loading) {
     return (
@@ -198,7 +212,7 @@ function OrderHistory() {
                         <p style={{ margin: '0 0 16px', color: '#555', fontSize: '12px' }}>Placed {formatDate(o.createdAt)}</p>
 
                         {/* Status Action Buttons */}
-                        {(o.status === 'pending' || !o.status || o.status === 'needs_details') && (
+                        {(o.status === 'pending' || !o.status || o.status === 'needs_details' || o.status === 'paid' || o.status === 'awaiting_payment') && (
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
                             <button onClick={() => updateOrderStatus(o.id, 'fulfilled')}
                               style={{ padding: '10px', background: green, color: '#000', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700' }}>
@@ -214,6 +228,11 @@ function OrderHistory() {
                             </button>
                           </div>
                         )}
+
+                        <button onClick={() => setDeleteTarget(o)}
+                          style={{ width: '100%', padding: '10px', background: 'transparent', color: '#ff4444', border: '1px solid #ff4444', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', marginTop: '8px' }}>
+                          🗑️ Delete order
+                        </button>
                       </div>
                     )}
                   </div>
@@ -223,6 +242,16 @@ function OrderHistory() {
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Delete this order?"
+        message="This permanently removes the order. You can't undo this."
+        confirmLabel="Delete"
+        cancelLabel="Keep order"
+        onConfirm={handleDeleteOrder}
+        onClose={() => setDeleteTarget(null)}
+      />
     </div>
   )
 }
