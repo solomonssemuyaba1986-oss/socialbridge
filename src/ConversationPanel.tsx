@@ -35,7 +35,6 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
   const [feedbackType, setFeedbackType] = useState<'success' | 'error' | 'info'>('success')
   const [feedbackVisible, setFeedbackVisible] = useState(false)
   const listRef = useRef<HTMLDivElement | null>(null)
-  const hasOpened = useRef(false)
 
   const showFeedback = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
     setFeedbackMessage(msg)
@@ -122,14 +121,8 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
   useEffect(() => {
     const el = listRef.current
     if (!el || loading) return
-    if (!hasOpened.current) {
-      // First open: jump straight to the latest message — no scroll animation
-      hasOpened.current = true
-      el.scrollTop = el.scrollHeight
-    } else {
-      // New message while chat is open: glide down naturally
-      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
-    }
+    // Always snap straight to the latest message — no scroll animation
+    el.scrollTop = el.scrollHeight
   }, [messages, loading])
 
   const handleSend = async (newText?: string) => {
