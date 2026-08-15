@@ -83,6 +83,11 @@ service cloud.firestore {
       allow read, update, delete: if false;
     }
 
+    match /recoveries/{docId} {
+      // Recovery codes are only handled server-side by Cloud Functions — never client-accessible
+      allow read, write: if false;
+    }
+
 
     match /users/{userId} {
       allow read, write: if request.auth.uid == userId;
