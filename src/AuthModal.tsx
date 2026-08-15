@@ -3,6 +3,7 @@ import { signInWithPopup, signInWithPhoneNumber } from 'firebase/auth'
 import type { AuthProvider, ConfirmationResult } from 'firebase/auth'
 import { auth, googleProvider, appleProvider, facebookProvider, createRecaptchaVerifier } from './firebase'
 import { COUNTRY_CODES } from './countryCodes'
+import { rememberUser } from './userMemory'
 
 const green = '#adff2f'
 
@@ -33,6 +34,7 @@ function AuthModal({ open, title, subtitle, onSuccess, onClose }: Props) {
     setPhoneOtpError('')
     try {
       await signInWithPopup(auth, provider)
+      rememberUser(auth.currentUser)
       onSuccess()
     } catch (error: unknown) {
       console.error(`${name} sign-in error:`, error)
@@ -81,6 +83,7 @@ function AuthModal({ open, title, subtitle, onSuccess, onClose }: Props) {
     setPhoneOtpError('')
     try {
       await confirmationResult.confirm(phoneOtp)
+      rememberUser(auth.currentUser)
       onSuccess()
     } catch (err: any) {
       console.error('Phone OTP verify error:', err)
