@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type CSSProperties, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { addDoc, collection, deleteDoc, doc, getDocs, updateDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
 import { notify } from './notifications'
@@ -45,6 +45,7 @@ const emptyForm = (): ProductFormState => ({
 
 function ProductsPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -117,6 +118,18 @@ function ProductsPage() {
     setGalleryImages(initialImages)
     setActiveImageIndex(0)
   }
+
+  // Deep-link support: /products?edit=<productId> auto-opens editing for that product
+  const editParam = searchParams.get('edit')
+  useEffect(() => {
+    if (loading || !editParam) return
+    const target = products.find(p => p.id === editParam)
+    if (target) {
+      startEdit(target)
+      setSearchParams({}, { replace: true })
+      document.getElementById('products-edit-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [loading, editParam, products, setSearchParams])
 
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
@@ -287,7 +300,7 @@ function ProductsPage() {
             </div>
           </div>
 
-          <div style={{ background: '#121212', border: '1px solid #1f1f1f', borderRadius: '16px', padding: '18px' }}>
+          <div id="products-edit-form" style={{ background: '#121212', border: '1px solid #1f1f1f', borderRadius: '16px', padding: '18px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
               <h2 style={{ margin: 0, fontSize: '18px' }}>{editingId ? 'Edit product' : 'Add a product'}</h2>
               {editingId ? <button onClick={resetForm} style={{ background: 'transparent', color: '#888', border: 'none', cursor: 'pointer' }}>Cancel</button> : null}
