@@ -123,6 +123,13 @@ function TopNav() {
                 Sign up
               </span>
             </p>
+            <p style={{ margin: '8px 0 0', color: '#555', fontSize: 13 }}>
+              Lost access to your store?{' '}
+              <span onClick={() => navigate('/recover')}
+                style={{ color: '#88aaff', cursor: 'pointer', fontWeight: 600, textDecoration: 'underline' }}>
+                Need help
+              </span>
+            </p>
           </div>
         </div>
       )}
