@@ -1,5 +1,5 @@
 /**
- * Rachett Notification Service
+ * rachett Notification Service
  * 
  * Structured, human-readable messages that help users troubleshoot.
  * Replaces raw alert() calls and inconsistent showFeedback patterns.

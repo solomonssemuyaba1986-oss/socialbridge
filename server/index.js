@@ -82,7 +82,7 @@ app.post('/api/otp/send', async (req, res) => {
     try {
       const response = await sms.send({
         to: [phone],
-        message: `Your Rachett verification code is: ${otp}. It expires in 2 minutes.`,
+        message: `Your rachett verification code is: ${otp}. It expires in 2 minutes.`,
         from: process.env.AT_SENDER_ID || '',
       })
       console.log('[SMS] Sent:', response)
@@ -156,6 +156,6 @@ app.get('/api/health', (req, res) => {
 // ─── Start server ───────────────────────────────────────────────────
 const PORT = process.env.PORT || 3001
 app.listen(PORT, () => {
-  console.log(`🚀 Rachett OTP server running on http://localhost:${PORT}`)
+  console.log(`🚀 rachett OTP server running on http://localhost:${PORT}`)
   console.log(`   Sandbox mode: ${process.env.AT_USERNAME === 'sandbox' || !process.env.AT_API_KEY ? 'YES (OTP shown in response)' : 'NO'}`)
 })

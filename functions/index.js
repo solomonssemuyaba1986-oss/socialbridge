@@ -66,8 +66,8 @@ exports.sendRecoveryCode = onCall(
     await resend.emails.send({
       from: RESEND_FROM_EMAIL.value(),
       to: email,
-      subject: 'Your Rachett recovery code',
-      text: `Your Rachett recovery code is ${code}.\n\nIt expires in 10 minutes. If you didn't request this, you can ignore this email.`,
+      subject: 'Your rachett recovery code',
+      text: `Your rachett recovery code is ${code}.\n\nIt expires in 10 minutes. If you didn't request this, you can ignore this email.`,
     })
 
     return { ok: true }

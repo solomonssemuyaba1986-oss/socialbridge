@@ -225,7 +225,7 @@ function Dashboard() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
           <div style={{ background: green, width: 34, height: 34, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16, color: '#000' }}>R</div>
           <div>
-            <div style={{ fontWeight: 800, color: '#fff', fontSize: 16 }}>Rachett</div>
+            <div style={{ fontWeight: 800, color: '#fff', fontSize: 16 }}>rachett</div>
             <div style={{ color: '#777', fontSize: 12 }}>{seller.businessName}</div>
           </div>
         </div>

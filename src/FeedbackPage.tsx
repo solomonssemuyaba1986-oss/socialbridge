@@ -84,7 +84,7 @@ function FeedbackPage() {
         </div>
         <h2 style={{ fontWeight: '800', margin: '0 0 8px', fontSize: '22px' }}>Thanks for your feedback!</h2>
         <p style={{ color: '#888', fontSize: '14px', margin: '0 0 24px', maxWidth: '340px' }}>
-          The rachett team has been notified. Every idea helps make Rachett better.
+          The rachett team has been notified. Every idea helps make rachett better.
         </p>
         <button onClick={() => navigate('/browse')}
           style={{ padding: '14px 32px', background: green, color: '#000', border: 'none', borderRadius: '12px', fontWeight: '800', cursor: 'pointer', fontSize: '15px' }}>

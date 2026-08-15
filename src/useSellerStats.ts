@@ -28,7 +28,7 @@ export interface SellerStats {
 }
 
 function computeStoreAge(createdAt: any): { label: string; days: number } {
-  if (!createdAt) return { label: 'New on Rachett', days: 0 }
+  if (!createdAt) return { label: 'New on rachett', days: 0 }
 
   const created = createdAt.toDate ? createdAt.toDate() : new Date(createdAt)
   const now = new Date()
@@ -37,11 +37,11 @@ function computeStoreAge(createdAt: any): { label: string; days: number } {
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
   if (diffDays < 30) {
-    const label = diffDays <= 1 ? 'New on Rachett' : `${diffDays} days on Rachett`
+    const label = diffDays <= 1 ? 'New on rachett' : `${diffDays} days on rachett`
     return { label, days: diffDays }
   }
   if (diffMonths < 12) {
-    return { label: `${diffMonths} month${diffMonths === 1 ? '' : 's'} on Rachett`, days: diffDays }
+    return { label: `${diffMonths} month${diffMonths === 1 ? '' : 's'} on rachett`, days: diffDays }
   }
 
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -94,7 +94,7 @@ function computeRealSellerBadge(
 /**
  * Active Seller Badge (🔵):
  * - Must already be a Real Seller
- * - 14+ days on Rachett
+ * - 14+ days on rachett
  * - 10+ fulfilled orders
  * - 60%+ delivery success (computed only when 10+ orders processed)
  * - Responds in < 24 hours (avg response < 1440 minutes)
@@ -144,7 +144,7 @@ export function useSellerStats(sellerId: string | null) {
     responseRate: 0,
     responseTime: '—',
     avgResponseMinutes: null,
-    storeAge: 'New on Rachett',
+    storeAge: 'New on rachett',
     storeAgeDays: 0,
     repeatBuyers: 0,
     deliverySuccess: 0,

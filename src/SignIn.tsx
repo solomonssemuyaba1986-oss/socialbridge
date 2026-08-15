@@ -221,7 +221,7 @@ function SignIn() {
       <nav className="rt-topnav" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 32px', borderBottom: '1px solid #1a1a1a' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{ background: green, width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '13px', color: '#000' }}>R</div>
-          <span style={{ fontWeight: '800', fontSize: '18px' }}>Rachett</span>
+          <span style={{ fontWeight: '800', fontSize: '18px' }}>rachett</span>
         </div>
         <button onClick={handleScrollToProviders}
           style={{ background: green, color: '#000', border: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '14px' }}>
@@ -279,7 +279,7 @@ function SignIn() {
           across social.
         </h1>
         <p style={{ fontSize: '18px', color: '#888', margin: '0 0 40px', maxWidth: '500px', marginInline: 'auto', lineHeight: '1.6' }}>
-          Lost messages. Slow replies. Orders scattered across platforms. Rachett fixes all of it.
+          Lost messages. Slow replies. Orders scattered across platforms. rachett fixes all of it.
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
@@ -494,11 +494,11 @@ function SignIn() {
       <div style={{ padding: '80px 20px', maxWidth: '800px', margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: '48px' }}>
           <h2 className="rt-title-md" style={{ fontSize: '42px', fontWeight: '900', margin: '0 0 16px', letterSpacing: '-1px' }}>Get set up in minutes.</h2>
-          <p style={{ color: '#666', fontSize: '16px', margin: 0 }}>It's you, your audience, your business, and Rachett.</p>
+          <p style={{ color: '#666', fontSize: '16px', margin: 0 }}>It's you, your audience, your business, and rachett.</p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
           {[
-            { num: '01', title: 'Add your link to your bio', desc: 'Paste one Rachett link on Instagram, TikTok, WhatsApp. Takes 60 seconds.' },
+            { num: '01', title: 'Add your link to your bio', desc: 'Paste one rachett link on Instagram, TikTok, WhatsApp. Takes 60 seconds.' },
             { num: '02', title: 'Followers tap. They shop.', desc: 'They hit your link and land on your storefront. Products, pricing — all there.' },
             { num: '03', title: 'You manage everything from one place', desc: 'See every order, every buyer, every product in your dashboard, no matter what platform they use to find you.' },
           ].map(step => (

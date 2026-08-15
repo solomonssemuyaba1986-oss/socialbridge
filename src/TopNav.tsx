@@ -35,7 +35,7 @@ function TopNav() {
       <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderBottom: '1px solid #111', background: '#0f0f0f', position: 'relative', zIndex: 100 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }} onClick={() => navigate(user ? '/dashboard' : '/')}>
           <div style={{ background: green, width: 28, height: 28, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12, color: '#000' }}>R</div>
-          <span style={{ fontWeight: 800, fontSize: 16, color: '#fff' }}>Rachett</span>
+          <span style={{ fontWeight: 800, fontSize: 16, color: '#fff' }}>rachett</span>
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -79,7 +79,7 @@ function TopNav() {
             <div style={{ width: 48, height: 48, borderRadius: 12, background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 20, color: '#000', margin: '0 auto 16px' }}>R</div>
 
             <h3 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 800 }}>Welcome back</h3>
-            <p style={{ margin: '0 0 28px', color: '#888', fontSize: 14 }}>Log into your Rachett account.</p>
+            <p style={{ margin: '0 0 28px', color: '#888', fontSize: 14 }}>Log into your rachett account.</p>
 
             {/* Google */}
             <button onClick={() => handleSocialSignIn(googleProvider, 'Google')} disabled={!!loginLoading}

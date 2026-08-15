@@ -75,7 +75,7 @@ function Inbox() {
   const [filter, setFilter] = useState<'all' | 'unread'>('all')
   const [logoMap, setLogoMap] = useState<Record<string, string>>({})
 
-  // Fetch store logos for the "other party" in each conversation (if they're Rachett sellers)
+  // Fetch store logos for the "other party" in each conversation (if they're rachett sellers)
   useEffect(() => {
     const ids = new Set<string>()
     buyerConversations.forEach(c => { if (c.sellerId) ids.add(c.sellerId) })
@@ -295,7 +295,7 @@ function Inbox() {
                         <div style={{ marginBottom: '12px', padding: '12px', background: '#1a1a1a', borderRadius: '10px', border: '1px solid #2a2a2a' }}>
                           <p style={{ margin: '0 0 6px', color: '#aaa', fontSize: '13px', lineHeight: 1.5 }}>"{selected.guest.text}"</p>
                           <p style={{ margin: 0, color: '#555', fontSize: '12px' }}>
-                            Guest buyer{selected.guestPhone ? ` · 📱 ${selected.guestPhone}` : ''}{selected.guest.productName ? ` · Asks about ${selected.guest.productName}` : ''} · Replies stay in Rachett
+                            Guest buyer{selected.guestPhone ? ` · 📱 ${selected.guestPhone}` : ''}{selected.guest.productName ? ` · Asks about ${selected.guest.productName}` : ''} · Replies stay in rachett
                           </p>
                         </div>
                       )}

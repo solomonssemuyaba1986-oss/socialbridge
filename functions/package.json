@@ -1,6 +1,6 @@
 {
   "name": "functions",
-  "description": "Rachett Cloud Functions",
+  "description": "rachett Cloud Functions",
   "engines": {
     "node": "20"
   },

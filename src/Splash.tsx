@@ -67,12 +67,12 @@ function processImageToBlackSilhouette(img: HTMLImageElement): string {
 
 function Splash({ onDone }: SplashProps) {
   const [fading, setFading] = useState(false)
-  const [rachettUrl, setRachettUrl] = useState('')
+  const [rachettUrl, setrachettUrl] = useState('')
   const [dwarfUrl, setDwarfUrl] = useState('')
 
   useEffect(() => {
     const rachettImg = new Image()
-    rachettImg.onload = () => setRachettUrl(extractGreenMan(rachettImg))
+    rachettImg.onload = () => setrachettUrl(extractGreenMan(rachettImg))
     rachettImg.src = '/logo.jpg'
 
     const dwarfImg = new Image()
@@ -108,7 +108,7 @@ function Splash({ onDone }: SplashProps) {
       {rachettUrl && (
         <img
           src={rachettUrl}
-          alt="Rachett"
+          alt="rachett"
           style={{ width: '160px', height: 'auto' }}
         />
       )}

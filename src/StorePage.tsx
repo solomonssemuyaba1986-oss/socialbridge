@@ -701,7 +701,7 @@ const handleSignupForAction = async (provider: any) => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
             {/* 🟢 Real Seller Badge */}
             {sellerStats.realSellerBadge && (
-              <span title={sellerStats.realSellerBadgeStatus === 'grace' ? 'This seller\'s verification is being renewed' : 'Identity verified by Rachett'}
+              <span title={sellerStats.realSellerBadgeStatus === 'grace' ? 'This seller\'s verification is being renewed' : 'Identity verified by rachett'}
                 style={{ 
                   background: sellerStats.realSellerBadgeStatus === 'grace' ? '#666' : '#adff2f', 
                   color: sellerStats.realSellerBadgeStatus === 'grace' ? '#fff' : '#000', 
@@ -713,7 +713,7 @@ const handleSignupForAction = async (provider: any) => {
             )}
             {/* 🔵 Active Seller Badge */}
             {sellerStats.activeSellerBadge && (
-              <span title={sellerStats.activeSellerBadgeStatus === 'grace' ? 'This seller\'s active status is being renewed' : 'Consistently delivers on Rachett'}
+              <span title={sellerStats.activeSellerBadgeStatus === 'grace' ? 'This seller\'s active status is being renewed' : 'Consistently delivers on rachett'}
                 style={{ 
                   background: sellerStats.activeSellerBadgeStatus === 'grace' ? '#555' : '#2196F3', 
                   color: '#fff', fontSize: '11px', fontWeight: '800', padding: '4px 12px', borderRadius: '999px', 
@@ -876,7 +876,7 @@ const handleSignupForAction = async (provider: any) => {
       {/* Footer */}
       <div style={{ textAlign: 'center', padding: '24px', borderTop: '1px solid #1a1a1a' }}>
         <p style={{ color: '#333', fontSize: '12px', margin: 0 }}>
-          Powered by <span style={{ color: green, fontWeight: '700' }}>Rachett</span>
+          Powered by <span style={{ color: green, fontWeight: '700' }}>rachett</span>
         </p>
       </div>
 
@@ -1104,7 +1104,7 @@ const handleSignupForAction = async (provider: any) => {
       {showSignupSheet && (
         <div className="rt-modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1001, padding: '20px' }}>
           <div className="rt-modal-box" style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '380px', border: '1px solid #222', textAlign: 'center' }}>
-            <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: '800', color: '#fff' }}>Join Rachett</h3>
+            <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: '800', color: '#fff' }}>Join rachett</h3>
             <p style={{ margin: '0 0 24px', color: '#888', fontSize: '14px' }}>Sign up to continue</p>
 
             {/* Google Sign In */}

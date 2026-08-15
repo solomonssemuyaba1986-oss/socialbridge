@@ -1,4 +1,4 @@
-# Rachett MVP Launch Checklist
+# rachett MVP Launch Checklist
 
 ## ✅ COMPLETED
 - [x] Input validation & sanitization (SetupStore, StorePage)

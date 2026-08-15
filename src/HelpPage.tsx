@@ -35,7 +35,7 @@ const FAQ_SECTIONS: FaqSection[] = [
     items: [
       {
         q: 'I changed my phone number',
-        a: "If you're a seller, update your contact number in Edit Store. Buyers reach you at that number in Rachett messaging.",
+        a: "If you're a seller, update your contact number in Edit Store. Buyers reach you at that number in rachett messaging.",
       },
       {
         q: "My SMS code isn't arriving",
@@ -49,7 +49,7 @@ const FAQ_SECTIONS: FaqSection[] = [
     items: [
       {
         q: 'How do I change the number buyers contact me on?',
-        a: 'Go to Edit Store and update your phone number. That is the number buyers use to message you inside Rachett.',
+        a: 'Go to Edit Store and update your phone number. That is the number buyers use to message you inside rachett.',
       },
       {
         q: 'How do I add or edit products?',
@@ -57,7 +57,7 @@ const FAQ_SECTIONS: FaqSection[] = [
       },
       {
         q: 'How do I message my customers?',
-        a: 'Open your Inbox. Every conversation happens right here in Rachett — no other app needed.',
+        a: 'Open your Inbox. Every conversation happens right here in rachett — no other app needed.',
       },
     ],
   },
@@ -67,11 +67,11 @@ const FAQ_SECTIONS: FaqSection[] = [
     items: [
       {
         q: 'How do I order?',
-        a: 'Add items to your bag, then message the seller in Rachett to arrange payment and delivery.',
+        a: 'Add items to your bag, then message the seller in rachett to arrange payment and delivery.',
       },
       {
         q: 'How do I contact a seller?',
-        a: 'Open their store and tap Message. The chat opens right here in Rachett — nothing to install.',
+        a: 'Open their store and tap Message. The chat opens right here in rachett — nothing to install.',
       },
     ],
   },
@@ -160,7 +160,7 @@ function HelpPage() {
       <div style={{ maxWidth: 760, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
           <h1 style={{ margin: '0 0 6px', fontSize: 26, fontWeight: 800 }}>❓ Help & Support</h1>
-          <p style={{ margin: 0, color: '#888', fontSize: 14 }}>Answers to common questions — everything happens right here in Rachett.</p>
+          <p style={{ margin: 0, color: '#888', fontSize: 14 }}>Answers to common questions — everything happens right here in rachett.</p>
         </div>
 
         {FAQ_SECTIONS.map((section, si) => (

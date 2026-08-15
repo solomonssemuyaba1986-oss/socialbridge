@@ -44,7 +44,7 @@ const handleFlutterwavePayment = useFlutterwave({
     name: buyerName,
   },
   customizations: {
-    title: "Rachett Order",
+    title: "rachett Order",
     description: `${orderProduct.name} x${quantity}`,
     logo: "https://...",
   },

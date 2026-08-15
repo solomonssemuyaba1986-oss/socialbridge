@@ -1,5 +1,5 @@
 /**
- * Rachett Payment Service
+ * rachett Payment Service
  * 
  * Flutterwave integration — Pan-African payments.
  * Every African currency. Every payment method.
@@ -194,7 +194,7 @@ function openFlutterwaveModal(
     },
     callback: (response: FlutterwaveCallback) => {
       // Flutterwave calls this after payment completes
-      console.log('[Rachett Payment] Flutterwave callback:', response)
+      console.log('[rachett Payment] Flutterwave callback:', response)
 
       if (response.status === 'successful' || response.status === 'completed') {
         onSuccess({
@@ -220,7 +220,7 @@ function openFlutterwaveModal(
     },
     onclose: () => {
       // User closed the modal — not an error, just dismissed
-      console.log('[Rachett Payment] Modal closed by user')
+      console.log('[rachett Payment] Modal closed by user')
       onClose()
     },
   })
@@ -236,7 +236,7 @@ export async function verifyFlutterwaveTransaction(
   try {
     const secretKey = import.meta.env.VITE_FLUTTERWAVE_SECRET_KEY
     if (!secretKey) {
-      console.error('[Rachett Payment] No secret key configured for verification')
+      console.error('[rachett Payment] No secret key configured for verification')
       return { verified: false, status: 'error', amount: 0 }
     }
 
@@ -260,7 +260,7 @@ export async function verifyFlutterwaveTransaction(
 
     return { verified: false, status: data.data?.status || 'unknown', amount: 0 }
   } catch (error) {
-    console.error('[Rachett Payment] Verification error:', error)
+    console.error('[rachett Payment] Verification error:', error)
     return { verified: false, status: 'error', amount: 0 }
   }
 }

@@ -518,7 +518,7 @@ function AnalyticsPage() {
         {/* One link — auto-detects platform */}
         <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px' }}>🔗 Share Your brand</h2>
         <p style={{ color: '#888', fontSize: '13px', margin: '0 0 16px' }}>
-          Paste this link anywhere — Instagram, TikTok, WhatsApp, everywhere. Rachett detects where traffic comes from automatically.
+          Paste this link anywhere — Instagram, TikTok, WhatsApp, everywhere. rachett detects where traffic comes from automatically.
         </p>
         <button
           onClick={() => {

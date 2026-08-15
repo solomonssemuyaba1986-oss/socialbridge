@@ -45,7 +45,7 @@ export default function LoadingScreen({ message, variant = 'grid', logo }: Props
         }
       `}</style>
       <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', color: '#fff', padding: '20px' }}>
-        <img src={logo || '/logo.jpg'} alt="Rachett" style={{ width: 64, height: 64, borderRadius: 16, objectFit: 'cover', marginBottom: 20 }} />
+        <img src={logo || '/logo.jpg'} alt="rachett" style={{ width: 64, height: 64, borderRadius: 16, objectFit: 'cover', marginBottom: 20 }} />
         <p style={{ color: '#999', fontSize: 14, margin: '0 0 16px', textAlign: 'center', minHeight: 20 }}>{message || LOADING_MESSAGES[msgIndex]}</p>
 
         {/* Progress bar */}
