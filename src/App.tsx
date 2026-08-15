@@ -22,6 +22,7 @@ import Splash from './Splash.tsx'
 import LoadingScreen from './LoadingScreen.tsx'
 import RecoverPage from './RecoverPage.tsx'
 import HelpPage from './HelpPage.tsx'
+import TermsPage from './TermsPage.tsx'
 
 function BulkUploadWrapper() {
   const navigate = useNavigate()
@@ -101,6 +102,7 @@ function App() {
       <Route path="/feedback" element={<FeedbackPage />} />
       <Route path="/recover" element={<RecoverPage />} />
       <Route path="/help" element={<HelpPage />} />
+      <Route path="/terms" element={<TermsPage />} />
       </Routes>
     </>
   )
