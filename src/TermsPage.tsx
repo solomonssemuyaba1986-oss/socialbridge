@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 function TermsPage() {
   return (
     <>
@@ -331,14 +333,18 @@ function TermsPage() {
 
         <div className="contact-box">
           <h3>Questions about rachett?</h3>
-          <p>We're a small team building something real for African sellers and buyers. If something isn't clear, just ask — we're here.</p>
+          <p>We're a small team building something real for sellers and buyers. If something isn't clear, just ask — we're here.</p>
           <a className="contact-email" href="mailto:rachettcommerce@gmail.com">rachettcommerce@gmail.com</a>
         </div>
+
+        <p style={{ color: '#555', fontSize: 12, textAlign: 'center', marginTop: 24 }}>
+          Questions? Visit the <Link to="/help" style={{ color: '#88aaff', cursor: 'pointer', textDecoration: 'underline' }}>Help page</Link>.
+        </p>
 
       </div>
 
       <footer>
-        © 2026 <span>rachett</span> made with ❤️ by <style={{ color: '#adff2f', textDecoration: 'underline' }}>dwarves</a>
+        © 2026 <span>rachett</span> made with ❤️ by dwarves. All rights reserved.
       </footer>
     </>
   )
