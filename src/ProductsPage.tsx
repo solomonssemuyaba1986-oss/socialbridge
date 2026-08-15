@@ -265,7 +265,8 @@ function ProductsPage() {
                   {products.map((product) => {
                     const badge = stockBadge(product.stock)
                     return (
-                      <div key={product.id} style={{ background: '#1a1a1a', border: '1px solid #222', borderRadius: '14px', padding: '12px', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                      <div key={product.id} style={{ background: '#1a1a1a', border: '1px solid #222', borderRadius: '14px', padding: '12px', display: 'flex', gap: '12px', alignItems: 'flex-start', position: 'relative' }}>
+                        <span style={{ position: 'absolute', top: '6px', left: '6px', background: green, color: '#000', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: '800', zIndex: 2 }}>Yours</span>
                         <img src={product.images?.[0] || product.imageUrl || 'https://placehold.co/220x220/111111/333333'} alt={product.name} style={{ width: '86px', height: '86px', objectFit: 'cover', borderRadius: '10px', flexShrink: 0 }} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
