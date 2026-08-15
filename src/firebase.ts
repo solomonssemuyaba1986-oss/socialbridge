@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { initializeFirestore } from "firebase/firestore";
+import { getFunctions } from "firebase/functions";
 import { getAuth, GoogleAuthProvider, FacebookAuthProvider, OAuthProvider, PhoneAuthProvider, RecaptchaVerifier, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { getStorage } from "firebase/storage";
 
@@ -34,6 +35,7 @@ export const facebookProvider = new FacebookAuthProvider();
 export const appleProvider = new OAuthProvider('apple.com');
 export const phoneProvider = new PhoneAuthProvider(auth);
 export const storage = getStorage(app);
+export const functions = getFunctions(app);
 
 // Helper to create a new reCAPTCHA verifier instance (call once per sign-in attempt)
 export function createRecaptchaVerifier(containerId: string) {
