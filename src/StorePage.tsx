@@ -13,6 +13,7 @@ import { useSellerStats, getSalesLabel, formatRating, renderStars, getBadgeStatu
 import { QUICK_REPLIES } from './quickReplies'
 import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder.ts'
 import { track } from './tracking'
+import ConfirmDialog from './ConfirmDialog'
 
 interface Seller {
   businessName: string
@@ -334,6 +335,7 @@ const messageDeepLinkId = searchParams.get('messageId')
   const [orderSuccess, setOrderSuccess] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string>('')
+  const [confirmLogout, setConfirmLogout] = useState(false)
 
   const [name, setName] = useState('')
   const [price, setPrice] = useState('')
@@ -704,7 +706,7 @@ const handleSignupForAction = async (provider: any) => {
           )}
         </div>
         {isOwner && (
-          <button onClick={() => { auth.signOut(); window.location.href = '/' }}
+          <button onClick={() => setConfirmLogout(true)}
             style={{ background: 'transparent', border: '1px solid #333', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', color: '#555', cursor: 'pointer' }}>
             Log out
           </button>
@@ -1154,6 +1156,20 @@ const handleSignupForAction = async (provider: any) => {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmLogout}
+        title="Log out of rachett?"
+        message="You'll need to sign in again to get back to your store. Are you sure you want to leave?"
+        confirmLabel="Log out"
+        cancelLabel="Stay logged in"
+        onConfirm={() => {
+          setConfirmLogout(false)
+          auth.signOut()
+          window.location.href = '/'
+        }}
+        onClose={() => setConfirmLogout(false)}
+      />
     </div>
   )
 }
