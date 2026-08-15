@@ -54,6 +54,8 @@ function SignIn() {
   const [showCountryDropdown, setShowCountryDropdown] = useState(false)
   const [countrySearch, setCountrySearch] = useState('')
   const [termsAgreed, setTermsAgreed] = useState(false)
+  const [termsError, setTermsError] = useState('')
+  const termsRef = useRef<HTMLDivElement>(null)
 
   // Recovery modal state
   const [showRecoveryModal, setShowRecoveryModal] = useState(false)
@@ -63,6 +65,7 @@ function SignIn() {
   }
 
   const handleSignInWithProvider = async (provider: AuthProvider) => {
+    if (!ensureTerms()) return
     setAuthLoading(true)
     try {
       await signInWithPopup(auth, provider)
@@ -90,6 +93,7 @@ function SignIn() {
   const handleAppleSignIn = () => handleSignInWithProvider(appleProvider)
 
   const handleContinueAsSaved = async () => {
+    if (!ensureTerms()) return
     setAuthLoading(true)
     try {
       await signInWithPopup(auth, googleProvider)
@@ -107,6 +111,16 @@ function SignIn() {
     setSavedUser(null)
   }
 
+  const ensureTerms = (): boolean => {
+    if (termsAgreed) {
+      setTermsError('')
+      return true
+    }
+    setTermsError('Please accept the Terms and Conditions to continue.')
+    termsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    return false
+  }
+
   // -- Phone Auth handlers --
   const handlePhoneChange = (val: string) => {
     const digits = val.replace(/\D/g, '').slice(0, 15)
@@ -120,6 +134,7 @@ function SignIn() {
   }
 
   const handleSendPhoneOtp = async () => {
+    if (!ensureTerms()) return
     if (!phoneNumber || phoneNumber.length < 5) {
       setPhoneOtpError('Enter a valid phone number for your country')
       return
@@ -276,6 +291,18 @@ function SignIn() {
               <div style={{ flex: 1, height: '1px', background: '#222' }} />
             </div>
 
+            {/* Terms & Conditions */}
+            <div ref={termsRef} style={{ width: '100%', textAlign: 'left', padding: '4px 2px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: '#666' }}>
+                <input type="checkbox" checked={termsAgreed} onChange={e => { setTermsAgreed(e.target.checked); if (e.target.checked) setTermsError('') }} style={{ cursor: 'pointer', width: '16px', height: '16px' }} />
+                I agree to{' '}
+                <span onClick={e => { e.preventDefault(); e.stopPropagation(); window.open('/terms', '_blank') }} style={{ color: green, textDecoration: 'underline', cursor: 'pointer' }}>
+                  rachett's Terms and Conditions
+                </span>
+              </label>
+              {termsError && <p style={{ color: '#ff4444', fontSize: '12px', margin: '4px 0 0' }}>{termsError}</p>}
+            </div>
+
             {/* Phone Sign-In */}
             <div style={{ width: '100%', background: '#1a1a1a', borderRadius: '10px', padding: '20px', border: '1px solid #222' }}>
               <p style={{ color: '#fff', fontWeight: '700', fontSize: '14px', margin: '0 0 12px', textAlign: 'left' }}>
@@ -389,14 +416,8 @@ function SignIn() {
               <div id="phone-recaptcha-container" />
             </div>
 
-            {/* Terms & Conditions */}
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: '#666', marginTop: '4px' }}>
-              <input type="checkbox" checked={termsAgreed} onChange={e => setTermsAgreed(e.target.checked)} style={{ cursor: 'pointer', width: '16px', height: '16px' }} />
-              I agree to <span style={{ color: green, textDecoration: 'underline' }}>rachett's Terms and Conditions</span>
-            </label>
-
             {/* Guest Button */}
-            <button onClick={() => navigate('/onboarding')}
+            <button onClick={() => { if (ensureTerms()) navigate('/onboarding') }}
               style={{
                 width: '100%', padding: '16px 32px', background: 'transparent', color: '#aaa',
                 border: '1px solid #444', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px',
