@@ -503,20 +503,18 @@ function SignIn() {
       <div style={{ padding: '80px 20px', maxWidth: '800px', margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: '48px' }}>
           <h2 className="rt-title-md" style={{ fontSize: '42px', fontWeight: '900', margin: '0 0 16px', letterSpacing: '-1px' }}>Get set up in minutes.</h2>
-          <p style={{ color: '#666', fontSize: '16px', margin: 0 }}>It's you, your audience, your business, and rachett.</p>
+          <p style={{ color: '#666', fontSize: '16px', margin: 0 }}>It's you, your audience, and rachett.</p>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
           {[
-            { num: '01', title: 'Add your link to your bio', desc: 'Paste one rachett link on Instagram, TikTok, WhatsApp. Takes 60 seconds.' },
-            { num: '02', title: 'Followers tap. They shop.', desc: 'They hit your link and land on your storefront. Products, pricing — all there.' },
-            { num: '03', title: 'You manage everything from one place', desc: 'See every order, every buyer, every product in your dashboard, no matter what platform they use to find you.' },
+            { num: '01', title: 'Link in bio', desc: 'Paste one rachett link on Instagram, TikTok or WhatsApp.' },
+            { num: '02', title: 'They shop', desc: 'Followers land on your storefront — products, prices, all there.' },
+            { num: '03', title: 'You run it', desc: 'Every order and buyer in one dashboard, from any platform.' },
           ].map(step => (
-            <div key={step.num} style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
-              <div style={{ fontSize: '48px', fontWeight: '900', color: green, opacity: 0.4, lineHeight: '1', minWidth: '60px' }}>{step.num}</div>
-              <div>
-                <p style={{ fontWeight: '700', fontSize: '18px', margin: '0 0 8px' }}>{step.title}</p>
-                <p style={{ color: '#666', fontSize: '15px', margin: 0, lineHeight: '1.6' }}>{step.desc}</p>
-              </div>
+            <div key={step.num} style={{ background: '#1a1a1a', borderRadius: '12px', padding: '24px', border: '1px solid #222' }}>
+              <div style={{ fontSize: '28px', fontWeight: '900', color: green, opacity: 0.5, lineHeight: '1', marginBottom: '16px' }}>{step.num}</div>
+              <p style={{ fontWeight: '700', fontSize: '17px', margin: '0 0 8px' }}>{step.title}</p>
+              <p style={{ color: '#666', fontSize: '14px', margin: 0, lineHeight: '1.6' }}>{step.desc}</p>
             </div>
           ))}
         </div>
