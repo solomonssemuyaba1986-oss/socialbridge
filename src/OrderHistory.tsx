@@ -80,6 +80,7 @@ function OrderHistory() {
 
   const selected = filtered.find(o => o.id === selectedId) ?? null
   const pendingCount = orders.filter(o => o.status === 'pending' || !o.status || o.status === 'paid' || o.status === 'awaiting_payment').length
+  const outOfStockCount = orders.filter(o => o.status === 'out_of_stock').length
 
   if (loading) {
     return (
@@ -151,6 +152,16 @@ function OrderHistory() {
                 fontWeight: filter === f.key ? '700' : '500', cursor: 'pointer', fontSize: '13px',
               }}>
               {f.label}
+              {f.key === 'pending' && pendingCount > 0 && (
+                <span style={{ marginLeft: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 999, background: filter === f.key ? '#000' : '#333', color: filter === f.key ? green : '#fff', fontSize: 11, fontWeight: 700 }}>
+                  {pendingCount}
+                </span>
+              )}
+              {f.key === 'out_of_stock' && outOfStockCount > 0 && (
+                <span style={{ marginLeft: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 999, background: filter === f.key ? '#000' : '#333', color: filter === f.key ? green : '#fff', fontSize: 11, fontWeight: 700 }}>
+                  {outOfStockCount}
+                </span>
+              )}
             </button>
           ))}
         </div>
