@@ -3,7 +3,7 @@ import { signInWithPopup, signInWithRedirect, signInWithPhoneNumber } from 'fire
 import type { AuthProvider, ConfirmationResult } from 'firebase/auth'
 import { auth, db, googleProvider, facebookProvider, appleProvider, createRecaptchaVerifier } from './firebase'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { doc, getDoc } from 'firebase/firestore'
+import { doc, getDoc, collection, getDocs, query, limit } from 'firebase/firestore'
 import { notify } from './notifications'
 import { rememberUser } from './userMemory'
 import { COUNTRY_CODES, type CountryCode } from './countryCodes'
@@ -61,6 +61,24 @@ function SignIn() {
 
   // Recovery modal state
   const [showRecoveryModal, setShowRecoveryModal] = useState(false)
+
+  // Real seller logos for the "Trusted by" ticker
+  const [trustedStores, setTrustedStores] = useState<any[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    getDocs(query(collection(db, 'sellers'), limit(50)))
+      .then(snap => {
+        if (cancelled) return
+        const stores = snap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .filter((s: any) => s.logoUrl && s.slug)
+          .slice(0, 12)
+        setTrustedStores(stores)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   const handleScrollToProviders = () => {
     providerSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -469,6 +487,31 @@ function SignIn() {
 
         <p style={{ color: '#444', fontSize: '13px', marginTop: '16px' }}>Start selling smarter in minutes.</p>
       </div>
+
+      {/* Trusted Sellers Ticker */}
+      {trustedStores.length > 0 && (
+        <div style={{ background: '#0a0a0a', borderTop: '1px solid #1a1a1a', borderBottom: '1px solid #1a1a1a', padding: '32px 20px', overflow: 'hidden' }}>
+          <style>{`
+            @keyframes rachettTicker {
+              0% { transform: translateX(0); }
+              100% { transform: translateX(-50%); }
+            }
+            .rt-ticker:hover { animation-play-state: paused; }
+          `}</style>
+          <p style={{ textAlign: 'center', color: '#777', fontSize: '12px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', margin: '0 0 20px' }}>
+            Trusted by sellers on rachett
+          </p>
+          <div className="rt-ticker" style={{ display: 'flex', gap: '16px', width: 'max-content', animation: 'rachettTicker 30s linear infinite' }}>
+            {[...trustedStores, ...trustedStores].map((store, i) => (
+              <div key={`${store.id}-${i}`} onClick={() => navigate(`/store/${store.slug}`)}
+                style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#1a1a1a', border: '1px solid #222', borderRadius: '999px', padding: '6px 16px 6px 6px', cursor: 'pointer', flexShrink: 0 }}>
+                <img src={store.logoUrl} alt={store.businessName || 'store'} style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover' }} />
+                <span style={{ color: '#ccc', fontSize: '13px', fontWeight: '600', whiteSpace: 'nowrap' }}>{store.businessName || store.slug}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Recovery Modal */}
       <RecoveryModal open={showRecoveryModal} onClose={() => setShowRecoveryModal(false)} />
