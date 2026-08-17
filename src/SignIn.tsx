@@ -305,6 +305,15 @@ function SignIn() {
               Continue with Apple
             </button>
 
+            {/* Trust signals */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '10px', fontSize: '11px', color: '#888', marginTop: '2px' }}>
+              <span>🔒 Secure login</span>
+              <span>·</span>
+              <span>✅ Verified sellers</span>
+              <span>·</span>
+              <span>🛡️ Your data is safe</span>
+            </div>
+
             {/* Divider */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%', margin: '4px 0' }}>
               <div style={{ flex: 1, height: '1px', background: '#222' }} />
