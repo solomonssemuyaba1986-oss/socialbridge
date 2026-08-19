@@ -35,14 +35,14 @@ export function useGuestOTP() {
    * Step 1: Send OTP to the given phone number
    */
   const requestOTP = useCallback(async (phone: string) => {
-    // Validate Uganda phone number
+    // Accept any international number (+country code), with a Uganda 07… shortcut
     const cleaned = phone.replace(/\s+/g, '')
-    if (!/^\+256\d{9}$/.test(cleaned) && !/^0\d{9}$/.test(cleaned)) {
-      setState(prev => ({ ...prev, step: 'error', error: 'Enter a valid Uganda number (e.g. +256771234567 or 0771234567)' }))
+    if (!/^\+[1-9]\d{7,14}$/.test(cleaned) && !/^0\d{8,14}$/.test(cleaned)) {
+      setState(prev => ({ ...prev, step: 'error', error: 'Enter a valid phone number with country code (e.g. +256771234567 or 0771234567)' }))
       return false
     }
 
-    // Normalize to +256 format
+    // Local 0-prefixed numbers are assumed to be Uganda
     const normalized = cleaned.startsWith('0') ? `+256${cleaned.slice(1)}` : cleaned
 
     setState({ step: 'phone', phone: normalized, error: '', loading: true })
