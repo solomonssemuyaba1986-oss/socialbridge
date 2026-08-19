@@ -289,7 +289,7 @@ function SignIn() {
       {/* Hero */}
       <div className="rt-hero" style={{ textAlign: 'center', padding: '80px 20px 60px', maxWidth: '800px', margin: '0 auto' }}>
         <div style={{ display: 'inline-block', background: '#1a1a1a', border: '1px solid #333', borderRadius: '20px', padding: '6px 16px', fontSize: '13px', color: '#888', marginBottom: '24px' }}>
-          People, not platforms.
+        people, not platforms.
         </div>
         <h1 className="rt-title-lg" style={{ fontSize: '56px', fontWeight: '900', lineHeight: '1.1', margin: '0 0 24px', letterSpacing: '-2px' }}>
           Your business<br />
