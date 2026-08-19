@@ -14,6 +14,7 @@ import { QUICK_REPLIES } from './quickReplies'
 import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder.ts'
 import { track } from './tracking'
 import ConfirmDialog from './ConfirmDialog'
+import ProductPreview from './ProductPreview'
 
 interface Seller {
   businessName: string
@@ -75,7 +76,7 @@ function detectPlatform(searchParams: URLSearchParams) {
   return 'Web'
 }
 
-function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onRefresh }: any) {
+function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onRefresh, onPreview }: any) {
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(p.name)
   const [editPrice, setEditPrice] = useState(p.price)
@@ -185,7 +186,8 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onRefresh }: an
         <img
           src={images[currentImageIndex] || 'https://placehold.co/300x200/1a1a1a/333333'}
           alt={p.name}
-          style={{ width: '100%', height: '160px', objectFit: 'cover', filter: isOutOfStock ? 'grayscale(60%)' : 'none' }}
+          onClick={() => onPreview?.(images, currentImageIndex)}
+          style={{ width: '100%', height: '160px', objectFit: 'cover', filter: isOutOfStock ? 'grayscale(60%)' : 'none', cursor: 'zoom-in' }}
         />
         {images.length > 1 && (
           <>
@@ -338,6 +340,9 @@ const messageDeepLinkId = searchParams.get('messageId')
   const [quantity, setQuantity] = useState('1')
   const [deliveryArea, setDeliveryArea] = useState('')
   const [message, setMessage] = useState('')
+
+  // Product preview lightbox
+  const [preview, setPreview] = useState<{ images: string[]; startIndex: number } | null>(null)
 
   // Guest OTP messaging
   const {
@@ -859,6 +864,7 @@ const handleSignupForAction = async (provider: any) => {
                 onOrder={() => setOrderProduct(p)}
                 onMessage={() => setMessageProduct(p)}
                 onRefresh={() => fetchProducts(sellerId)}
+                onPreview={(imgs: string[], start: number) => setPreview({ images: imgs, startIndex: start })}
               />
             ))}
           </div>
@@ -1151,6 +1157,14 @@ const handleSignupForAction = async (provider: any) => {
         }}
         onClose={() => setConfirmLogout(false)}
       />
+
+      {preview && (
+        <ProductPreview
+          images={preview.images}
+          startIndex={preview.startIndex}
+          onClose={() => setPreview(null)}
+        />
+      )}
     </div>
   )
 }
