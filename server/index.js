@@ -62,8 +62,8 @@ app.post('/api/otp/send', async (req, res) => {
   try {
     const { phone } = req.body
 
-    if (!phone || !/^\+256\d{9}$/.test(phone)) {
-      return res.status(400).json({ error: 'Invalid phone number. Use format: +256XXXXXXXXX' })
+    if (!phone || !/^\+[1-9]\d{7,14}$/.test(phone)) {
+      return res.status(400).json({ error: 'Invalid phone number. Use international format, e.g. +256771234567' })
     }
 
     // Rate limit: max 3 OTP requests per hour per number
