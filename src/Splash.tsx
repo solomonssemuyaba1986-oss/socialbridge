@@ -24,37 +24,10 @@ function extractGreenMan(img: HTMLImageElement): string {
     const isGreenMan = g > r && g > b && brightness > 40 && brightness < 230
 
     if (isGreenMan) {
-      pixels[i] = 0
-      pixels[i + 1] = 0
-      pixels[i + 2] = 0
-      pixels[i + 3] = 255
-    } else {
-      pixels[i + 3] = 0
-    }
-  }
-
-  ctx.putImageData(imageData, 0, 0)
-  return canvas.toDataURL()
-}
-
-function processImageToBlackSilhouette(img: HTMLImageElement): string {
-  const canvas = document.createElement('canvas')
-  canvas.width = img.width
-  canvas.height = img.height
-  const ctx = canvas.getContext('2d')!
-  ctx.drawImage(img, 0, 0)
-
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-  const pixels = imageData.data
-
-  for (let i = 0; i < pixels.length; i += 4) {
-    const brightness = (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3
-    const a = pixels[i + 3]
-
-    if (a > 128 && brightness > 90) {
-      pixels[i] = 0
-      pixels[i + 1] = 0
-      pixels[i + 2] = 0
+      // Recolor to the rachett green so the mark is visible on dark backgrounds
+      pixels[i] = 173
+      pixels[i + 1] = 255
+      pixels[i + 2] = 47
       pixels[i + 3] = 255
     } else {
       pixels[i + 3] = 0
@@ -68,16 +41,11 @@ function processImageToBlackSilhouette(img: HTMLImageElement): string {
 function Splash({ onDone }: SplashProps) {
   const [fading, setFading] = useState(false)
   const [rachettUrl, setrachettUrl] = useState('')
-  const [dwarfUrl, setDwarfUrl] = useState('')
 
   useEffect(() => {
     const rachettImg = new Image()
     rachettImg.onload = () => setrachettUrl(extractGreenMan(rachettImg))
     rachettImg.src = '/logo.jpg'
-
-    const dwarfImg = new Image()
-    dwarfImg.onload = () => setDwarfUrl(processImageToBlackSilhouette(dwarfImg))
-    dwarfImg.src = '/mothercompanydwarf.png'
   }, [])
 
   useEffect(() => {
@@ -97,7 +65,7 @@ function Splash({ onDone }: SplashProps) {
       right: 0,
       bottom: 0,
       zIndex: 9999,
-      background: '#adff2f',
+      background: '#0f0f0f',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
@@ -106,25 +74,14 @@ function Splash({ onDone }: SplashProps) {
       opacity: fading ? 0 : 1,
     }}>
       {rachettUrl && (
-        <img
-          src={rachettUrl}
-          alt="rachett"
-          style={{ width: '160px', height: 'auto' }}
-        />
+        <img src={rachettUrl} alt="rachett" style={{ width: '130px', height: 'auto', marginBottom: '18px' }} />
       )}
+      <p style={{ margin: 0, color: '#fff', fontSize: '34px', fontWeight: '900', letterSpacing: '-1px' }}>rachett</p>
+      <p style={{ margin: '10px 0 0', color: '#adff2f', fontSize: '16px', fontWeight: '700', letterSpacing: '0.5px' }}>People, not platforms.</p>
 
-      {dwarfUrl && (
-        <img
-          src={dwarfUrl}
-          alt="from dwarves"
-          style={{
-            position: 'absolute',
-            bottom: '48px',
-            width: '120px',
-            height: 'auto',
-          }}
-        />
-      )}
+      <p style={{ position: 'absolute', bottom: '40px', margin: 0, color: '#555', fontSize: '12px' }}>
+        made by <span style={{ color: '#888', fontWeight: '700' }}>dwarves</span>
+      </p>
     </div>
   )
 }
