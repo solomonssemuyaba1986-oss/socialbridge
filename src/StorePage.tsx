@@ -15,6 +15,7 @@ import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder
 import { track } from './tracking'
 import ConfirmDialog from './ConfirmDialog'
 import ProductPreview from './ProductPreview'
+import { useDraft } from './useDraft'
 
 interface Seller {
   businessName: string
@@ -329,7 +330,7 @@ const messageDeepLinkId = searchParams.get('messageId')
 
   const [orderProduct, setOrderProduct] = useState<Product | null>(null)
   const [messageProduct, setMessageProduct] = useState<Product | null>(null)
-  const [messageText, setMessageText] = useState('')
+  const { text: messageText, setText: setMessageText, draft: draftMsg, clearDraft: clearMsgDraft } = useDraft(messageProduct ? `product_${messageProduct.id}` : 'none')
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [feedbackMessage, setFeedbackMessage] = useState('')
   const [feedbackType, setFeedbackType] = useState<'success' | 'error' | 'info'>('success')
@@ -592,7 +593,7 @@ const handleSendMessage = async () => {
     )
     console.log('Message sent')
     track('message_sent', auth.currentUser?.uid || null, detectPlatform(searchParams), { productId: messageProduct.id, productName: messageProduct.name, sellerId })
-    setMessageText('')
+    clearMsgDraft()
     setShowQuickReplies(false)
     setMessageProduct(null)
     showFeedback(notify.messageSent, 'success')
@@ -986,6 +987,9 @@ const handleSignupForAction = async (provider: any) => {
             {auth.currentUser ? (
               <>
                 {/* Message Input */}
+                {draftMsg && (
+                  <span style={{ color: '#888', fontSize: 12, fontWeight: 700, display: 'block', marginBottom: 4 }}>📝 Draft</span>
+                )}
                 <textarea placeholder="Write your message..." value={messageText} onChange={e => setMessageText(e.target.value)}
                   style={{ width: '100%', minHeight: '100px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '20px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
 
@@ -1054,7 +1058,7 @@ const handleSignupForAction = async (provider: any) => {
                           showFeedback('Message sent! The seller will reply soon.', 'success')
                           setTimeout(() => {
                             setMessageProduct(null)
-                            setMessageText('')
+                            clearMsgDraft()
                             setShowQuickReplies(false)
                             setGuestName('')
                             setGuestPhone('')
@@ -1103,7 +1107,7 @@ const handleSignupForAction = async (provider: any) => {
             )}
 
             {/* Cancel Button */}
-            <button onClick={() => { setMessageProduct(null); setMessageText(''); setShowQuickReplies(false); resetOTP(); setGuestName(''); setGuestPhone(''); setGuestOtpInput('') }}
+            <button onClick={() => { setMessageProduct(null); setShowQuickReplies(false); resetOTP(); setGuestName(''); setGuestPhone(''); setGuestOtpInput('') }}
               style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
               Cancel
             </button>
