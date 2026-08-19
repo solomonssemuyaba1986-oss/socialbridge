@@ -11,6 +11,8 @@ export interface SellerConversation {
   buyerName: string
   lastMessage: string
   lastMessageAt: any
+  lastMessageBy?: string
+  lastMessageStatus?: string
   unreadBySeller: boolean
   unreadBySellerCount?: number
   productName?: string
