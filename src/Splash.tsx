@@ -118,7 +118,6 @@ function Splash({ onDone }: SplashProps) {
         <img src={rachettUrl} alt="rachett" style={{ width: '130px', height: 'auto', marginBottom: '18px' }} />
       )}
       <p style={{ margin: 0, color: '#000', fontSize: '34px', fontWeight: '900', letterSpacing: '-1px' }}>rachett</p>
-      <p style={{ margin: '10px 0 0', color: '#111', fontSize: '16px', fontWeight: '700', letterSpacing: '0.5px' }}>People, not platforms.</p>
 
       <p style={{ position: 'absolute', bottom: '40px', margin: 0, color: '#336600', fontSize: '12px' }}>
         made by <span style={{ color: '#000', fontWeight: '700' }}>dwarves</span>
