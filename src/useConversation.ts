@@ -51,6 +51,9 @@ export function useConversation(sellerId: string | null, buyerId: string | null)
               console.warn('Failed to mark message seen:', err)
             })
           })
+          updateDoc(doc(db, 'conversations', conversationId), { lastMessageStatus: 'seen' }).catch(err => {
+            console.warn('Failed to update conversation status:', err)
+          })
         }
       }
     })
@@ -68,6 +71,8 @@ export function useConversation(sellerId: string | null, buyerId: string | null)
         sellerId, buyerId, sellerName, buyerName,
         lastMessage: text,
         lastMessageAt: serverTimestamp(),
+        lastMessageBy: senderId,
+        lastMessageStatus: 'sent',
         unreadBySeller: senderId === buyerId,
         unreadByBuyer: senderId === sellerId,
         unreadBySellerCount: senderId === buyerId ? 1 : 0,
@@ -77,6 +82,8 @@ export function useConversation(sellerId: string | null, buyerId: string | null)
       const patch: Record<string, unknown> = {
         lastMessage: text,
         lastMessageAt: serverTimestamp(),
+        lastMessageBy: senderId,
+        lastMessageStatus: 'sent',
         unreadBySeller: senderId === buyerId,
         unreadByBuyer: senderId === sellerId
       }
