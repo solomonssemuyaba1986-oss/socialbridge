@@ -5,6 +5,7 @@ import { QUICK_REPLIES, SELLER_QUICK_REPLIES } from './quickReplies'
 import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder'
 import { auth, db } from './firebase'
 import { notify } from './notifications'
+import { useDraft } from './useDraft'
 
 const green = '#adff2f'
 
@@ -22,7 +23,7 @@ type Props = {
 
 export default function ConversationPanel({ sellerId, buyerId, sellerName, buyerName, productName, productPrice, productImage, productId, orderCount }: Props) {
   const { messages, loading, sendMessage, conversationId } = useConversation(sellerId, buyerId)
-  const [text, setText] = useState('')
+  const { text, setText, draft, clearDraft } = useDraft(conversationId ? `convo_${conversationId}` : 'none')
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [showOrderModal, setShowOrderModal] = useState(false)
   const [buyerNameOrder, setBuyerNameOrder] = useState('')
@@ -136,7 +137,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
     }
     try {
       await sendMessage(senderId, messageText, sellerName || 'Seller', buyerName || 'Buyer')
-      setText('')
+      clearDraft()
       setShowQuickReplies(false)
     } catch (err) {
       console.error('Failed to send conversation message:', err)
@@ -232,6 +233,9 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {draft && (
+          <span style={{ color: '#888', fontSize: 12, fontWeight: 700 }}>📝 Draft</span>
+        )}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button onClick={() => setShowQuickReplies(prev => !prev)} style={{ width: 46, height: 46, borderRadius: 16, background: '#222', border: '1px solid #333', color: '#fff', cursor: 'pointer', fontSize: 24, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
           <input value={text} onChange={e => setText(e.target.value)} placeholder="Write a reply..." style={{ flex: 1, padding: '14px 16px', borderRadius: 16, border: '1px solid #333', background: '#101010', color: '#fff', minHeight: 46 }} />
