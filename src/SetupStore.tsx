@@ -4,6 +4,7 @@ import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase
 import { ref, uploadBytes } from 'firebase/storage'
 import { useNavigate } from 'react-router-dom'
 import { COUNTRIES } from './countries'
+import { COUNTRY_CODES, type CountryCode } from './countryCodes'
 import AuthModal from './AuthModal'
 
 const OTP_SERVER_URL = import.meta.env.VITE_OTP_SERVER_URL || 'http://localhost:3001'
@@ -24,10 +25,17 @@ function SetupStore() {
   const [handleAvailable, setHandleAvailable] = useState<boolean | null>(null)
   const [handleChecking, setHandleChecking] = useState(false)
   const [bio, setBio] = useState('')
+  const initialPhone = auth.currentUser?.phoneNumber || ''
+  const initialCountry = COUNTRY_CODES.find(c => initialPhone.startsWith(c.dialCode))
+    || COUNTRY_CODES.find(c => c.dialCode === '+256')
+    || COUNTRY_CODES[0]
+  const [selectedCountry, setSelectedCountry] = useState<CountryCode>(initialCountry)
+  const [whatsappCountrySearch, setWhatsappCountrySearch] = useState('')
+  const [showWhatsappCountryDropdown, setShowWhatsappCountryDropdown] = useState(false)
   const [whatsapp, setWhatsapp] = useState(
     // Pre-fill from Firebase Phone Auth if available
-    auth.currentUser?.phoneNumber 
-      ? auth.currentUser.phoneNumber.replace(/^\+256/, '') 
+    initialPhone.startsWith(initialCountry.dialCode)
+      ? initialPhone.slice(initialCountry.dialCode.length).replace(/^0/, '')
       : ''
   )
   const [email, setEmail] = useState(auth.currentUser?.email || '')
@@ -59,6 +67,10 @@ function SetupStore() {
   const [phoneOtpLoading, setPhoneOtpLoading] = useState(false)
   const [phoneOtpError, setPhoneOtpError] = useState('')
 
+  // Country-aware WhatsApp helpers
+  const getFullWhatsapp = () => `+${selectedCountry.dialCode.replace(/[^+\d]/g, '')}${whatsapp}`
+  const whatsappIsValid = /^\+[1-9]\d{7,14}$/.test(getFullWhatsapp())
+
   // Multi-step onboarding
   const [step, setStep] = useState(1)
   const totalSteps = 4
@@ -69,7 +81,7 @@ function SetupStore() {
       if (storeHandle.length < 3) { setErrors(e => ({ ...e, submit: 'Choose a store handle (at least 3 characters) to continue.' })); return }
     }
     if (to === 3) {
-      if (whatsapp.length !== 9) { setErrors(e => ({ ...e, whatsapp: 'Enter your 9-digit Uganda WhatsApp number to continue.' })); return }
+      if (!whatsappIsValid) { setErrors(e => ({ ...e, whatsapp: 'Enter a valid phone number with country code (e.g. +256771234567) to continue.' })); return }
       if (!phoneVerified) { setErrors(e => ({ ...e, submit: 'Verify your phone number before continuing.' })); return }
     }
     if (to === 4) {
@@ -156,13 +168,13 @@ function SetupStore() {
 
   // -- Phone OTP verification --
   const sendPhoneOtp = async () => {
-    if (!whatsapp || whatsapp.length !== 9) {
-      setPhoneOtpError('Enter a valid phone number first')
+    if (!whatsappIsValid) {
+      setPhoneOtpError('Enter a valid phone number with country code first')
       return
     }
     setPhoneOtpLoading(true)
     setPhoneOtpError('')
-    const normalized = `+256${whatsapp}`
+    const normalized = getFullWhatsapp()
     try {
       const res = await fetch(`${OTP_SERVER_URL}/api/otp/send`, {
         method: 'POST',
@@ -190,7 +202,7 @@ function SetupStore() {
       setPhoneOtpError('Enter the 6-digit code')
       return
     }
-    const normalized = `+256${whatsapp}`
+    const normalized = getFullWhatsapp()
     setPhoneOtpLoading(true)
     setPhoneOtpError('')
     try {
@@ -247,10 +259,8 @@ function SetupStore() {
     if (cleanedBio.length > 500) {
       newErrors.bio = 'Bio must be 500 characters or less'
     }
-    if (whatsapp.length !== 9) {
-      newErrors.whatsapp = 'Enter a valid 9-digit Uganda phone number'
-    } else if (!/^7\d{8}$/.test(whatsapp)) {
-      newErrors.whatsapp = 'Uganda number must start with 7'
+    if (!whatsappIsValid) {
+      newErrors.whatsapp = 'Enter a valid phone number with country code (e.g. +256771234567)'
     }
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sanitizeInput(email))) {
       newErrors.email = 'Enter a valid email address'
@@ -266,7 +276,7 @@ function SetupStore() {
   }
 
   const handleWhatsappChange = (val: string) => {
-    const digits = val.replace(/\D/g, '').slice(0, 9)
+    const digits = val.replace(/\D/g, '').slice(0, 14)
     setWhatsapp(digits)
     setErrors(e => ({ ...e, whatsapp: undefined }))
     // Reset OTP state when number changes
@@ -276,6 +286,17 @@ function SetupStore() {
       setPhoneOtpInput('')
       setPhoneOtpError('')
     }
+  }
+
+  const handleWhatsappCountryChange = (c: CountryCode) => {
+    setSelectedCountry(c)
+    setShowWhatsappCountryDropdown(false)
+    setWhatsappCountrySearch('')
+    setPhoneOtpSent(false)
+    setPhoneVerified(false)
+    setPhoneOtpInput('')
+    setPhoneOtpError('')
+    setErrors(e => ({ ...e, whatsapp: undefined }))
   }
 
   // -- Geolocation --
@@ -356,7 +377,7 @@ function SetupStore() {
         return
       }
       const slug = storeHandle
-      const fullNumber = `256${whatsapp}`
+      const fullNumber = `${selectedCountry.dialCode.replace(/[^+\d]/g, '')}${whatsapp}`
 
       // Upload logo (optional)
       let finalLogoUrl = user.photoURL || ''
@@ -444,7 +465,7 @@ function SetupStore() {
     }
   }
 
-  const isFormReady = businessName && bio && whatsapp.length === 9 && phoneVerified && nationality
+  const isFormReady = businessName && bio && whatsappIsValid && phoneVerified && nationality
 
   return (
     <div style={{ minHeight: '100vh', background: '#f9f9f9', fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
@@ -526,17 +547,35 @@ function SetupStore() {
           <>
         {/* Phone OTP Verification */}
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>WhatsApp Number</label>
-        <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>Uganda number — we add 256 automatically. You must verify this number.</p>
+        <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>Any country — pick your code below. You must verify this number by SMS.</p>
 
-        <div style={{ display: 'flex', alignItems: 'center', border: errors.whatsapp ? '2px solid #c33' : '1px solid #ddd', borderRadius: '8px', overflow: 'hidden', marginBottom: '4px' }}>
-          <div style={{ background: '#f5f5f5', padding: '12px 14px', fontSize: '15px', borderRight: errors.whatsapp ? '2px solid #c33' : '1px solid #ddd', color: '#333', fontWeight: '600', whiteSpace: 'nowrap' }}>
-            🇺🇬 +256
+        <div style={{ display: 'flex', alignItems: 'center', border: errors.whatsapp ? '2px solid #c33' : '1px solid #ddd', borderRadius: '8px', overflow: 'visible', marginBottom: '4px', position: 'relative' }}>
+          <div onClick={() => setShowWhatsappCountryDropdown(!showWhatsappCountryDropdown)}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#f5f5f5', padding: '12px 12px', fontSize: '15px', borderRight: errors.whatsapp ? '2px solid #c33' : '1px solid #ddd', color: '#333', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer' }}>
+            <span>{selectedCountry.flag} {selectedCountry.dialCode}</span>
+            <span style={{ color: '#999', fontSize: '11px' }}>{showWhatsappCountryDropdown ? '▲' : '▼'}</span>
           </div>
+          {showWhatsappCountryDropdown && (
+            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #ddd', borderRadius: '8px', maxHeight: '240px', overflow: 'hidden', zIndex: 20, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', marginTop: '2px' }}>
+              <input value={whatsappCountrySearch} onChange={e => setWhatsappCountrySearch(e.target.value)} placeholder="Search country..." autoFocus
+                style={{ width: '100%', padding: '10px 12px', border: 'none', borderBottom: '1px solid #eee', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
+              <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                {COUNTRY_CODES.filter(c => !whatsappCountrySearch || c.name.toLowerCase().includes(whatsappCountrySearch.toLowerCase()) || c.dialCode.includes(whatsappCountrySearch)).map(c => (
+                  <div key={c.dialCode} onClick={() => handleWhatsappCountryChange(c)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', cursor: 'pointer', fontSize: '14px', color: selectedCountry.dialCode === c.dialCode ? '#4a4' : '#333', background: selectedCountry.dialCode === c.dialCode ? '#f0faf0' : 'transparent' }}>
+                    <span style={{ fontSize: '16px' }}>{c.flag}</span>
+                    <span style={{ flex: 1 }}>{c.name}</span>
+                    <span style={{ color: '#999' }}>{c.dialCode}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <input
             value={whatsapp}
             onChange={e => handleWhatsappChange(e.target.value)}
-            placeholder="771234567"
-            maxLength={9}
+            placeholder="your number"
+            maxLength={14}
             style={{ flex: 1, padding: '12px', border: 'none', outline: 'none', fontSize: '15px', background: '#fff' }}
           />
         </div>
@@ -544,7 +583,7 @@ function SetupStore() {
         {errors.whatsapp && <p style={{ color: '#c33', fontSize: '12px', margin: '4px 0 8px' }}>{errors.whatsapp}</p>}
 
         {/* OTP Verification UI */}
-        {whatsapp.length === 9 && !phoneVerified && (
+        {whatsappIsValid && !phoneVerified && (
           <div style={{ marginBottom: '16px', padding: '12px', background: '#f8f8f8', borderRadius: '8px', border: '1px solid #eee' }}>
             {!phoneOtpSent ? (
               <>
@@ -556,7 +595,7 @@ function SetupStore() {
               </>
             ) : (
               <>
-                <p style={{ fontSize: '13px', color: '#666', margin: '0 0 8px' }}>A 6-digit code was sent to <strong>+256{whatsapp}</strong></p>
+                <p style={{ fontSize: '13px', color: '#666', margin: '0 0 8px' }}>A 6-digit code was sent to <strong>{getFullWhatsapp()}</strong></p>
                 <input
                   value={phoneOtpInput}
                   onChange={e => setPhoneOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
@@ -582,7 +621,7 @@ function SetupStore() {
         {phoneVerified && (
           <div style={{ marginBottom: '16px', padding: '10px 12px', background: '#e8f5e9', borderRadius: '8px', border: '1px solid #c8e6c9', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ color: '#2e7d32', fontSize: '16px' }}>✓</span>
-            <span style={{ color: '#2e7d32', fontSize: '13px', fontWeight: '600' }}>Phone verified — +256{whatsapp}</span>
+            <span style={{ color: '#2e7d32', fontSize: '13px', fontWeight: '600' }}>Phone verified — {getFullWhatsapp()}</span>
           </div>
         )}
 
