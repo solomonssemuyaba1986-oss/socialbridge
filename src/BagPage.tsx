@@ -6,6 +6,7 @@ import { track, detectSource } from './tracking'
 import { useBag } from './useBag'
 import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder'
 import { useGuestOTP } from './useGuestOTP'
+import { useDraft } from './useDraft'
 import { QUICK_REPLIES } from './quickReplies'
 
 const green = '#adff2f'
@@ -33,7 +34,7 @@ function BagPage() {
   const [orderQty, setOrderQty] = useState('1')
   const [deliveryArea, setDeliveryArea] = useState('')
   const [orderMessage, setOrderMessage] = useState('')
-  const [messageText, setMessageText] = useState('')
+  const { text: messageText, setText: setMessageText, draft: draftMsg, clearDraft: clearMsgDraft } = useDraft(messageTarget ? `product_${messageTarget.id}` : 'none')
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [guestName, setGuestName] = useState('')
   const [guestPhone, setGuestPhone] = useState('')
@@ -86,7 +87,6 @@ function BagPage() {
     const sid = await resolveSellerId(item.sellerSlug, item.sellerId)
     if (!sid) { alert('Could not find this seller. They may have closed their store.'); return }
     setMessageTarget(toTarget(item))
-    setMessageText('')
     setShowQuickReplies(false)
     setGuestName('')
     setGuestPhone('')
@@ -130,7 +130,6 @@ function BagPage() {
 
   const closeMessageModal = () => {
     setMessageTarget(null)
-    setMessageText('')
     setShowQuickReplies(false)
     setGuestName('')
     setGuestPhone('')
@@ -159,6 +158,7 @@ function BagPage() {
             createdAt: serverTimestamp(),
           })
           setGuestMessageSent(true)
+          clearMsgDraft()
           setTimeout(() => closeMessageModal(), 1500)
         } catch (err) {
           console.error('Guest message error:', err)
@@ -181,6 +181,7 @@ function BagPage() {
         createdAt: serverTimestamp(),
       })
       track('message_sent', auth.currentUser.uid, detectSource(), { productId: messageTarget.id, productName: messageTarget.name, sellerId: messageTarget.sellerId })
+      clearMsgDraft()
       closeMessageModal()
       alert('Message sent! The seller will reply soon.')
     } catch (err) {
@@ -336,6 +337,10 @@ function BagPage() {
 
             {auth.currentUser ? (
               <>
+                {/* Message Input */}
+                {draftMsg && (
+                  <span style={{ color: '#888', fontSize: 12, fontWeight: 700, display: 'block', marginBottom: 4 }}>📝 Draft</span>
+                )}
                 <textarea placeholder="Write your message..." value={messageText} onChange={e => setMessageText(e.target.value)}
                   style={{ width: '100%', minHeight: '100px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '20px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
                 <button onClick={handleSendMessage}
