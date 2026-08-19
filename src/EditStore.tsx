@@ -4,6 +4,7 @@ import { auth, db, storage } from './firebase'
 import { doc, getDoc, updateDoc } from 'firebase/firestore'
 import { ref, uploadBytes } from 'firebase/storage'
 import { COUNTRIES } from './countries'
+import { COUNTRY_CODES, type CountryCode } from './countryCodes'
 import { notify } from './notifications'
 import ConfirmDialog from './ConfirmDialog'
 
@@ -11,6 +12,11 @@ function EditStore() {
   const [businessName, setBusinessName] = useState('')
   const [bio, setBio] = useState('')
   const [whatsapp, setWhatsapp] = useState('')
+  const [selectedCountry, setSelectedCountry] = useState<CountryCode>(() =>
+    COUNTRY_CODES.find(c => c.dialCode === '+256') || COUNTRY_CODES[0]
+  )
+  const [whatsappCountrySearch, setWhatsappCountrySearch] = useState('')
+  const [showWhatsappCountryDropdown, setShowWhatsappCountryDropdown] = useState(false)
   const [email, setEmail] = useState('')
   const [instagram, setInstagram] = useState('')
   const [tiktok, setTiktok] = useState('')
@@ -36,6 +42,10 @@ function EditStore() {
 
   const navigate = useNavigate()
 
+  // Strip '+'/dashes from a dial code (e.g. '+1-684' -> '1684') for storage & matching
+  const dialStripped = (c: CountryCode) => c.dialCode.replace(/[^+\d]/g, '')
+  const getStoredFullNumber = () => (whatsapp ? `${dialStripped(selectedCountry)}${whatsapp}` : '')
+
   useEffect(() => {
     const load = async () => {
       const user = auth.currentUser
@@ -47,7 +57,13 @@ function EditStore() {
           const data = snap.data() as any
           setBusinessName(data.businessName || '')
           setBio(data.bio || '')
-          setWhatsapp((data.whatsapp || '').replace(/^256/, ''))
+          const stored = (data.whatsapp || '').replace(/^0/, '')
+          const country = [...COUNTRY_CODES].sort((a, b) => dialStripped(b).length - dialStripped(a).length)
+            .find(c => stored.startsWith(dialStripped(c)))
+            || COUNTRY_CODES.find(c => c.dialCode === '+256')
+            || COUNTRY_CODES[0]
+          setSelectedCountry(country)
+          setWhatsapp(stored.slice(dialStripped(country).length))
           setEmail(data.email || '')
           setInstagram((data.instagram || '').replace(/^@+/, ''))
           setTiktok((data.tiktok || '').replace(/^@+/, ''))
@@ -201,7 +217,7 @@ function EditStore() {
         }
       }
 
-      const fullNumber = whatsapp ? `256${whatsapp}` : ''
+      const fullNumber = getStoredFullNumber()
       const updates: Record<string, any> = {
         businessName: businessName.trim(),
         bio: bio.trim(),
@@ -237,8 +253,30 @@ function EditStore() {
         <label>Bio</label>
         <textarea value={bio} onChange={e => setBio(e.target.value)} rows={3} style={{ width: '100%', padding: 8, marginBottom: 8 }} />
 
-        <label>WhatsApp (local)</label>
-        <input value={whatsapp} onChange={e => setWhatsapp(e.target.value.replace(/\D/g, '').slice(0,9))} placeholder="771234567" style={{ width: '100%', padding: 8, marginBottom: 8 }} />
+        <label>WhatsApp number</label>
+        <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #ccc', borderRadius: 4, overflow: 'visible', marginBottom: 8, position: 'relative' }}>
+          <div onClick={() => setShowWhatsappCountryDropdown(!showWhatsappCountryDropdown)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f5f5f5', padding: '8px 10px', borderRight: '1px solid #ccc', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            <span>{selectedCountry.flag} {selectedCountry.dialCode}</span>
+            <span style={{ color: '#999', fontSize: 10 }}>{showWhatsappCountryDropdown ? '▲' : '▼'}</span>
+          </div>
+          {showWhatsappCountryDropdown && (
+            <div style={{ position: 'absolute', top: '100%', left: 0, background: '#fff', border: '1px solid #ccc', borderRadius: 4, maxHeight: 220, overflow: 'auto', zIndex: 20, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+              <input value={whatsappCountrySearch} onChange={e => setWhatsappCountrySearch(e.target.value)} placeholder="Search country..." autoFocus
+                style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: '1px solid #eee', fontSize: 13, boxSizing: 'border-box', outline: 'none' }} />
+              {COUNTRY_CODES.filter(c => !whatsappCountrySearch || c.name.toLowerCase().includes(whatsappCountrySearch.toLowerCase()) || c.dialCode.includes(whatsappCountrySearch)).map(c => (
+                <div key={c.dialCode} onClick={() => { setSelectedCountry(c); setShowWhatsappCountryDropdown(false); setWhatsappCountrySearch('') }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', cursor: 'pointer', fontSize: 13 }}>
+                  <span>{c.flag}</span>
+                  <span style={{ flex: 1 }}>{c.name}</span>
+                  <span style={{ color: '#999' }}>{c.dialCode}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <input value={whatsapp} onChange={e => setWhatsapp(e.target.value.replace(/\D/g, '').slice(0, 14))} placeholder="your number"
+            style={{ flex: 1, padding: 8, border: 'none', outline: 'none', fontSize: 14 }} />
+        </div>
 
         <label>Email (optional)</label>
         <input value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" style={{ width: '100%', padding: 8, marginBottom: 8 }} />
