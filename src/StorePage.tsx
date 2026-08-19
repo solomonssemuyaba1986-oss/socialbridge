@@ -240,7 +240,7 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onRefresh, onPr
               style={{ width: '100%', padding: '8px', background: uploadingEdit ? '#333' : green, color: '#000', border: 'none', borderRadius: '6px', fontWeight: '700', cursor: 'pointer', fontSize: '13px', marginBottom: '6px' }}>
               Save
             </button>
-            <button onClick={() => setEditing(false)}
+            <button onClick={() => { setEditing(false); setEditName(p.name); setEditPrice(p.price); setEditDescription(p.description || ''); setEditImages(p.images || [p.imageUrl].filter(Boolean)) }}
               style={{ width: '100%', padding: '8px', background: 'transparent', color: '#555', border: '1px solid #333', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
               Cancel
             </button>
@@ -899,7 +899,8 @@ const handleSignupForAction = async (provider: any) => {
 
       {/* Order Modal */}
       {orderProduct && (
-        <div className="rt-modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+        <div className="rt-modal-overlay" onClick={() => { setOrderProduct(null); setOrderSuccess(false) }}
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
           <div className="rt-modal-box" style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222', textAlign: 'center' }}>
             {orderSuccess ? (
               <div>
@@ -908,6 +909,10 @@ const handleSignupForAction = async (provider: any) => {
                 </div>
                 <h3 style={{ color: '#fff', fontWeight: '800', fontSize: '18px', margin: '0 0 8px' }}>Order Sent!</h3>
                 <p style={{ color: '#888', fontSize: '14px', margin: 0 }}>Order sent to {seller?.businessName || 'the seller'}! They'll confirm soon.</p>
+                <button onClick={() => { setOrderProduct(null); setOrderSuccess(false) }}
+                  style={{ width: '100%', padding: '12px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginTop: '20px' }}>
+                  Done
+                </button>
               </div>
             ) : (
               <>
@@ -933,7 +938,7 @@ const handleSignupForAction = async (provider: any) => {
                   style={{ display: 'block', width: '100%', padding: '14px', background: 'transparent', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', marginBottom: '12px', textAlign: 'center', textDecoration: 'none', boxSizing: 'border-box' }}>
                   📞 Call Seller
                 </a>
-                <button onClick={() => setOrderProduct(null)}
+                <button onClick={() => { setOrderProduct(null); setOrderSuccess(false) }}
                   style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
                   Cancel
                 </button>
