@@ -4,6 +4,7 @@ import { httpsCallable } from 'firebase/functions'
 import { signInWithPopup } from 'firebase/auth'
 import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore'
 import { functions, auth, db, googleProvider } from './firebase'
+import { COUNTRY_CODES, type CountryCode } from './countryCodes'
 
 const green = '#adff2f'
 const OTP_SERVER_URL = import.meta.env.VITE_OTP_SERVER_URL || 'http://localhost:3001'
@@ -19,12 +20,19 @@ export default function RecoveryModal({ open, onClose }: Props) {
   const [email, setEmail] = useState('')
   const [emailCode, setEmailCode] = useState('')
   const [newPhone, setNewPhone] = useState('')
+  const [selectedCountry, setSelectedCountry] = useState<CountryCode>(() =>
+    COUNTRY_CODES.find(c => c.dialCode === '+256') || COUNTRY_CODES[0]
+  )
+  const [whatsappCountrySearch, setWhatsappCountrySearch] = useState('')
+  const [showWhatsappCountryDropdown, setShowWhatsappCountryDropdown] = useState(false)
   const [phoneCode, setPhoneCode] = useState('')
   const [storeId, setStoreId] = useState('')
   const [storeName, setStoreName] = useState('')
   const [recoveredVia, setRecoveredVia] = useState('email')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const getFullNewPhone = () => `+${selectedCountry.dialCode.replace(/[^+\d]/g, '')}${newPhone}`
 
   const sendRecoveryCode = httpsCallable(functions, 'sendRecoveryCode')
   const verifyRecoveryCode = httpsCallable(functions, 'verifyRecoveryCode')
@@ -69,7 +77,7 @@ export default function RecoveryModal({ open, onClose }: Props) {
   // --- Phone anchor (seller updates their store contact; OTP via SMS) ---
   const handlePhoneSendOtp = async () => {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setError('Enter the recovery email on your store'); return }
-    if (newPhone.length !== 9 || !/^7\d{8}$/.test(newPhone)) { setError('Enter a valid Uganda number'); return }
+    if (!/^\+[1-9]\d{7,14}$/.test(getFullNewPhone())) { setError('Enter a valid phone number with country code (e.g. +256771234567)'); return }
     setLoading(true); setError('')
     try {
       // Find the seller store attached to this recovery email
@@ -87,7 +95,7 @@ export default function RecoveryModal({ open, onClose }: Props) {
       const res = await fetch(`${OTP_SERVER_URL}/api/otp/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: `+256${newPhone}` }),
+        body: JSON.stringify({ phone: getFullNewPhone() }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -110,14 +118,14 @@ export default function RecoveryModal({ open, onClose }: Props) {
       const res = await fetch(`${OTP_SERVER_URL}/api/otp/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: `+256${newPhone}`, otp: phoneCode }),
+        body: JSON.stringify({ phone: getFullNewPhone(), otp: phoneCode }),
       })
       const data = await res.json()
       if (!res.ok) {
         setError(data.error || 'Invalid code')
       } else {
         await updateDoc(doc(db, 'sellers', storeId), {
-          whatsapp: `256${newPhone}`,
+          whatsapp: selectedCountry.dialCode.replace(/[^+\d]/g, '') + newPhone,
           phoneVerified: true,
         })
         setRecoveredVia('phone')
@@ -235,13 +243,33 @@ export default function RecoveryModal({ open, onClose }: Props) {
         {step === 'phone' && (
           <>
             <p style={{ color: '#888', fontSize: '14px', margin: '0 0 16px' }}>
-              {storeName && <><strong style={{ color: green }}>{storeName}</strong> found. </>}Enter the recovery email on your store first, then your new Uganda number — verified by SMS (no WhatsApp needed).
+              {storeName && <><strong style={{ color: green }}>{storeName}</strong> found. </>}Enter the recovery email on your store first, then your new number (any country) — verified by SMS (no WhatsApp needed).
             </p>
             <input value={email} onChange={e => setEmail(e.target.value)} placeholder="Recovery email (you@example.com)"
               style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
-            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #333', borderRadius: '8px', overflow: 'hidden', marginBottom: '12px' }}>
-              <div style={{ background: '#111', padding: '12px 14px', fontSize: '14px', borderRight: '1px solid #333', color: '#888' }}>🇺🇬 +256</div>
-              <input value={newPhone} onChange={e => setNewPhone(e.target.value.replace(/\D/g, '').slice(0, 9))} placeholder="771234567" maxLength={9}
+            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #333', borderRadius: '8px', overflow: 'visible', marginBottom: '12px', position: 'relative' }}>
+              <div onClick={() => setShowWhatsappCountryDropdown(!showWhatsappCountryDropdown)}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#111', padding: '12px 12px', fontSize: '14px', borderRight: '1px solid #333', color: '#aaa', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer' }}>
+                <span>{selectedCountry.flag} {selectedCountry.dialCode}</span>
+                <span style={{ color: '#555', fontSize: '11px' }}>{showWhatsappCountryDropdown ? '▲' : '▼'}</span>
+              </div>
+              {showWhatsappCountryDropdown && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', maxHeight: '220px', overflow: 'hidden', zIndex: 20, marginTop: '2px' }}>
+                  <input value={whatsappCountrySearch} onChange={e => setWhatsappCountrySearch(e.target.value)} placeholder="Search country..." autoFocus
+                    style={{ width: '100%', padding: '10px 12px', border: 'none', borderBottom: '1px solid #333', fontSize: '13px', boxSizing: 'border-box', outline: 'none', background: '#111', color: '#fff' }} />
+                  <div style={{ maxHeight: '180px', overflowY: 'auto' }}>
+                    {COUNTRY_CODES.filter(c => !whatsappCountrySearch || c.name.toLowerCase().includes(whatsappCountrySearch.toLowerCase()) || c.dialCode.includes(whatsappCountrySearch)).map(c => (
+                      <div key={c.dialCode} onClick={() => { setSelectedCountry(c); setShowWhatsappCountryDropdown(false); setWhatsappCountrySearch('') }}
+                        style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', cursor: 'pointer', fontSize: '13px', color: selectedCountry.dialCode === c.dialCode ? green : '#aaa', background: selectedCountry.dialCode === c.dialCode ? '#0a1a0a' : 'transparent' }}>
+                        <span style={{ fontSize: '16px' }}>{c.flag}</span>
+                        <span style={{ flex: 1 }}>{c.name}</span>
+                        <span style={{ color: '#666' }}>{c.dialCode}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <input value={newPhone} onChange={e => setNewPhone(e.target.value.replace(/\D/g, '').slice(0, 14))} placeholder="your number" maxLength={14}
                 style={{ flex: 1, padding: '12px', border: 'none', outline: 'none', fontSize: '15px', background: '#111', color: '#fff' }} />
             </div>
             {error && <p style={{ color: '#ff4444', fontSize: '12px', margin: '0 0 12px' }}>{error}</p>}
@@ -258,7 +286,7 @@ export default function RecoveryModal({ open, onClose }: Props) {
         {step === 'phone-otp' && (
           <>
             <p style={{ color: '#888', fontSize: '14px', margin: '0 0 16px' }}>
-              A 6-digit code was sent to <strong style={{ color: '#fff' }}>+256{newPhone}</strong>. Enter it below.
+              A 6-digit code was sent to <strong style={{ color: '#fff' }}>{getFullNewPhone()}</strong>. Enter it below.
             </p>
             <input value={phoneCode} onChange={e => setPhoneCode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000"
               style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '20px', background: '#111', color: '#fff', textAlign: 'center', letterSpacing: '8px' }} />
@@ -282,7 +310,7 @@ export default function RecoveryModal({ open, onClose }: Props) {
               <>
                 <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: '800' }}>Contact updated!</h3>
                 <p style={{ color: '#888', fontSize: '14px', margin: '0 0 16px' }}>
-                  Your store's phone is now <strong style={{ color: '#fff' }}>+256{newPhone}</strong>. Sign in with your new number or your Google/Apple/Facebook to continue.
+                  Your store's phone is now <strong style={{ color: '#fff' }}>{getFullNewPhone()}</strong>. Sign in with your new number or your Google/Apple/Facebook to continue.
                 </p>
               </>
             ) : (
