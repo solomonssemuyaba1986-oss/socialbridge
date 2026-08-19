@@ -10,6 +10,7 @@ import { useGuestOTP } from './useGuestOTP'
 import { QUICK_REPLIES } from './quickReplies'
 import { getMainCategories } from './categories'
 import LoadingScreen from './LoadingScreen'
+import { useDraft } from './useDraft'
 import Fuse from 'fuse.js'
 
 interface Product {
@@ -57,7 +58,7 @@ function BrowsePage() {
   const [quantity, setQuantity] = useState('1')
   const [deliveryArea, setDeliveryArea] = useState('')
   const [orderMessage, setOrderMessage] = useState('')
-  const [messageText, setMessageText] = useState('')
+  const { text: messageText, setText: setMessageText, draft: draftMsg, clearDraft: clearMsgDraft } = useDraft(messageProduct ? `product_${messageProduct.id}` : 'none')
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [guestName, setGuestName] = useState('')
   const [guestPhone, setGuestPhone] = useState('')
@@ -193,7 +194,7 @@ function BrowsePage() {
           setGuestMessageSent(true)
           setTimeout(() => {
             setMessageProduct(null)
-            setMessageText('')
+            clearMsgDraft()
             setShowQuickReplies(false)
             setGuestName('')
             setGuestPhone('')
@@ -222,7 +223,7 @@ function BrowsePage() {
         createdAt: serverTimestamp(),
       })
       track('message_sent', auth.currentUser.uid, detectSource(), { productId: messageProduct.id, productName: messageProduct.name, sellerId: messageProduct.sellerId })
-      setMessageText('')
+      clearMsgDraft()
       setShowQuickReplies(false)
       setMessageProduct(null)
       alert('Message sent! The seller will reply soon.')
@@ -234,7 +235,6 @@ function BrowsePage() {
 
   const closeMessageModal = () => {
     setMessageProduct(null)
-    setMessageText('')
     setShowQuickReplies(false)
     setGuestName('')
     setGuestPhone('')
@@ -832,6 +832,10 @@ function BrowsePage() {
 
             {auth.currentUser ? (
               <>
+                {/* Message Input */}
+                {draftMsg && (
+                  <span style={{ color: '#888', fontSize: 12, fontWeight: 700, display: 'block', marginBottom: 4 }}>📝 Draft</span>
+                )}
                 <textarea placeholder="Write your message..." value={messageText} onChange={e => setMessageText(e.target.value)}
                   style={{ width: '100%', minHeight: '100px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '20px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
                 <button onClick={handleSendMessage}
