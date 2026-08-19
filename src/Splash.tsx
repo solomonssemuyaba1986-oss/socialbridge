@@ -4,7 +4,7 @@ interface SplashProps {
   onDone: () => void
 }
 
-function extractGreenMan(img: HTMLImageElement): string {
+function extractWhiteMan(img: HTMLImageElement): string {
   const canvas = document.createElement('canvas')
   canvas.width = img.width
   canvas.height = img.height
@@ -14,27 +14,46 @@ function extractGreenMan(img: HTMLImageElement): string {
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
   const pixels = imageData.data
 
+  let minX = canvas.width
+  let minY = canvas.height
+  let maxX = -1
+  let maxY = -1
+
   for (let i = 0; i < pixels.length; i += 4) {
     const r = pixels[i]
     const g = pixels[i + 1]
     const b = pixels[i + 2]
     const brightness = (r + g + b) / 3
 
-    // Green-tinted man: G dominates over R and B, not too dark (excludes black frame), not too bright (excludes white bg)
-    const isGreenMan = g > r && g > b && brightness > 40 && brightness < 230
-
-    if (isGreenMan) {
-      // Recolor to the rachett green so the mark is visible on dark backgrounds
-      pixels[i] = 173
+    // The man is the white figure in the logo — render him white, everything else transparent
+    if (brightness > 200) {
+      pixels[i] = 255
       pixels[i + 1] = 255
-      pixels[i + 2] = 47
+      pixels[i + 2] = 255
       pixels[i + 3] = 255
+      const x = (i / 4) % canvas.width
+      const y = Math.floor((i / 4) / canvas.width)
+      if (x < minX) minX = x
+      if (x > maxX) maxX = x
+      if (y < minY) minY = y
+      if (y > maxY) maxY = y
     } else {
       pixels[i + 3] = 0
     }
   }
 
   ctx.putImageData(imageData, 0, 0)
+
+  // Crop tightly around the figure so he renders big and centered
+  if (maxX >= minX && maxY >= minY) {
+    const w = maxX - minX + 1
+    const h = maxY - minY + 1
+    const cropCanvas = document.createElement('canvas')
+    cropCanvas.width = w
+    cropCanvas.height = h
+    cropCanvas.getContext('2d')!.drawImage(canvas, minX, minY, w, h, 0, 0, w, h)
+    return cropCanvas.toDataURL()
+  }
   return canvas.toDataURL()
 }
 
@@ -44,7 +63,7 @@ function Splash({ onDone }: SplashProps) {
 
   useEffect(() => {
     const rachettImg = new Image()
-    rachettImg.onload = () => setrachettUrl(extractGreenMan(rachettImg))
+    rachettImg.onload = () => setrachettUrl(extractWhiteMan(rachettImg))
     rachettImg.src = '/logo.jpg'
   }, [])
 
