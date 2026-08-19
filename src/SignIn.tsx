@@ -289,7 +289,7 @@ function SignIn() {
       {/* Hero */}
       <div className="rt-hero" style={{ textAlign: 'center', padding: '80px 20px 60px', maxWidth: '800px', margin: '0 auto' }}>
         <div style={{ display: 'inline-block', background: '#1a1a1a', border: '1px solid #333', borderRadius: '20px', padding: '6px 16px', fontSize: '13px', color: '#888', marginBottom: '24px' }}>
-          Your brand. Your audience. Across every platform. In one inbox.
+          People, not platforms.
         </div>
         <h1 className="rt-title-lg" style={{ fontSize: '56px', fontWeight: '900', lineHeight: '1.1', margin: '0 0 24px', letterSpacing: '-2px' }}>
           Your business<br />
@@ -499,7 +499,7 @@ function SignIn() {
             .rt-ticker:hover { animation-play-state: paused; }
           `}</style>
           <p style={{ textAlign: 'center', color: '#777', fontSize: '12px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', margin: '0 0 20px' }}>
-            Trusted by sellers on rachett
+            sellers that trust rachett
           </p>
           <div className="rt-ticker" style={{ display: 'flex', gap: '16px', width: 'max-content', animation: 'rachettTicker 30s linear infinite' }}>
             {[...trustedStores, ...trustedStores].map((store, i) => (
@@ -583,7 +583,7 @@ function SignIn() {
       {/* CTA */}
       <div style={{ padding: '80px 20px', textAlign: 'center' }}>
         <h2 className="rt-title-md" style={{ fontSize: '42px', fontWeight: '900', margin: '0 0 16px', letterSpacing: '-1px' }}>
-          It doesn't matter where you are, or your customers
+          It doesn't matter where you are, or your customers,
           Manage your business<br />
           <span style={{ color: green }}>from anywhere.</span>
         </h2>
