@@ -8,6 +8,7 @@ import { useBuyerConversations, type BuyerConversation } from './useBuyerConvers
 import ConversationPanel from './ConversationPanel'
 import { markConversationRead } from './useConversation'
 import LoadingScreen from './LoadingScreen'
+import { getDraft } from './useDraft'
 
 const green = '#adff2f'
 
@@ -58,6 +59,9 @@ type Thread = {
   unread: boolean
   unreadCount: number
   verified?: boolean
+  lastMessageBy?: string
+  lastMessageStatus?: string
+  hasDraft?: boolean
   platformIcon?: string
   platformLabel?: string
   guestPhone?: string
@@ -74,6 +78,12 @@ function Inbox() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'unread'>('all')
   const [logoMap, setLogoMap] = useState<Record<string, string>>({})
+  const [draftTick, setDraftTick] = useState(0)
+  useEffect(() => {
+    const handler = () => setDraftTick(t => t + 1)
+    window.addEventListener('rachett:draftchange', handler)
+    return () => window.removeEventListener('rachett:draftchange', handler)
+  }, [])
 
   // Fetch store logos for the "other party" in each conversation (if they're rachett sellers)
   useEffect(() => {
@@ -102,31 +112,39 @@ function Inbox() {
   const threads: Thread[] = useMemo(() => {
     const list: Thread[] = []
     buyerConversations.forEach(c => {
+      const dt = getDraft(`convo_${c.id}`)
       list.push({
         key: `buyer-${c.id}`,
         name: c.sellerName || 'Seller',
         avatarText: (c.sellerName || 'S').charAt(0).toUpperCase(),
         avatarUrl: logoMap[c.sellerId],
-        preview: `You: ${c.lastMessage || ''}`,
+        preview: dt || `You: ${c.lastMessage || ''}`,
         timeValue: c.lastMessageAt?.toDate?.()?.getTime() || 0,
         timeLabel: formatTime(c.lastMessageAt),
         unread: !!c.unreadByBuyer,
         unreadCount: c.unreadByBuyerCount || (c.unreadByBuyer ? 1 : 0),
+        lastMessageBy: c.lastMessageBy,
+        lastMessageStatus: c.lastMessageStatus,
+        hasDraft: !!dt,
         kind: 'buyer',
         buyerConvo: c,
       })
     })
     sellerConversations.forEach(c => {
+      const dt = getDraft(`convo_${c.id}`)
       list.push({
         key: `seller-${c.id}`,
         name: c.buyerName || 'Buyer',
         avatarText: (c.buyerName || 'B').charAt(0).toUpperCase(),
         avatarUrl: logoMap[c.buyerId],
-        preview: c.lastMessage || '',
+        preview: dt || c.lastMessage || '',
         timeValue: c.lastMessageAt?.toDate?.()?.getTime() || 0,
         timeLabel: formatTime(c.lastMessageAt),
         unread: !!c.unreadBySeller,
         unreadCount: c.unreadBySellerCount || (c.unreadBySeller ? 1 : 0),
+        lastMessageBy: c.lastMessageBy,
+        lastMessageStatus: c.lastMessageStatus,
+        hasDraft: !!dt,
         kind: 'seller',
         sellerConvo: c,
       })
@@ -151,7 +169,7 @@ function Inbox() {
     })
     list.sort((a, b) => b.timeValue - a.timeValue)
     return list
-  }, [buyerConversations, sellerConversations, messages, logoMap])
+  }, [buyerConversations, sellerConversations, messages, logoMap, draftTick])
 
   const totalUnread = unreadMessages + unreadSellerConversations + unreadBuyerConversations
   const loading = messagesLoading || conversationsLoading || buyerConversationsLoading
@@ -272,9 +290,15 @@ function Inbox() {
                         <span style={{ color: '#555', fontSize: '11px', flexShrink: 0 }}>{t.timeLabel}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                        <p style={{ margin: '2px 0 0', color: t.unread ? '#fff' : '#888', fontSize: '13px', fontWeight: t.unread ? 700 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
+                        <p style={{ margin: '2px 0 0', color: t.hasDraft ? '#b026ff' : (t.unread ? '#fff' : '#888'), fontSize: '13px', fontWeight: t.unread ? 700 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
+                          {t.hasDraft && <span style={{ color: '#b026ff', fontWeight: 800 }}>📝 Draft: </span>}
                           {t.preview}
                         </p>
+                        {t.lastMessageBy === auth.currentUser?.uid && t.lastMessageStatus && !t.hasDraft && (
+                          <span title={t.lastMessageStatus} style={{ flexShrink: 0, color: t.lastMessageStatus === 'seen' ? '#00e5ff' : '#8fd14f', fontSize: '12px', fontWeight: 800 }}>
+                            {t.lastMessageStatus === 'sent' ? '✓' : '✓✓'}
+                          </span>
+                        )}
                         {t.unreadCount > 0 && (
                           <div style={{ background: green, color: '#000', borderRadius: '999px', minWidth: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '800', padding: '0 6px', flexShrink: 0, boxSizing: 'border-box' }}>
                             {t.unreadCount}
