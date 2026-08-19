@@ -2,6 +2,15 @@ import { useEffect, useState } from 'react'
 
 const PREFIX = 'rachett_draft_'
 
+/** Read a saved draft (used by overviews to show "Draft" status without opening the chat). */
+export function getDraft(key: string): string {
+  try {
+    return localStorage.getItem(PREFIX + key) || ''
+  } catch {
+    return ''
+  }
+}
+
 /**
  * Auto-saving draft messages. Whatever you type is saved silently to
  * localStorage and restored when you come back — nothing gets lost.
@@ -34,6 +43,7 @@ export function useDraft(key: string) {
       } else {
         localStorage.removeItem(currentKey)
       }
+      window.dispatchEvent(new CustomEvent('rachett:draftchange'))
     } catch {
       // storage unavailable — ignore
     }
