@@ -860,7 +860,7 @@ function BrowsePage() {
                     </p>
                     <input placeholder="Your name" value={guestName} onChange={e => setGuestName(e.target.value)}
                       style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
-                    <input placeholder="Phone number e.g. 0771234567" value={guestPhone} onChange={e => setGuestPhone(e.target.value)}
+                    <input placeholder="Phone number e.g. +256771234567" value={guestPhone} onChange={e => setGuestPhone(e.target.value)}
                       style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
                     <textarea placeholder="Write your message..." value={messageText} onChange={e => setMessageText(e.target.value)}
                       style={{ width: '100%', minHeight: '80px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '20px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
