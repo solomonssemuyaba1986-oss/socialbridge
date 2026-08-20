@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { collection, onSnapshot } from 'firebase/firestore'
 import { db, auth } from './firebase'
 import { onAuthStateChanged } from 'firebase/auth'
+import { useSellerLive } from './sellerLive'
 
 const green = '#adff2f'
 const amber = '#ffaa00'
@@ -279,6 +280,8 @@ function AnalyticsPage() {
     { label: 'Settings', path: '/edit-store', icon: '⚙️' },
   ]
 
+  const { pendingOrdersCount } = useSellerLive()
+
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -308,6 +311,11 @@ function AnalyticsPage() {
                 }}>
                 <span>{item.icon}</span>
                 <span style={{ flex: 1 }}>{item.label}</span>
+                {item.label === 'Orders' && pendingOrdersCount > 0 && (
+                  <span style={{ minWidth: '24px', height: '24px', borderRadius: '999px', background: green, color: '#000', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 900, padding: '0 6px', boxShadow: `0 0 0 2px rgba(173,255,47,0.2)` }}>
+                    {pendingOrdersCount}
+                  </span>
+                )}
               </button>
             )
           })}
