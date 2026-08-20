@@ -4,9 +4,7 @@ import { doc, getDoc, collection, getDocs, updateDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 import { useSellerOrders } from './useSellerOrders'
-import { useSellerMessages } from './useSellerMessages'
-import { useSellerConversations } from './useSellerConversations'
-import { useBuyerConversations } from './useBuyerConversations'
+import { useSellerLive } from './sellerLive'
 import { notify } from './notifications'
 import LoadingScreen from './LoadingScreen'
 
@@ -111,11 +109,9 @@ function Dashboard() {
   }, [])
 
   const { orders, loading: ordersLoading } = useSellerOrders()
-  const { unreadCount: unreadMessagesCount } = useSellerMessages()
-  const { unreadCount: unreadSellerConvoCount } = useSellerConversations()
-  const { unreadCount: unreadBuyerConvoCount } = useBuyerConversations()
 
-  const totalMessageUnread = unreadMessagesCount + unreadSellerConvoCount + unreadBuyerConvoCount
+  const { pendingOrdersCount, unreadMessages: liveUnreadMessages, unreadSellerConvo, unreadBuyerConvo } = useSellerLive()
+  const liveMessageUnread = liveUnreadMessages + unreadSellerConvo + unreadBuyerConvo
 
   // Waiting = orders you haven't worked on yet (not confirmed, out of stock, or needs details).
   const pendingOrders = orders.filter(o => !['fulfilled', 'out_of_stock', 'needs_details'].includes(o.status || ''))
@@ -232,7 +228,7 @@ function Dashboard() {
         <div style={{ display: 'grid', gap: '6px' }}>
           {navItems.map(item => {
             const active = location.pathname === item.path || (item.path === '/dashboard' && location.pathname === '/dashboard')
-            const showBadge = item.label === 'Orders' ? orders.filter(o => o.status === 'pending' || !o.status).length : item.label === 'Inbox' ? totalMessageUnread : 0
+            const showBadge = item.label === 'Orders' ? pendingOrdersCount : item.label === 'Inbox' ? liveMessageUnread : 0
             return (
               <button key={item.path + item.label} onClick={() => navigate(item.path)}
                 style={{
