@@ -8,7 +8,7 @@ import { CATEGORIES, getSubcategories } from './categories'
 import { notify } from './notifications'
 import { useConversation } from './useConversation.ts'
 import { useGuestOTP } from './useGuestOTP.ts'
-import { useBag } from './useBag'
+import { useBag, getBagCounts, type BagCountData } from './useBag'
 import { useSellerStats, getSalesLabel, formatRating, renderStars, getBadgeStatusLabel } from './useSellerStats.ts'
 import { QUICK_REPLIES } from './quickReplies'
 import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder.ts'
@@ -47,9 +47,17 @@ interface Product {
   subCategory?: string
   outOfStock?: boolean
   orderCount?: number
+  salesCount?: number
 }
 
 const green = '#adff2f'
+
+function formatCount(n: number) {
+  if (n < 1000) return String(n)
+  if (n < 10000) return (n / 1000).toFixed(1) + 'K'
+  if (n < 1000000) return Math.round(n / 1000) + 'K'
+  return (n / 1000000).toFixed(1) + 'M'
+}
 const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'dzudmmuxg'
 const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'p2z65zrv'
 
@@ -77,7 +85,7 @@ function detectPlatform(searchParams: URLSearchParams) {
   return 'Web'
 }
 
-function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onRefresh, onPreview }: any) {
+function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onRefresh, onPreview, inBag, bagged, sold, onToggleBag }: any) {
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(p.name)
   const [editPrice, setEditPrice] = useState(p.price)
@@ -177,13 +185,26 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onRefresh, onPr
 
       {/* Image Counter */}
       {images.length > 1 && (
-        <div style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(0,0,0,0.6)', color: '#fff', padding: '4px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', zIndex: 2 }}>
+        <div style={{ position: 'absolute', bottom: '8px', right: '8px', background: 'rgba(0,0,0,0.6)', color: '#fff', padding: '4px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', zIndex: 2 }}>
           {currentImageIndex + 1}/{images.length}
         </div>
       )}
 
       {/* Image with Navigation */}
       <div style={{ position: 'relative' }}>
+        {!isOwner && (
+          <>
+            <button onClick={(e) => { e.stopPropagation(); onToggleBag() }}
+              style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(0,0,0,0.65)', color: '#fff', border: inBag ? `1px solid ${green}` : '1px solid rgba(255,255,255,0.25)', borderRadius: '8px', padding: '3px 8px', cursor: 'pointer', fontSize: '11px', fontWeight: '700', zIndex: 2, display: 'flex', alignItems: 'center', gap: '3px', backdropFilter: 'blur(4px)', lineHeight: 1.4 }}>
+              {inBag ? '✓' : '🛍️'} {formatCount(bagged)}
+            </button>
+            {sold > 0 && (
+              <div style={{ position: 'absolute', top: '34px', right: '8px', background: 'rgba(0,0,0,0.65)', color: '#fff', border: '1px solid rgba(173,255,47,0.4)', borderRadius: '8px', padding: '3px 8px', fontSize: '11px', fontWeight: '700', zIndex: 2, display: 'flex', alignItems: 'center', gap: '3px', backdropFilter: 'blur(4px)', lineHeight: 1.4 }}>
+                ✓ {formatCount(sold)} bought
+              </div>
+            )}
+          </>
+        )}
         <img
           src={images[currentImageIndex] || 'https://placehold.co/300x200/1a1a1a/333333'}
           alt={p.name}
@@ -307,11 +328,12 @@ function StorePage() {
   const { slug } = useParams()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const { count: bagCount } = useBag()
+  const { count: bagCount, addToBag, removeFromBag, isInBag } = useBag()
   const productDeepLinkId = searchParams.get('productId')
 const messageDeepLinkId = searchParams.get('messageId')
   const [seller, setSeller] = useState<Seller | null>(null)
   const [products, setProducts] = useState<Product[]>([])
+  const [bagCounts, setBagCounts] = useState<Record<string, BagCountData>>({})
   const [isOwner, setIsOwner] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -458,6 +480,29 @@ const messageDeepLinkId = searchParams.get('messageId')
     }
   }
 
+  // Fetch bag counts (social proof) for this store's products
+  useEffect(() => {
+    const ids = products.map(p => p.id)
+    if (ids.length === 0) return
+    getBagCounts(ids).then(setBagCounts).catch(() => {})
+  }, [products])
+
+  const handleToggleBag = (p: Product) => {
+    if (isInBag(p.id)) {
+      removeFromBag(p.id)
+      setBagCounts(prev => ({
+        ...prev,
+        [p.id]: { count: Math.max(0, (prev[p.id]?.count || 0) - 1), baggedCount: prev[p.id]?.baggedCount || 0 },
+      }))
+    } else {
+      addToBag({ productId: p.id, productName: p.name, productPrice: p.price, imageUrl: p.imageUrl, sellerSlug: seller?.slug || '', sellerId, businessName: seller?.businessName || '' })
+      setBagCounts(prev => ({
+        ...prev,
+        [p.id]: { count: (prev[p.id]?.count || 0) + 1, baggedCount: (prev[p.id]?.baggedCount || 0) + 1 },
+      }))
+    }
+  }
+
 const compressImage = (file: File): Promise<File> => {
   return new Promise((resolve) => {
     const canvas = document.createElement('canvas')
@@ -537,6 +582,7 @@ const handleOrder = async () => {
       buyerUid,
       productName: orderProduct.name,
       productPrice: orderProduct.price,
+      productId: orderProduct.id,
       quantity,
       deliveryArea,
       status: 'pending',
@@ -862,6 +908,10 @@ const handleSignupForAction = async (provider: any) => {
                 p={{ ...p, sellerWhatsapp: seller.whatsapp }}
                 isOwner={isOwner}
                 sellerId={sellerId}
+                inBag={isInBag(p.id)}
+                bagged={bagCounts[p.id]?.baggedCount || 0}
+                sold={p.salesCount || 0}
+                onToggleBag={() => handleToggleBag(p)}
                 onOrder={() => setOrderProduct(p)}
                 onMessage={() => setMessageProduct(p)}
                 onRefresh={() => fetchProducts(sellerId)}
