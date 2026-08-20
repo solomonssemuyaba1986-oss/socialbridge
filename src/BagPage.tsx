@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { collection, getDocs, query, where, addDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, getDocs, query, where, addDoc, serverTimestamp, getDoc, doc } from 'firebase/firestore'
 import { db, auth } from './firebase'
 import { track, detectSource } from './tracking'
 import { useBag } from './useBag'
@@ -10,6 +10,13 @@ import { useDraft } from './useDraft'
 import { QUICK_REPLIES } from './quickReplies'
 
 const green = '#adff2f'
+
+function formatCount(n: number) {
+  if (n < 1000) return String(n)
+  if (n < 10000) return (n / 1000).toFixed(1) + 'K'
+  if (n < 1000000) return Math.round(n / 1000) + 'K'
+  return (n / 1000000).toFixed(1) + 'M'
+}
 
 interface BagTarget {
   id: string
@@ -42,6 +49,27 @@ function BagPage() {
   const [guestMessageSent, setGuestMessageSent] = useState(false)
   const { state: otpState, requestOTP, verifyOTP, reset: resetOTP } = useGuestOTP()
   const sellerIdCache = useRef<Map<string, string>>(new Map())
+  const [salesMap, setSalesMap] = useState<Record<string, number>>({})
+
+  // Fetch each item's sold count (social proof) — motivates completing the purchase
+  useEffect(() => {
+    const ids = new Set(items.map(i => i.productId))
+    if (ids.size === 0) { setSalesMap({}); return }
+    let cancelled = false
+    Promise.all(Array.from(ids).map(async pid => {
+      const item = items.find(i => i.productId === pid)
+      if (!item) return
+      try {
+        const snap = await getDoc(doc(db, 'sellers', item.sellerId, 'products', pid))
+        if (!cancelled && snap.exists()) {
+          setSalesMap(prev => ({ ...prev, [pid]: snap.data().salesCount || 0 }))
+        }
+      } catch (err) {
+        console.warn('Failed to fetch sales count:', err)
+      }
+    }))
+    return () => { cancelled = true }
+  }, [items])
 
   const total = items.reduce((sum, i) => sum + (Number(String(i.productPrice).replace(/[^0-9]/g, '')) || 0) * i.quantity, 0)
 
@@ -108,6 +136,7 @@ function BagPage() {
         buyerUid: auth.currentUser.uid,
         productName: orderTarget.name,
         productPrice: orderTarget.price,
+        productId: orderTarget.id,
         quantity: orderQty,
         deliveryArea: deliveryArea.trim(),
         status: 'pending',
@@ -225,6 +254,9 @@ function BagPage() {
                 <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: '#fff' }}>{item.productName}</p>
                 <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#888' }}>{item.businessName}</p>
                 <p style={{ margin: 0, fontWeight: '800', fontSize: '14px', color: green }}>UGX {item.productPrice}</p>
+                {(salesMap[item.productId] || 0) > 0 && (
+                  <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#8fd14f', fontWeight: '700' }}>✓ {formatCount(salesMap[item.productId] || 0)} bought</p>
+                )}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#0f0f0f', borderRadius: '8px', padding: '2px' }}>
