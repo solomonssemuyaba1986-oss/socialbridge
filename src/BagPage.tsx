@@ -255,7 +255,9 @@ function BagPage() {
                 <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#888' }}>{item.businessName}</p>
                 <p style={{ margin: 0, fontWeight: '800', fontSize: '14px', color: green }}>UGX {item.productPrice}</p>
                 {(salesMap[item.productId] || 0) > 0 && (
-                  <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#8fd14f', fontWeight: '700' }}>✓ {formatCount(salesMap[item.productId] || 0)} bought</p>
+                  <p style={{ display: 'inline-block', margin: '6px 0 0', padding: '3px 10px', background: green, color: '#000', borderRadius: '999px', fontSize: '12px', fontWeight: '800', lineHeight: 1.4 }}>
+                    ✓ {formatCount(salesMap[item.productId] || 0)} bought
+                  </p>
                 )}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center' }}>
