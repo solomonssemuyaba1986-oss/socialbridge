@@ -4,7 +4,7 @@ import { onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebase'
 import { useNavigate } from 'react-router-dom'
 import { track, detectSource } from './tracking'
-import { useBag, getBagCounts } from './useBag'
+import { useBag, getBagCounts, type BagCountData } from './useBag'
 import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder'
 import { useGuestOTP } from './useGuestOTP'
 import { QUICK_REPLIES } from './quickReplies'
@@ -27,6 +27,7 @@ interface Product {
   subCategory?: string
   outOfStock?: boolean
   orderCount?: number
+  salesCount?: number
 }
 
 const categories = ['All', ...getMainCategories()]
@@ -48,7 +49,7 @@ function BrowsePage() {
   const [ownerFilter, setOwnerFilter] = useState<'all' | 'mine' | 'not-mine'>('all')
   const { addToBag, removeFromBag, isInBag, count: bagCount } = useBag()
   const navigate = useNavigate()
-  const [bagCounts, setBagCounts] = useState<Record<string, number>>({})
+  const [bagCounts, setBagCounts] = useState<Record<string, BagCountData>>({})
   const [surveyProduct, setSurveyProduct] = useState<Product | null>(null)
   const [surveyImageIndex, setSurveyImageIndex] = useState(0)
   const [orderProduct, setOrderProduct] = useState<Product | null>(null)
@@ -90,10 +91,16 @@ function BrowsePage() {
   const handleToggleBag = (p: Product) => {
     if (isInBag(p.id)) {
       removeFromBag(p.id)
-      setBagCounts(prev => ({ ...prev, [p.id]: Math.max(0, (prev[p.id] || 0) - 1) }))
+      setBagCounts(prev => ({
+        ...prev,
+        [p.id]: { count: Math.max(0, (prev[p.id]?.count || 0) - 1), baggedCount: prev[p.id]?.baggedCount || 0 },
+      }))
     } else {
       addToBag({ productId: p.id, productName: p.name, productPrice: p.price, imageUrl: p.imageUrl, sellerSlug: p.sellerSlug, sellerId: p.sellerId, businessName: p.businessName })
-      setBagCounts(prev => ({ ...prev, [p.id]: (prev[p.id] || 0) + 1 }))
+      setBagCounts(prev => ({
+        ...prev,
+        [p.id]: { count: (prev[p.id]?.count || 0) + 1, baggedCount: (prev[p.id]?.baggedCount || 0) + 1 },
+      }))
     }
   }
 
@@ -148,6 +155,7 @@ function BrowsePage() {
         buyerUid: auth.currentUser.uid,
         productName: orderProduct.name,
         productPrice: orderProduct.price,
+        productId: orderProduct.id,
         quantity,
         deliveryArea: deliveryArea.trim(),
         status: 'pending',
@@ -356,7 +364,8 @@ function BrowsePage() {
                 sellerId: sellerDoc.id,
                 businessName: sellerData.businessName,
                 outOfStock: productData.outOfStock || false,
-                orderCount: productData.orderCount || 0
+                orderCount: productData.orderCount || 0,
+                salesCount: productData.salesCount || 0
               })
             })
           } catch (err) {
@@ -645,9 +654,14 @@ function BrowsePage() {
                   <div onClick={() => handleCardClick(p)} style={{ cursor: 'pointer', position: 'relative' }}>
                     {p.sellerSlug === mySlug && mySlug && (<div style={{ position: 'absolute', top: '6px', left: '6px', background: green, color: '#000', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: '800', zIndex: 2 }}>Yours</div>)}
                     <button onClick={(e) => { e.stopPropagation(); handleToggleBag(p) }}
-                      style={{ position: 'absolute', top: '6px', right: '6px', background: isInBag(p.id) ? green : 'rgba(0,0,0,0.6)', color: isInBag(p.id) ? '#000' : '#fff', border: 'none', borderRadius: '8px', padding: '2px 7px', cursor: 'pointer', fontSize: '11px', fontWeight: '700', zIndex: 2, display: 'flex', alignItems: 'center', gap: '3px', backdropFilter: 'blur(4px)', lineHeight: 1.4 }}>
-                      🛍️ {formatBagCount(bagCounts[p.id] || 0)}
+                      style={{ position: 'absolute', top: '6px', right: '6px', background: 'rgba(0,0,0,0.65)', color: '#fff', border: isInBag(p.id) ? `1px solid ${green}` : '1px solid rgba(255,255,255,0.25)', borderRadius: '8px', padding: '2px 7px', cursor: 'pointer', fontSize: '11px', fontWeight: '700', zIndex: 2, display: 'flex', alignItems: 'center', gap: '3px', backdropFilter: 'blur(4px)', lineHeight: 1.4 }}>
+                      {isInBag(p.id) ? '✓' : '🛍️'} {formatBagCount(bagCounts[p.id]?.baggedCount || 0)}
                     </button>
+                    {(p.salesCount || 0) > 0 && (
+                      <div style={{ position: 'absolute', top: '30px', right: '6px', background: 'rgba(0,0,0,0.65)', color: '#fff', border: '1px solid rgba(173,255,47,0.4)', borderRadius: '8px', padding: '2px 7px', fontSize: '11px', fontWeight: '700', zIndex: 2, display: 'flex', alignItems: 'center', gap: '3px', backdropFilter: 'blur(4px)', lineHeight: 1.4 }}>
+                        ✓ {formatBagCount(p.salesCount || 0)} bought
+                      </div>
+                    )}
 
                     <img src={p.imageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
                       style={{ width: '100%', height: '160px', objectFit: 'cover', opacity: p.outOfStock ? 0.5 : 1 }} />
@@ -726,6 +740,16 @@ function BrowsePage() {
               <h2 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: '800', color: '#fff' }}>{surveyProduct.name}</h2>
               <p style={{ margin: '0 0 8px', color: '#888', fontSize: '13px' }}>{surveyProduct.businessName}</p>
               <p style={{ margin: '0 0 12px', fontWeight: '800', fontSize: '18px', color: green }}>UGX {surveyProduct.price}</p>
+              {(bagCounts[surveyProduct.id]?.baggedCount || 0) > 0 || (surveyProduct.salesCount || 0) > 0 ? (
+                <div style={{ display: 'flex', gap: '14px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                  {(bagCounts[surveyProduct.id]?.baggedCount || 0) > 0 && (
+                    <span style={{ color: '#aaa', fontSize: '13px', fontWeight: '700' }}>🛍️ {formatBagCount(bagCounts[surveyProduct.id]?.baggedCount || 0)} bagged</span>
+                  )}
+                  {(surveyProduct.salesCount || 0) > 0 && (
+                    <span style={{ color: '#8fd14f', fontSize: '13px', fontWeight: '700' }}>✓ {formatBagCount(surveyProduct.salesCount || 0)} bought</span>
+                  )}
+                </div>
+              ) : null}
               {surveyProduct.description && (
                 <p style={{ margin: '0 0 16px', color: '#aaa', fontSize: '13px', lineHeight: 1.6 }}>{surveyProduct.description}</p>
               )}
@@ -734,7 +758,7 @@ function BrowsePage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <button onClick={() => handleToggleBag(surveyProduct)}
                   style={{ padding: '12px', background: isInBag(surveyProduct.id) ? '#1a2a1a' : '#222', color: green, border: `1px solid ${green}`, borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '14px' }}>
-                  {isInBag(surveyProduct.id) ? '✓ In Bag — Tap to Remove' : `🛍️ Add to Bag (${formatBagCount(bagCounts[surveyProduct.id] || 0)} bagged)`}
+                  {isInBag(surveyProduct.id) ? '✓ In Bag — Tap to Remove' : `🛍️ Add to Bag (${formatBagCount(bagCounts[surveyProduct.id]?.baggedCount || 0)} bagged)`}
                 </button>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button onClick={() => { setMessageProduct(surveyProduct); setSurveyProduct(null) }}
