@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useSellerOrders, type SellerOrder } from './useSellerOrders.ts'
-import { updateDoc, doc, deleteDoc } from 'firebase/firestore'
+import { updateDoc, doc, deleteDoc, increment } from 'firebase/firestore'
 import { db } from './firebase'
 import ConfirmDialog from './ConfirmDialog'
 
@@ -48,7 +48,16 @@ function OrderHistory() {
 
   const updateOrderStatus = async (orderId: string, status: string) => {
     if (!userId) return
+    const order = orders.find(o => o.id === orderId)
     await updateDoc(doc(db, 'sellers', userId, 'orders', orderId), { status, read: true })
+    // Confirming the order = a real sale: bump the product's salesCount (social proof).
+    if (status === 'fulfilled' && order?.productId) {
+      try {
+        await updateDoc(doc(db, 'sellers', userId, 'products', order.productId), { salesCount: increment(1) })
+      } catch (err) {
+        console.warn('Failed to bump product salesCount:', err)
+      }
+    }
   }
 
   const handleDeleteOrder = async () => {
