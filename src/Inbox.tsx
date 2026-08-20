@@ -240,11 +240,11 @@ function Inbox() {
       </div>
 
       <div style={{ maxWidth: '640px', margin: '0 auto', padding: '16px' }}>
-        {/* Tabs */}
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+        {/* Tabs + quick shortcuts — horizontally scrollable like the Browse categories */}
+        <div className="rt-filters" style={{ display: 'flex', gap: '8px', marginBottom: '16px', overflowX: 'auto' }}>
           {(['all', 'unread'] as const).map(t => (
             <button key={t} onClick={() => { setFilter(t); setSelectedKey(null) }}
-              style={{ padding: '8px 18px', borderRadius: '999px', border: `1px solid ${filter === t ? green : '#333'}`, background: filter === t ? '#1a2a1a' : '#1a1a1a', color: filter === t ? green : '#aaa', fontWeight: '700', fontSize: '13px', cursor: 'pointer' }}>
+              style={{ padding: '8px 18px', borderRadius: '999px', border: `1px solid ${filter === t ? green : '#333'}`, background: filter === t ? '#1a2a1a' : '#1a1a1a', color: filter === t ? green : '#aaa', fontWeight: '700', fontSize: '13px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
               {t === 'all' ? 'All' : `Unread (${totalUnread})`}
             </button>
           ))}
@@ -253,7 +253,7 @@ function Inbox() {
           {isSeller && (
             <>
               <button onClick={() => navigate('/orders')}
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '999px', border: `1px solid ${pendingOrdersCount > 0 ? green : '#333'}`, background: pendingOrdersCount > 0 ? '#1a2a1a' : '#1a1a1a', color: '#fff', fontWeight: '700', fontSize: '13px', cursor: 'pointer' }}>
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '999px', border: `1px solid ${pendingOrdersCount > 0 ? green : '#333'}`, background: pendingOrdersCount > 0 ? '#1a2a1a' : '#1a1a1a', color: '#fff', fontWeight: '700', fontSize: '13px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
                 📦 Orders
                 {pendingOrdersCount > 0 && (
                   <span style={{ background: green, color: '#000', borderRadius: '999px', minWidth: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '800', padding: '0 6px', boxSizing: 'border-box' }}>
@@ -262,11 +262,11 @@ function Inbox() {
                 )}
               </button>
               <button onClick={() => navigate('/products')}
-                style={{ padding: '8px 14px', borderRadius: '999px', border: '1px solid #333', background: '#1a1a1a', color: '#aaa', fontWeight: '700', fontSize: '13px', cursor: 'pointer' }}>
+                style={{ padding: '8px 14px', borderRadius: '999px', border: '1px solid #333', background: '#1a1a1a', color: '#aaa', fontWeight: '700', fontSize: '13px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
                 🛍️ Products
               </button>
               <button onClick={() => navigate('/analytics')}
-                style={{ padding: '8px 14px', borderRadius: '999px', border: '1px solid #333', background: '#1a1a1a', color: '#aaa', fontWeight: '700', fontSize: '13px', cursor: 'pointer' }}>
+                style={{ padding: '8px 14px', borderRadius: '999px', border: '1px solid #333', background: '#1a1a1a', color: '#aaa', fontWeight: '700', fontSize: '13px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
                 📈 Analytics
               </button>
             </>
