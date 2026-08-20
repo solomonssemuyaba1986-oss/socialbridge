@@ -16,6 +16,8 @@ export type BuyerOrderFields = {
   transactionId?: string
   flwRef?: string
   paymentStatus?: string
+  /** Which product the order is for — used to credit product salesCount on fulfillment. */
+  productId?: string
 }
 
 /** One Firestore write — buyers are not allowed to patch orders after create (see firestore.rules). */
