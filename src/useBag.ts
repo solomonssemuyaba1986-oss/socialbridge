@@ -46,18 +46,34 @@ export async function incrementBagCount(productId: string, delta: number) {
   }
 }
 
-export async function getBagCounts(productIds: string[]): Promise<Record<string, number>> {
+export interface BagCountData {
+  count: number
+  baggedCount: number
+}
+
+/** Monotonic "people who have bagged this" counter — only ever goes up (on add). */
+export async function incrementBaggedCount(productId: string) {
+  try {
+    const ref = doc(db, 'bagCounts', productId)
+    await setDoc(ref, { baggedCount: firestoreIncrement(1) }, { merge: true })
+  } catch (e) {
+    console.warn('Failed to update bagged count:', e)
+  }
+}
+
+export async function getBagCounts(productIds: string[]): Promise<Record<string, BagCountData>> {
   if (productIds.length === 0) return {}
   try {
-    const result: Record<string, number> = {}
+    const result: Record<string, BagCountData> = {}
     const snap = await getDocs(collection(db, 'bagCounts'))
     snap.forEach(doc => {
       if (productIds.includes(doc.id)) {
-        result[doc.id] = doc.data().count || 0
+        const d = doc.data()
+        result[doc.id] = { count: d.count || 0, baggedCount: d.baggedCount || d.count || 0 }
       }
     })
     productIds.forEach(id => {
-      if (!(id in result)) result[id] = 0
+      if (!(id in result)) result[id] = { count: 0, baggedCount: 0 }
     })
     return result
   } catch (e) {
@@ -165,6 +181,7 @@ export function useBag() {
       if (prev.some(i => i.productId === item.productId)) return prev
       const newItem = { ...item, addedAt: Date.now(), quantity: 1 }
       incrementBagCount(item.productId, 1)
+      incrementBaggedCount(item.productId)
       const uid = uidRef.current
       if (uid) {
         setDoc(doc(db, 'users', uid, 'bag', item.productId), newItem).catch(err => {
