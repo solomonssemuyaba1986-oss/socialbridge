@@ -16,6 +16,7 @@ export interface SellerOrder {
   sourcePlatform?: string
   createdAt: { toDate?: () => Date } | null
   read?: boolean
+  productId?: string
 }
 
 export function isUnread(order: SellerOrder): boolean {
