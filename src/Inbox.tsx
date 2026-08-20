@@ -173,7 +173,7 @@ function Inbox() {
 
   const totalUnread = unreadMessages + unreadSellerConversations + unreadBuyerConversations
   const loading = messagesLoading || conversationsLoading || buyerConversationsLoading
-  const visible = filter === 'unread' ? threads.filter(t => t.unread) : threads
+  const visible = filter === 'unread' ? threads.filter(t => t.unread || t.key === selectedKey) : threads
   const selected = threads.find(t => t.key === selectedKey) || null
 
   const openChat = (key: string) => {
