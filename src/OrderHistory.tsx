@@ -4,6 +4,7 @@ import { useSellerOrders, type SellerOrder } from './useSellerOrders.ts'
 import { updateDoc, doc, deleteDoc, increment } from 'firebase/firestore'
 import { db } from './firebase'
 import ConfirmDialog from './ConfirmDialog'
+import { useSellerLive } from './sellerLive'
 
 const green = '#adff2f'
 
@@ -42,6 +43,7 @@ function OrderHistory() {
   const navigate = useNavigate()
   const location = useLocation()
   const { orders, loading, userId } = useSellerOrders()
+  const { pendingOrdersCount } = useSellerLive()
   const [filter, setFilter] = useState<'all' | 'pending' | 'fulfilled' | 'out_of_stock'>('pending')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<SellerOrder | null>(null)
@@ -120,9 +122,9 @@ function OrderHistory() {
                 }}>
                 <span>{item.icon}</span>
                 <span style={{ flex: 1 }}>{item.label}</span>
-                {item.label === 'Orders' && pendingCount > 0 && (
+                {item.label === 'Orders' && pendingOrdersCount > 0 && (
                   <span style={{ minWidth: '24px', height: '24px', borderRadius: '999px', background: green, color: '#000', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 900, padding: '0 6px', boxShadow: `0 0 0 2px rgba(173,255,47,0.2)` }}>
-                    {pendingCount}
+                    {pendingOrdersCount}
                   </span>
                 )}
               </button>
