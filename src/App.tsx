@@ -23,6 +23,7 @@ import LoadingScreen from './LoadingScreen.tsx'
 import RecoverPage from './RecoverPage.tsx'
 import HelpPage from './HelpPage.tsx'
 import TermsPage from './TermsPage.tsx'
+import { SellerLiveProvider } from './sellerLive.tsx'
 
 function BulkUploadWrapper() {
   const navigate = useNavigate()
@@ -79,7 +80,7 @@ function App() {
   )
 
   return (
-    <>
+    <SellerLiveProvider>
       {location.pathname !== '/terms' && <TopNav />}
       <Routes>
       <Route path="/" element={
@@ -105,7 +106,7 @@ function App() {
       <Route path="/help" element={<HelpPage />} />
       <Route path="/terms" element={<TermsPage />} />
       </Routes>
-    </>
+    </SellerLiveProvider>
   )
 }
 
