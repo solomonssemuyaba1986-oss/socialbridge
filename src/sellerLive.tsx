@@ -1,7 +1,8 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { collection, query, where, onSnapshot, doc } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth, db } from './firebase'
+import { playNewOrderAlert, playNewMessageAlert } from './orderAlerts'
 
 /**
  * Shared realtime seller overview — the single source of truth for the live
@@ -117,6 +118,25 @@ export function SellerLiveProvider({ children }: { children: ReactNode }) {
     unreadSellerConvo,
     unreadBuyerConvo,
   }), [isSeller, pendingOrdersCount, productsCount, unreadMessages, unreadSellerConvo, unreadBuyerConvo])
+
+  // Always-on notification sounds — a new order or new unread message beeps on ANY page.
+  // Baseline guard: existing pending/unread never re-trigger on load; only a genuine increase sounds.
+  const prevPendingRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (prevPendingRef.current !== null && pendingOrdersCount > prevPendingRef.current) {
+      playNewOrderAlert()
+    }
+    prevPendingRef.current = pendingOrdersCount
+  }, [pendingOrdersCount])
+
+  const totalUnread = unreadMessages + unreadSellerConvo + unreadBuyerConvo
+  const prevUnreadRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (prevUnreadRef.current !== null && totalUnread > prevUnreadRef.current) {
+      playNewMessageAlert()
+    }
+    prevUnreadRef.current = totalUnread
+  }, [totalUnread])
 
   return <SellerLiveContext.Provider value={value}>{children}</SellerLiveContext.Provider>
 }
