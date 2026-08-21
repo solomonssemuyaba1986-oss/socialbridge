@@ -654,11 +654,11 @@ function BrowsePage() {
                   <div onClick={() => handleCardClick(p)} style={{ cursor: 'pointer', position: 'relative' }}>
                     {p.sellerSlug === mySlug && mySlug && (<div style={{ position: 'absolute', top: '6px', left: '6px', background: green, color: '#000', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: '800', zIndex: 2 }}>Yours</div>)}
                     <button onClick={(e) => { e.stopPropagation(); handleToggleBag(p) }}
-                      style={{ position: 'absolute', top: '6px', right: '6px', background: 'rgba(0,0,0,0.65)', color: '#fff', border: isInBag(p.id) ? `1px solid ${green}` : '1px solid rgba(255,255,255,0.25)', borderRadius: '8px', padding: '2px 7px', cursor: 'pointer', fontSize: '11px', fontWeight: '700', zIndex: 2, display: 'flex', alignItems: 'center', gap: '3px', backdropFilter: 'blur(4px)', lineHeight: 1.4 }}>
-                      {isInBag(p.id) ? '✓' : '🛍️'} {formatBagCount(bagCounts[p.id]?.baggedCount || 0)}
+                      style={{ position: 'absolute', top: '6px', right: '6px', background: isInBag(p.id) ? '#1a3a1a' : 'rgba(0,0,0,0.65)', color: '#fff', border: isInBag(p.id) ? `1px solid ${green}` : '1px solid rgba(255,255,255,0.25)', borderRadius: '8px', padding: '2px 7px', cursor: 'pointer', fontSize: '11px', fontWeight: '700', zIndex: 2, display: 'flex', alignItems: 'center', gap: '3px', backdropFilter: 'blur(4px)', lineHeight: 1.4, whiteSpace: 'nowrap' }}>
+                      🛍️ {formatBagCount(bagCounts[p.id]?.baggedCount || 0)}
                     </button>
                     {(p.salesCount || 0) > 0 && (
-                      <div style={{ position: 'absolute', top: '30px', right: '6px', background: 'rgba(0,0,0,0.65)', color: '#fff', border: '1px solid rgba(173,255,47,0.4)', borderRadius: '8px', padding: '2px 7px', fontSize: '11px', fontWeight: '700', zIndex: 2, display: 'flex', alignItems: 'center', gap: '3px', backdropFilter: 'blur(4px)', lineHeight: 1.4 }}>
+                      <div style={{ position: 'absolute', top: '30px', right: '6px', background: 'rgba(0,0,0,0.65)', color: '#fff', border: '1px solid rgba(173,255,47,0.4)', borderRadius: '8px', padding: '2px 7px', fontSize: '11px', fontWeight: '700', zIndex: 2, display: 'flex', alignItems: 'center', gap: '3px', backdropFilter: 'blur(4px)', lineHeight: 1.4, whiteSpace: 'nowrap' }}>
                         ✓ {formatBagCount(p.salesCount || 0)} bought
                       </div>
                     )}
