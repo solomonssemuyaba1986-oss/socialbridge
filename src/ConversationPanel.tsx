@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 import { useConversation } from './useConversation'
 import { QUICK_REPLIES, SELLER_QUICK_REPLIES } from './quickReplies'
-import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder'
-import { auth, db } from './firebase'
+import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder'
+import { auth } from './firebase'
 import { notify } from './notifications'
 import { useDraft } from './useDraft'
 
@@ -86,24 +85,17 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
       setOrderSuccess(true)
       showFeedback(notify.orderSent, 'success')
 
-      // Persist an order confirmation into the chat thread (visible to both sides)
-      if (conversationId) {
-        try {
-          await addDoc(collection(db, 'conversations', conversationId, 'messages'), {
-            senderId: buyerId,
-            type: 'order',
-            text: `📦 Order placed — Ref: ${orderId || ''}`,
-            orderId: orderId || '',
-            productName,
-            productPrice,
-            quantity,
-            status: 'sent',
-            createdAt: serverTimestamp(),
-          })
-        } catch (err) {
-          console.warn('Failed to write order message:', err)
-        }
-      }
+      // Persist the order into the chat thread (creates it if needed) — visible to both sides
+      await createOrderConversation({
+        sellerId,
+        buyerId,
+        sellerName: sellerName || 'Seller',
+        buyerName: buyerNameOrder,
+        orderId: orderId || '',
+        productName: productName || '',
+        productPrice: productPrice || '',
+        quantity,
+      })
 
       setTimeout(() => {
         setBuyerNameOrder(''); setQuantity('1'); setDeliveryArea(''); setOrderMessage('')
