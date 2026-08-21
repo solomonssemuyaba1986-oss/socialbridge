@@ -11,7 +11,7 @@ import { useGuestOTP } from './useGuestOTP.ts'
 import { useBag, getBagCounts, type BagCountData } from './useBag'
 import { useSellerStats, getSalesLabel, formatRating, renderStars, getBadgeStatusLabel } from './useSellerStats.ts'
 import { QUICK_REPLIES } from './quickReplies'
-import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder.ts'
+import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder.ts'
 import { track } from './tracking'
 import ConfirmDialog from './ConfirmDialog'
 import ProductPreview from './ProductPreview'
@@ -577,7 +577,7 @@ const handleOrder = async () => {
   const buyerUid = auth.currentUser.uid
 
   try {
-    await createBuyerOrder(sellerId, {
+    const { orderId } = await createBuyerOrder(sellerId, {
       buyerName,
       buyerUid,
       productName: orderProduct.name,
@@ -589,6 +589,17 @@ const handleOrder = async () => {
       read: false,
       sourcePlatform,
       createdAt: new Date(),
+    })
+
+    await createOrderConversation({
+      sellerId,
+      buyerId: buyerUid,
+      sellerName: seller?.businessName || 'Seller',
+      buyerName,
+      orderId,
+      productName: orderProduct.name,
+      productPrice: orderProduct.price,
+      quantity,
     })
 
     await incrementProductOrderCount(sellerId, orderProduct.id, orderProduct.orderCount || 0)
