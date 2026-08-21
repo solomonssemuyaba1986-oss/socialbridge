@@ -5,7 +5,7 @@ import { db, auth } from './firebase'
 import { useNavigate } from 'react-router-dom'
 import { track, detectSource } from './tracking'
 import { useBag, getBagCounts, type BagCountData } from './useBag'
-import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder'
+import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder'
 import { useGuestOTP } from './useGuestOTP'
 import { QUICK_REPLIES } from './quickReplies'
 import { getMainCategories } from './categories'
@@ -150,7 +150,7 @@ function BrowsePage() {
     if (!buyerName.trim() || !deliveryArea.trim() || !orderProduct) return
     const sourcePlatform = detectSource()
     try {
-      await createBuyerOrder(orderProduct.sellerId, {
+      const { orderId } = await createBuyerOrder(orderProduct.sellerId, {
         buyerName: buyerName.trim(),
         buyerUid: auth.currentUser.uid,
         productName: orderProduct.name,
@@ -162,6 +162,16 @@ function BrowsePage() {
         read: false,
         sourcePlatform,
         createdAt: new Date(),
+      })
+      await createOrderConversation({
+        sellerId: orderProduct.sellerId,
+        buyerId: auth.currentUser.uid,
+        sellerName: orderProduct.businessName,
+        buyerName: buyerName.trim(),
+        orderId,
+        productName: orderProduct.name,
+        productPrice: orderProduct.price,
+        quantity,
       })
       await incrementProductOrderCount(orderProduct.sellerId, orderProduct.id, orderProduct.orderCount || 0)
       track('order_placed', auth.currentUser.uid, sourcePlatform, { productId: orderProduct.id, productName: orderProduct.name, sellerId: orderProduct.sellerId })
