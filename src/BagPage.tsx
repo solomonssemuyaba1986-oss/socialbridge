@@ -4,7 +4,7 @@ import { collection, getDocs, query, where, addDoc, serverTimestamp, getDoc, doc
 import { db, auth } from './firebase'
 import { track, detectSource } from './tracking'
 import { useBag } from './useBag'
-import { createBuyerOrder, incrementProductOrderCount } from './createBuyerOrder'
+import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder'
 import { useGuestOTP } from './useGuestOTP'
 import { useDraft } from './useDraft'
 import { QUICK_REPLIES } from './quickReplies'
@@ -133,7 +133,7 @@ function BagPage() {
     if (!buyerName.trim() || !deliveryArea.trim() || !orderTarget) return
     const sourcePlatform = detectSource()
     try {
-      await createBuyerOrder(orderTarget.sellerId, {
+      const { orderId } = await createBuyerOrder(orderTarget.sellerId, {
         buyerName: buyerName.trim(),
         buyerUid: auth.currentUser.uid,
         productName: orderTarget.name,
@@ -145,6 +145,16 @@ function BagPage() {
         read: false,
         sourcePlatform,
         createdAt: new Date(),
+      })
+      await createOrderConversation({
+        sellerId: orderTarget.sellerId,
+        buyerId: auth.currentUser.uid,
+        sellerName: orderTarget.businessName,
+        buyerName: buyerName.trim(),
+        orderId,
+        productName: orderTarget.name,
+        productPrice: orderTarget.price,
+        quantity: orderQty,
       })
       await incrementProductOrderCount(orderTarget.sellerId, orderTarget.id, orderTarget.orderCount || 0)
       track('order_placed', auth.currentUser.uid, sourcePlatform, { productId: orderTarget.id, productName: orderTarget.name, sellerId: orderTarget.sellerId })
