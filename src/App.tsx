@@ -81,7 +81,7 @@ function App() {
 
   return (
     <SellerLiveProvider>
-      {location.pathname !== '/terms' && <TopNav />}
+      {location.pathname !== '/terms' && <TopNav variant={location.pathname === '/bag' ? 'bag' : 'default'} />}
       <Routes>
       <Route path="/" element={
         !signedIn ? <SignIn /> :
