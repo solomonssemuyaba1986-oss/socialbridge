@@ -195,11 +195,11 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onRefresh, onPr
         {!isOwner && (
           <>
             <button onClick={(e) => { e.stopPropagation(); onToggleBag() }}
-              style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(0,0,0,0.65)', color: '#fff', border: inBag ? `1px solid ${green}` : '1px solid rgba(255,255,255,0.25)', borderRadius: '8px', padding: '3px 8px', cursor: 'pointer', fontSize: '11px', fontWeight: '700', zIndex: 2, display: 'flex', alignItems: 'center', gap: '3px', backdropFilter: 'blur(4px)', lineHeight: 1.4 }}>
-              {inBag ? '✓' : '🛍️'} {formatCount(bagged)}
+              style={{ position: 'absolute', top: '8px', right: '8px', background: inBag ? '#1a3a1a' : 'rgba(0,0,0,0.65)', color: '#fff', border: inBag ? `1px solid ${green}` : '1px solid rgba(255,255,255,0.25)', borderRadius: '8px', padding: '3px 8px', cursor: 'pointer', fontSize: '11px', fontWeight: '700', zIndex: 2, display: 'flex', alignItems: 'center', gap: '3px', backdropFilter: 'blur(4px)', lineHeight: 1.4, whiteSpace: 'nowrap' }}>
+              🛍️ {formatCount(bagged)}
             </button>
             {sold > 0 && (
-              <div style={{ position: 'absolute', top: '34px', right: '8px', background: 'rgba(0,0,0,0.65)', color: '#fff', border: '1px solid rgba(173,255,47,0.4)', borderRadius: '8px', padding: '3px 8px', fontSize: '11px', fontWeight: '700', zIndex: 2, display: 'flex', alignItems: 'center', gap: '3px', backdropFilter: 'blur(4px)', lineHeight: 1.4 }}>
+              <div style={{ position: 'absolute', top: '34px', right: '8px', background: 'rgba(0,0,0,0.65)', color: '#fff', border: '1px solid rgba(173,255,47,0.4)', borderRadius: '8px', padding: '3px 8px', fontSize: '11px', fontWeight: '700', zIndex: 2, display: 'flex', alignItems: 'center', gap: '3px', backdropFilter: 'blur(4px)', lineHeight: 1.4, whiteSpace: 'nowrap' }}>
                 ✓ {formatCount(sold)} bought
               </div>
             )}
