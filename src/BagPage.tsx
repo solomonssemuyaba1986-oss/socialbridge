@@ -10,6 +10,8 @@ import { useDraft } from './useDraft'
 import { QUICK_REPLIES } from './quickReplies'
 
 const green = '#adff2f'
+const SUPPORT_WHATSAPP = (import.meta.env.VITE_SUPPORT_WHATSAPP || '256703174968').trim()
+const SUPPORT_EMAIL = 'rachettcommerce@gmail.com'
 
 function formatCount(n: number) {
   if (n < 1000) return String(n)
@@ -290,6 +292,16 @@ function BagPage() {
           <span style={{ color: '#888', fontSize: '14px' }}>Total</span>
           <span style={{ fontWeight: '800', fontSize: '18px', color: green }}>UGX {total.toLocaleString()}</span>
         </div>
+
+        {/* Bag support row */}
+        <div style={{ marginTop: '16px', padding: '16px', background: '#1a1a1a', borderRadius: '12px', border: '1px solid #222', textAlign: 'center' }}>
+          <p style={{ margin: '0 0 10px', color: '#888', fontSize: '13px' }}>❓ Need help with your bag or an order?</p>
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button onClick={() => navigate('/help?topic=bag')} style={{ padding: '8px 14px', background: '#222', color: '#fff', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', whiteSpace: 'nowrap' }}>📖 Help Center</button>
+            <a href={`https://wa.me/${SUPPORT_WHATSAPP}`} target="_blank" rel="noreferrer" style={{ padding: '8px 14px', background: '#222', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontSize: '12px', fontWeight: '700', textDecoration: 'none', whiteSpace: 'nowrap' }}>💬 WhatsApp us</a>
+            <a href={`mailto:${SUPPORT_EMAIL}`} style={{ padding: '8px 14px', background: '#222', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontSize: '12px', fontWeight: '700', textDecoration: 'none', whiteSpace: 'nowrap' }}>✉️ Email</a>
+          </div>
+        </div>
       </div>
 
       {/* Order Modal */}
@@ -305,6 +317,7 @@ function BagPage() {
                 </div>
                 <h3 style={{ color: '#fff', fontWeight: '800', fontSize: '18px', margin: '0 0 8px' }}>Order Sent!</h3>
                 <p style={{ color: '#888', fontSize: '14px', margin: 0 }}>The seller will contact you to confirm delivery.</p>
+                <button onClick={() => navigate('/inbox')} style={{ marginTop: '14px', padding: '10px 16px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>Track it in your Inbox →</button>
               </div>
             ) : (
               <>
