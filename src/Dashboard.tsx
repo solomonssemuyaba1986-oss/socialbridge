@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { doc, getDoc, collection, getDocs, updateDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
@@ -98,16 +98,6 @@ function Dashboard() {
     { label: 'Reviews', path: '/dashboard', icon: '⭐' },
   ]
 
-  const playNewOrderAlert = useCallback(() => {
-    try {
-      const audio = new Audio('/notification.mp3')
-      audio.volume = 0.7
-      audio.play().catch(() => {})
-    } catch {
-      // no sound file
-    }
-  }, [])
-
   const { orders, loading: ordersLoading } = useSellerOrders()
 
   const { pendingOrdersCount, unreadMessages: liveUnreadMessages, unreadSellerConvo, unreadBuyerConvo } = useSellerLive()
@@ -137,15 +127,7 @@ function Dashboard() {
     }
   }, [pendingOrders.length, ordersLoading])
 
-  // Sound — fires only when the pending (not-yet-confirmed) order count increases.
-  const prevPendingRef = useRef<number | null>(null)
-  useEffect(() => {
-    if (ordersLoading) return
-    if (prevPendingRef.current !== null && pendingOrders.length > prevPendingRef.current) {
-      playNewOrderAlert()
-    }
-    prevPendingRef.current = pendingOrders.length
-  }, [pendingOrders.length, ordersLoading, playNewOrderAlert])
+  // Notification sounds now live in SellerLiveProvider (global, any page) — Dashboard keeps only the spotlight.
 
   // Auto-hide the welcome greeting after a few seconds
   useEffect(() => {
