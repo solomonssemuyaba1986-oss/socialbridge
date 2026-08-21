@@ -69,7 +69,7 @@ export async function getBagCounts(productIds: string[]): Promise<Record<string,
     snap.forEach(doc => {
       if (productIds.includes(doc.id)) {
         const d = doc.data()
-        result[doc.id] = { count: d.count || 0, baggedCount: d.baggedCount || d.count || 0 }
+        result[doc.id] = { count: Math.max(0, d.count || 0), baggedCount: Math.max(0, d.baggedCount ?? d.count ?? 0) }
       }
     })
     productIds.forEach(id => {
