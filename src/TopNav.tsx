@@ -71,8 +71,10 @@ function TopNav({ variant = 'default' }: { variant?: 'default' | 'bag' }) {
                   </span>
                 )}
               </button>
-              {(!isBag || isSeller) && (
+              {isSeller ? (
                 <button onClick={() => navigate('/dashboard')} style={{ background: 'transparent', color: '#fff', border: '1px solid #333', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Manage Store</button>
+              ) : (
+                <button onClick={() => navigate('/setup')} style={{ background: green, color: '#000', border: 'none', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>🛍️ Become a seller</button>
               )}
             </>
           )}
