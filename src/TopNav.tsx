@@ -3,11 +3,17 @@ import { useNavigate } from 'react-router-dom'
 import { auth, googleProvider, facebookProvider, appleProvider } from './firebase'
 import {signInWithPopup } from 'firebase/auth'
 import { notify } from './notifications'
+import { useSellerLive } from './sellerLive'
 
-function TopNav() {
+function TopNav({ variant = 'default' }: { variant?: 'default' | 'bag' }) {
   const navigate = useNavigate()
   const user = auth.currentUser
   const green = '#adff2f'
+  const isBag = variant === 'bag'
+
+  // Live unread badge for the Inbox button (works for buyers & sellers)
+  const { isSeller, unreadMessages, unreadSellerConvo, unreadBuyerConvo } = useSellerLive()
+  const inboxUnread = unreadMessages + unreadSellerConvo + unreadBuyerConvo
 
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [loginLoading, setLoginLoading] = useState('')
@@ -39,7 +45,7 @@ function TopNav() {
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button onClick={() => navigate('/help')} style={{ background: 'transparent', color: '#888', border: '1px solid #2a2a2a', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>❓ Need help?</button>
+          <button onClick={() => navigate(isBag ? '/help?topic=bag' : '/help')} style={{ background: 'transparent', color: '#888', border: '1px solid #2a2a2a', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>{isBag ? '❓ Bag help?' : '❓ Need help?'}</button>
           <button onClick={() => navigate('/feedback')} style={{ background: 'transparent', color: green, border: '1px solid #2a2a2a', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>💡 Feedback</button>
 
           {!user && (
@@ -57,8 +63,17 @@ function TopNav() {
 
           {user && (
             <>
-              <button onClick={() => navigate('/inbox')} style={{ background: 'transparent', color: '#fff', border: '1px solid #333', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>💬 Inbox</button>
-              <button onClick={() => navigate('/dashboard')} style={{ background: 'transparent', color: '#fff', border: '1px solid #333', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Manage Store</button>
+              <button onClick={() => navigate('/inbox')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', color: '#fff', border: '1px solid #333', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
+                💬 Inbox
+                {inboxUnread > 0 && (
+                  <span style={{ background: green, color: '#000', borderRadius: '999px', minWidth: 20, height: 20, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, padding: '0 6px', boxSizing: 'border-box' }}>
+                    {inboxUnread}
+                  </span>
+                )}
+              </button>
+              {(!isBag || isSeller) && (
+                <button onClick={() => navigate('/dashboard')} style={{ background: 'transparent', color: '#fff', border: '1px solid #333', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Manage Store</button>
+              )}
             </>
           )}
         </div>
