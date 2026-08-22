@@ -68,6 +68,9 @@ function BrowsePage() {
   const [guestMessageSent, setGuestMessageSent] = useState(false)
   const { state: otpState, requestOTP, verifyOTP, reset: resetOTP } = useGuestOTP()
   const clickTimerRef = useRef<number | null>(null)
+  const cardSwipeStartRef = useRef<{ id: string; x: number; y: number } | null>(null)
+  const swipeSuppressRef = useRef(false)
+  const [cardImgIndex, setCardImgIndex] = useState<Record<string, number>>({})
   const guestFileRef = useRef<HTMLInputElement | null>(null)
   const [guestImageUrl, setGuestImageUrl] = useState('')
   const [guestUploading, setGuestUploading] = useState(false)
@@ -100,7 +103,7 @@ function BrowsePage() {
         [p.id]: { count: Math.max(0, (prev[p.id]?.count || 0) - 1), baggedCount: prev[p.id]?.baggedCount || 0 },
       }))
     } else {
-      addToBag({ productId: p.id, productName: p.name, productPrice: p.price, imageUrl: p.imageUrl, sellerSlug: p.sellerSlug, sellerId: p.sellerId, businessName: p.businessName })
+      addToBag({ productId: p.id, productName: p.name, productPrice: p.price, imageUrl: p.imageUrl, images: p.images?.length ? p.images : (p.imageUrl ? [p.imageUrl] : []), sellerSlug: p.sellerSlug, sellerId: p.sellerId, businessName: p.businessName })
       setBagCounts(prev => ({
         ...prev,
         [p.id]: { count: (prev[p.id]?.count || 0) + 1, baggedCount: (prev[p.id]?.baggedCount || 0) + 1 },
@@ -136,6 +139,50 @@ function BrowsePage() {
   const getSurveyImages = (p: Product) => {
     if (p.images && p.images.length > 0) return p.images
     return p.imageUrl ? [p.imageUrl] : []
+  }
+
+  // Pinterest-style swipeable card image: multi-image products swipe horizontally in place.
+  const renderCardImages = (p: Product, height: number) => {
+    const imgs = getSurveyImages(p)
+    if (imgs.length <= 1) {
+      return (
+        <img src={imgs[0] || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
+          style={{ width: '100%', height, objectFit: 'cover', opacity: p.outOfStock ? 0.5 : 1 }} />
+      )
+    }
+    const idx = Math.min(cardImgIndex[p.id] || 0, imgs.length - 1)
+    return (
+      <div className="rt-swipe"
+        onPointerDown={(e) => { cardSwipeStartRef.current = { id: p.id, x: e.clientX, y: e.clientY } }}
+        onPointerUp={(e) => {
+          const s = cardSwipeStartRef.current
+          cardSwipeStartRef.current = null
+          if (s && s.id === p.id && Math.abs(e.clientX - s.x) > 10 && Math.abs(e.clientX - s.x) > Math.abs(e.clientY - s.y)) {
+            swipeSuppressRef.current = true
+          }
+        }}
+        onClick={(e) => {
+          // A swipe just happened — don't bubble a click into navigate/survey.
+          if (swipeSuppressRef.current) {
+            swipeSuppressRef.current = false
+            e.stopPropagation()
+          }
+        }}
+        onScroll={(e) => {
+          const el = e.currentTarget
+          const i = Math.round(el.scrollLeft / el.clientWidth)
+          setCardImgIndex(prev => (prev[p.id] === i ? prev : { ...prev, [p.id]: i }))
+        }}
+        style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', cursor: 'pointer', position: 'relative' }}>
+        {imgs.map((img, i) => (
+          <img key={`${p.id}-${i}`} src={img} alt={p.name} draggable={false}
+            style={{ width: '100%', flex: '0 0 100%', height, objectFit: 'cover', scrollSnapAlign: 'start', opacity: p.outOfStock ? 0.5 : 1 }} />
+        ))}
+        <div style={{ position: 'absolute', bottom: '6px', right: '6px', background: 'rgba(0,0,0,0.6)', color: '#fff', padding: '2px 7px', borderRadius: '12px', fontSize: '10px', fontWeight: '700', zIndex: 2, backdropFilter: 'blur(4px)', lineHeight: 1.4 }}>
+          {idx + 1}/{imgs.length}
+        </div>
+      </div>
+    )
   }
 
   const closeSurvey = () => {
@@ -661,8 +708,7 @@ function BrowsePage() {
                       {p.sellerSlug === mySlug && mySlug && (
                       <div style={{ position: 'absolute', top: '6px', left: '6px', background: green, color: '#000', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: '800', zIndex: 2 }}>Yours</div>
                     )}
-                    <img src={p.imageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
-                        style={{ width: '100%', height: '120px', objectFit: 'cover', opacity: p.outOfStock ? 0.5 : 1 }} />
+                    {renderCardImages(p, 120)}
                       <div style={{ padding: '10px' }}>
                         <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '12px', color: '#fff', lineHeight: '1.2' }}>{p.name}</p>
                         <p style={{ margin: 0, fontWeight: '800', color: green, fontSize: '12px' }}>UGX {p.price}</p>
@@ -697,13 +743,7 @@ function BrowsePage() {
                       </div>
                     )}
 
-                    <img src={p.imageUrl || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
-                      style={{ width: '100%', height: '160px', objectFit: 'cover', opacity: p.outOfStock ? 0.5 : 1 }} />
-                    {getSurveyImages(p).length > 1 && (
-                      <div style={{ position: 'absolute', bottom: '6px', right: '6px', background: 'rgba(0,0,0,0.6)', color: '#fff', padding: '2px 7px', borderRadius: '12px', fontSize: '10px', fontWeight: '700', zIndex: 2, backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', gap: '3px', lineHeight: 1.4 }}>
-                        📷 {getSurveyImages(p).length}
-                      </div>
-                    )}
+                    {renderCardImages(p, 160)}
                     <div style={{ padding: '12px' }}>
                       <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: '#fff' }}>{p.name}</p>
                       <p style={{ margin: '0 0 8px', color: '#555', fontSize: '12px' }}>{p.businessName}</p>
