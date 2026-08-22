@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useRef, useState, useMemo, type ChangeEvent } from 'react'
 import { useConversation } from './useConversation'
 import { QUICK_REPLIES, SELLER_QUICK_REPLIES } from './quickReplies'
 import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder'
@@ -23,7 +23,7 @@ type Props = {
 }
 
 export default function ConversationPanel({ sellerId, buyerId, sellerName, buyerName, productName, productPrice, productImage, productId, orderCount }: Props) {
-  const { messages, loading, sendMessage, conversationId } = useConversation(sellerId, buyerId)
+  const { messages, loading, sendMessage, sendImageBatch, conversationId } = useConversation(sellerId, buyerId)
   const { text, setText, clearDraft } = useDraft(conversationId ? `convo_${conversationId}` : 'none')
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [showOrderModal, setShowOrderModal] = useState(false)
@@ -39,7 +39,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
   const listRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [uploadingImage, setUploadingImage] = useState(false)
-  const [pendingImage, setPendingImage] = useState<string | null>(null)
+  const [pendingImages, setPendingImages] = useState<string[]>([])
   const [previewImage, setPreviewImage] = useState<string | null>(null)
 
   const showFeedback = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -125,25 +125,50 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
     el.scrollTop = el.scrollHeight
   }, [messages, loading])
 
+  const PHOTO_CLUSTER_WINDOW_MS = 3 * 60 * 1000
+
+  // Consecutive photo-only messages (same sender, within the window) become one compact cluster.
+  const clusters = useMemo(() => {
+    const isPhotoOnly = (m: any) =>
+      m.type === 'image' && m.imageUrl && !(m.text && m.text !== '📷 Photo')
+    const result: ({ kind: 'images'; messages: any[] } | { kind: 'single'; message: any })[] = []
+    for (const m of messages) {
+      if (!isPhotoOnly(m)) {
+        result.push({ kind: 'single', message: m })
+        continue
+      }
+      const prev = result[result.length - 1]
+      if (prev && prev.kind === 'images' && prev.messages.length > 0) {
+        const last = prev.messages[prev.messages.length - 1]
+        const t1 = last.createdAt?.toDate?.()?.getTime() || 0
+        const t2 = m.createdAt?.toDate?.()?.getTime() || 0
+        if (last.senderId === m.senderId && t2 - t1 <= PHOTO_CLUSTER_WINDOW_MS) {
+          prev.messages.push(m)
+          continue
+        }
+      }
+      result.push({ kind: 'images', messages: [m] })
+    }
+    return result
+  }, [messages])
+
   const handleSend = async (newText?: string) => {
     const messageText = (newText !== undefined ? newText : text).trim()
-    if (!messageText && !pendingImage) return
+    if (!messageText && pendingImages.length === 0) return
     const senderId = auth.currentUser?.uid
     if (!senderId) return
-    if (senderId === sellerId && sellerId === buyerId) {
+    if (senderId === sellerId && senderId === buyerId) {
       showFeedback("You can't message your self.", 'error')
       return
     }
     try {
-      await sendMessage(
-        senderId,
-        messageText || '📷 Photo',
-        sellerName || 'Seller',
-        buyerName || 'Buyer',
-        pendingImage ? { imageUrl: pendingImage, type: 'image' } : undefined
-      )
+      if (pendingImages.length > 0) {
+        await sendImageBatch(senderId, pendingImages, messageText || '📷 Photo', sellerName || 'Seller', buyerName || 'Buyer')
+      } else {
+        await sendMessage(senderId, messageText, sellerName || 'Seller', buyerName || 'Buyer')
+      }
       clearDraft()
-      setPendingImage(null)
+      setPendingImages([])
       setShowQuickReplies(false)
     } catch (err) {
       console.error('Failed to send conversation message:', err)
@@ -163,7 +188,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
     setUploadingImage(true)
     try {
       const url = await uploadImageToCloudinary(file)
-      setPendingImage(url) // stage it — nothing is sent until you hit Send
+      setPendingImages(prev => [...prev, url]) // stage it — nothing is sent until you hit Send
     } catch (err) {
       console.error('Photo upload failed:', err)
       showFeedback(notify.messageFailed, 'error')
@@ -210,7 +235,34 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
         ) : messages.length === 0 ? (
           <div style={{ color: '#666' }}>No messages yet</div>
         ) : (
-          messages.map((m: any) => {
+          clusters.map((c: any, ci: number) => {
+            if (c.kind === 'images' && c.messages.length > 1) {
+              const last = c.messages[c.messages.length - 1]
+              const isSeller = last.senderId === sellerId
+              const isMe = last.senderId === auth.currentUser?.uid
+              const borderColor = isSeller ? '#3399ff' : '#ff4444'
+              const senderName = isMe ? 'Me' : (isSeller ? (sellerName || 'Seller') : (buyerName || 'Buyer'))
+              const senderIcon = isMe ? '👤' : (isSeller ? '🏪' : '👤')
+              const status = last.status || 'sent'
+              const statusInfo = { sent: { color: '#adff2f', label: 'Sent' }, delivered: { color: '#3399ff', label: 'Delivered' }, seen: { color: '#00e5ff', label: 'Seen' } }[status as 'sent' | 'delivered' | 'seen'] || { color: '#adff2f', label: 'Sent' }
+              const cols = Math.min(c.messages.length, 3)
+              return (
+                <div key={`img-${ci}`} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={{ fontSize: 12, color: borderColor, fontWeight: 600 }}>{senderIcon} {senderName}</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 6, maxWidth: cols === 1 ? 240 : 360 }}>
+                    {c.messages.map((m: any) => (
+                      <img key={m.id} src={m.imageUrl} alt="photo" onClick={() => setPreviewImage(m.imageUrl)}
+                        style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 10, border: `1px solid ${borderColor}`, cursor: 'zoom-in' }} />
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: '#666' }}>
+                    <span>{last.createdAt?.toDate ? last.createdAt.toDate().toLocaleString() : 'Now'}</span>
+                    {isMe && <span style={{ color: statusInfo.color, fontWeight: 700 }}>{statusInfo.label}</span>}
+                  </div>
+                </div>
+              )
+            }
+            const m = c.kind === 'images' ? c.messages[0] : c.message
             if (m.type === 'order') {
               return (
                 <div key={m.id} style={{ display: 'flex', justifyContent: 'center', margin: '4px 0' }}>
@@ -290,14 +342,26 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
           <button onClick={() => handleSend()} disabled={uploadingImage}
             style={{ background: uploadingImage ? '#3a4d2a' : '#adff2f', color: '#000', padding: '13px 22px', borderRadius: 16, border: 'none', fontWeight: 700, cursor: uploadingImage ? 'not-allowed' : 'pointer' }}>Send</button>
         </div>
-        {pendingImage ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#111', border: '1px solid #333', borderRadius: 12, padding: 8 }}>
-            <img src={pendingImage} alt="photo" style={{ width: 64, height: 64, borderRadius: 8, objectFit: 'cover' }} />
-            <div style={{ flex: 1, color: '#888', fontSize: 12, lineHeight: 1.4 }}>
-              {uploadingImage ? 'Uploading photo…' : 'Photo will send with your message.'}
+        {pendingImages.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: '#111', border: '1px solid #333', borderRadius: 12, padding: 8 }}>
+            <div style={{ display: 'flex', gap: 6, overflowX: 'auto' }}>
+              {pendingImages.map((url, i) => (
+                <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
+                  <img src={url} alt="photo" style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'cover' }} />
+                  <button onClick={() => setPendingImages(prev => prev.filter((_, j) => j !== i))} disabled={uploadingImage}
+                    style={{ position: 'absolute', top: -6, right: -6, background: '#ff4444', border: 'none', color: '#fff', borderRadius: '50%', width: 18, height: 18, cursor: uploadingImage ? 'not-allowed' : 'pointer', fontSize: 10, lineHeight: 1 }}>✕</button>
+                </div>
+              ))}
             </div>
-            <button onClick={() => setPendingImage(null)} disabled={uploadingImage}
-              style={{ width: 28, height: 28, background: '#ff4444', border: 'none', color: '#fff', borderRadius: '50%', cursor: uploadingImage ? 'not-allowed' : 'pointer', fontSize: 12, lineHeight: 1 }}>✕</button>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <span style={{ color: '#888', fontSize: 12, lineHeight: 1.4 }}>
+                {uploadingImage ? 'Uploading photo…' : `${pendingImages.length} photo${pendingImages.length > 1 ? 's' : ''} — sends together.`}
+              </span>
+              <button onClick={() => setPendingImages([])} disabled={uploadingImage}
+                style={{ padding: '4px 10px', background: 'transparent', color: '#ff6666', border: '1px solid #553333', borderRadius: 8, cursor: uploadingImage ? 'not-allowed' : 'pointer', fontSize: 12 }}>
+                Clear all
+              </button>
+            </div>
           </div>
         ) : uploadingImage ? (
           <p style={{ margin: 0, color: '#888', fontSize: 12 }}>Uploading photo…</p>
