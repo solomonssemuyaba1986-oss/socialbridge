@@ -23,6 +23,7 @@ import LoadingScreen from './LoadingScreen.tsx'
 import RecoverPage from './RecoverPage.tsx'
 import HelpPage from './HelpPage.tsx'
 import TermsPage from './TermsPage.tsx'
+import NearbyPage from './NearbyPage.tsx'
 import { SellerLiveProvider } from './sellerLive.tsx'
 import NetworkGuard from './NetworkGuard.tsx'
 
@@ -95,6 +96,7 @@ function App() {
       <Route path="/store/:slug" element={<StorePage />} />
       <Route path="/dashboard" element={signedIn ? <Dashboard /> : <Navigate to="/" />} />
       <Route path="/browse" element={<BrowsePage />} />
+      <Route path="/nearby" element={<NearbyPage />} />
       <Route path="/bag" element={<BagPage />} />
       <Route path="/bulk-upload" element={signedIn ? <BulkUploadWrapper /> : <Navigate to="/" />} />
       <Route path="/products" element={signedIn ? <ProductsPage /> : <Navigate to="/" />} />
