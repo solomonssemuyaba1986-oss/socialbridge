@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import {
-  collection, doc, addDoc, setDoc, getDoc, increment, updateDoc,
+  collection, doc, addDoc, setDoc, getDoc, increment, updateDoc, writeBatch,
   query, orderBy, onSnapshot, serverTimestamp
 } from 'firebase/firestore'
 import { db, auth } from './firebase'
@@ -111,5 +111,63 @@ export function useConversation(sellerId: string | null, buyerId: string | null)
     await addDoc(collection(db, 'conversations', conversationId, 'messages'), messageFields)
   }
 
-  return { messages, loading, sendMessage, conversationId }
+  /** Send multiple photos atomically as one compact batch. A caption rides on the first photo. */
+  const sendImageBatch = async (
+    senderId: string,
+    imageUrls: string[],
+    caption: string,
+    sellerName: string,
+    buyerName: string
+  ) => {
+    if (!conversationId || !sellerId || !buyerId || imageUrls.length === 0) return
+
+    const hasCaption = !!caption && caption !== '📷 Photo'
+    const batch = writeBatch(db)
+    const messagesRef = collection(db, 'conversations', conversationId, 'messages')
+
+    imageUrls.forEach((imageUrl, i) => {
+      const fields: Record<string, unknown> = {
+        senderId,
+        status: 'sent',
+        createdAt: serverTimestamp(),
+        imageUrl,
+        type: 'image',
+        text: hasCaption && i === 0 ? caption : '📷 Photo'
+      }
+      batch.set(doc(messagesRef), fields)
+    })
+
+    const convoRef = doc(db, 'conversations', conversationId)
+    const convoSnap = await getDoc(convoRef)
+
+    if (!convoSnap.exists()) {
+      batch.set(convoRef, {
+        sellerId, buyerId, sellerName, buyerName,
+        lastMessage: '📷 Photo',
+        lastMessageAt: serverTimestamp(),
+        lastMessageBy: senderId,
+        lastMessageStatus: 'sent',
+        unreadBySeller: senderId === buyerId,
+        unreadByBuyer: senderId === sellerId,
+        unreadBySellerCount: senderId === buyerId ? imageUrls.length : 0,
+        unreadByBuyerCount: senderId === sellerId ? imageUrls.length : 0
+      })
+    } else {
+      const patch: Record<string, unknown> = {
+        lastMessage: '📷 Photo',
+        lastMessageAt: serverTimestamp(),
+        lastMessageBy: senderId,
+        lastMessageStatus: 'sent',
+        unreadBySeller: senderId === buyerId,
+        unreadByBuyer: senderId === sellerId
+      }
+      if (senderId === buyerId) patch.unreadBySellerCount = increment(imageUrls.length)
+      if (senderId === sellerId) patch.unreadByBuyerCount = increment(imageUrls.length)
+      batch.update(convoRef, patch)
+    }
+
+    await batch.commit()
+  }
+
+  return { messages, loading, sendMessage, sendImageBatch, conversationId }
 }
