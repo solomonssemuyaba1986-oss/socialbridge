@@ -52,6 +52,7 @@ function BagPage() {
   const { state: otpState, requestOTP, verifyOTP, reset: resetOTP } = useGuestOTP()
   const sellerIdCache = useRef<Map<string, string>>(new Map())
   const [salesMap, setSalesMap] = useState<Record<string, number>>({})
+  const [previewItem, setPreviewItem] = useState<typeof items[number] | null>(null)
 
   // Fetch each item's sold count (social proof) — motivates completing the purchase
   useEffect(() => {
@@ -261,9 +262,9 @@ function BagPage() {
               style={{ background: '#1a1a1a', borderRadius: '12px', padding: '14px', border: '1px solid #222', display: 'flex', gap: '14px', alignItems: 'center' }}>
               <img src={item.imageUrl || 'https://placehold.co/80/1a1a1a/333333'} alt={item.productName}
                 style={{ width: '72px', height: '72px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0, cursor: 'pointer' }}
-                onClick={() => navigate(`/store/${item.sellerSlug}?productId=${item.productId}`)} />
+                onClick={() => setPreviewItem(item)} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: '#fff' }}>{item.productName}</p>
+                <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: '#fff', cursor: 'pointer' }} onClick={() => setPreviewItem(item)}>{item.productName}</p>
                 <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#888' }}>{item.businessName}</p>
                 <p style={{ margin: 0, fontWeight: '800', fontSize: '14px', color: green }}>UGX {item.productPrice}</p>
                 {(salesMap[item.productId] || 0) > 0 && (
@@ -469,6 +470,37 @@ function BagPage() {
             <button onClick={closeMessageModal}
               style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
               Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Product Preview Modal */}
+      {previewItem && (
+        <div onClick={() => setPreviewItem(null)}
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.92)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: '#1a1a1a', borderRadius: '16px', padding: '20px', width: '100%', maxWidth: '400px', border: '1px solid #222', maxHeight: '92vh', overflowY: 'auto', textAlign: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+              <button onClick={() => setPreviewItem(null)} style={{ background: 'transparent', border: 'none', color: '#666', fontSize: 20, cursor: 'pointer', padding: '0 4px' }}>✕</button>
+            </div>
+            <img src={previewItem.imageUrl || 'https://placehold.co/600x400/1a1a1a/333333'} alt={previewItem.productName}
+              style={{ width: '100%', height: '240px', objectFit: 'cover', borderRadius: '12px', marginBottom: '16px' }} />
+            <h3 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: '800', color: '#fff' }}>{previewItem.productName}</h3>
+            <p style={{ margin: '0 0 8px', color: '#888', fontSize: '13px' }}>{previewItem.businessName}</p>
+            <p style={{ margin: '0 0 10px', fontWeight: '800', fontSize: '16px', color: green }}>UGX {previewItem.productPrice}</p>
+            {(salesMap[previewItem.productId] || 0) > 0 && (
+              <p style={{ display: 'inline-block', margin: '0 0 18px', padding: '3px 10px', background: green, color: '#000', borderRadius: '999px', fontSize: '12px', fontWeight: '800', lineHeight: 1.4 }}>
+                ✓ {formatCount(salesMap[previewItem.productId] || 0)} bought
+              </p>
+            )}
+            <button onClick={() => navigate(`/store/${previewItem.sellerSlug}`)}
+              style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '10px', fontWeight: '800', cursor: 'pointer', fontSize: '15px', marginBottom: '8px' }}>
+              🏪 Visit seller
+            </button>
+            <button onClick={() => setPreviewItem(null)}
+              style={{ width: '100%', padding: '12px', background: 'transparent', color: '#888', border: '1px solid #333', borderRadius: '10px', cursor: 'pointer', fontSize: '14px' }}>
+              Close
             </button>
           </div>
         </div>
