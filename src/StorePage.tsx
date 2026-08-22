@@ -46,6 +46,7 @@ interface Product {
   price: string
   description: string
   imageUrl: string
+  images?: string[]
   category?: string
   subCategory?: string
   outOfStock?: boolean
@@ -501,7 +502,7 @@ const messageDeepLinkId = searchParams.get('messageId')
         [p.id]: { count: Math.max(0, (prev[p.id]?.count || 0) - 1), baggedCount: prev[p.id]?.baggedCount || 0 },
       }))
     } else {
-      addToBag({ productId: p.id, productName: p.name, productPrice: p.price, imageUrl: p.imageUrl, sellerSlug: seller?.slug || '', sellerId, businessName: seller?.businessName || '' })
+      addToBag({ productId: p.id, productName: p.name, productPrice: p.price, imageUrl: p.imageUrl, images: p.images?.length ? p.images : (p.imageUrl ? [p.imageUrl] : []), sellerSlug: seller?.slug || '', sellerId, businessName: seller?.businessName || '' })
       setBagCounts(prev => ({
         ...prev,
         [p.id]: { count: (prev[p.id]?.count || 0) + 1, baggedCount: (prev[p.id]?.baggedCount || 0) + 1 },
