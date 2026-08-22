@@ -1,10 +1,23 @@
+import { useState } from 'react'
+
 const green = '#adff2f'
 
 type Props = {
-  onRetry: () => void
+  onRetry: () => Promise<boolean>
 }
 
 function OfflineScreen({ onRetry }: Props) {
+  const [checking, setChecking] = useState(false)
+  const [stillOffline, setStillOffline] = useState(false)
+
+  const handleRetry = async () => {
+    setChecking(true)
+    setStillOffline(false)
+    const ok = await onRetry()
+    setChecking(false)
+    if (!ok) setStillOffline(true)
+  }
+
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 5000,
@@ -32,11 +45,16 @@ function OfflineScreen({ onRetry }: Props) {
         ))}
       </div>
 
-      <button onClick={onRetry}
-        style={{ padding: '14px 32px', background: green, color: '#000', border: 'none', borderRadius: 12, fontWeight: 800, cursor: 'pointer', fontSize: 15 }}>
-        🔁 Try again
+      <button onClick={handleRetry} disabled={checking}
+        style={{ padding: '14px 32px', background: checking ? '#333' : green, color: checking ? '#888' : '#000', border: 'none', borderRadius: 12, fontWeight: 800, cursor: checking ? 'not-allowed' : 'pointer', fontSize: 15 }}>
+        {checking ? '⏳ Checking…' : '🔁 Try again'}
       </button>
-      <p style={{ marginTop: 20, color: '#555', fontSize: 12 }}>
+      {stillOffline && (
+        <p style={{ marginTop: 14, color: '#ff4444', fontSize: 13, fontWeight: 600 }}>
+          ⚠️ Still offline — check your connection and try again.
+        </p>
+      )}
+      <p style={{ marginTop: stillOffline ? 4 : 20, color: '#555', fontSize: 12 }}>
         rachett resumes automatically when you're back online.
       </p>
     </div>
