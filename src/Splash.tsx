@@ -4,78 +4,86 @@ interface SplashProps {
   onDone: () => void
 }
 
-// Snapchat-style: white figure with a black outline so it pops on the green.
+// Snapchat-style: white figure with a smooth black halo so it pops on the green.
 function extractLogo(img: HTMLImageElement): string {
   const w = img.width
   const h = img.height
-  const canvas = document.createElement('canvas')
-  canvas.width = w
-  canvas.height = h
-  const ctx = canvas.getContext('2d')!
-  ctx.drawImage(img, 0, 0)
-  const pixels = ctx.getImageData(0, 0, w, h).data
+  const OUTLINE_R = 3
 
+  // 1) Read the raw pixels once
+  const src = document.createElement('canvas')
+  src.width = w
+  src.height = h
+  const sctx = src.getContext('2d')!
+  sctx.drawImage(img, 0, 0)
+  const pixels = sctx.getImageData(0, 0, w, h).data
+
+  // Slightly generous threshold so soft anti-aliased edges stay part of the figure.
   const isWhite = (x: number, y: number): boolean => {
     const i = (y * w + x) * 4
-    return (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3 > 200
+    return (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3 > 180
   }
 
-  const OUTLINE_R = 3
+  // 2) Bounding box of the figure (tight crop)
   let minX = w, minY = h, maxX = -1, maxY = -1
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       if (!isWhite(x, y)) continue
-      if (x - OUTLINE_R < minX) minX = x - OUTLINE_R
-      if (x + OUTLINE_R > maxX) maxX = x + OUTLINE_R
-      if (y - OUTLINE_R < minY) minY = y - OUTLINE_R
-      if (y + OUTLINE_R > maxY) maxY = y + OUTLINE_R
+      if (x < minX) minX = x
+      if (x > maxX) maxX = x
+      if (y < minY) minY = y
+      if (y > maxY) maxY = y
     }
   }
+  if (maxX < minX || maxY < minY) return src.toDataURL() // no white figure found
 
-  if (maxX < minX || maxY < minY) return canvas.toDataURL()
+  const fw = maxX - minX + 1
+  const fh = maxY - minY + 1
 
-  const outW = maxX - minX + 1
-  const outH = maxY - minY + 1
+  // 3) Clean white-figure mask
+  const mask = document.createElement('canvas')
+  mask.width = fw
+  mask.height = fh
+  const mctx = mask.getContext('2d')!
+  const maskData = mctx.createImageData(fw, fh)
+  const mp = maskData.data
+  for (let oy = 0; oy < fh; oy++) {
+    for (let ox = 0; ox < fw; ox++) {
+      const idx = (oy * fw + ox) * 4
+      if (isWhite(ox + minX, oy + minY)) {
+        mp[idx] = 255
+        mp[idx + 1] = 255
+        mp[idx + 2] = 255
+        mp[idx + 3] = 255
+      }
+    }
+  }
+  mctx.putImageData(maskData, 0, 0)
+
+  // 4) Same figure in black (for the halo)
+  const black = document.createElement('canvas')
+  black.width = fw
+  black.height = fh
+  const bctx = black.getContext('2d')!
+  bctx.fillStyle = '#000'
+  bctx.fillRect(0, 0, fw, fh)
+  bctx.globalCompositeOperation = 'destination-in'
+  bctx.drawImage(mask, 0, 0)
+
+  // 5) Output: white figure + a smooth circular black halo (16-direction halo,
+  //    not a blocky 3x3 square — that's what made the old outline look distorted).
   const out = document.createElement('canvas')
-  out.width = outW
-  out.height = outH
-  const outCtx = out.getContext('2d')!
-  const outData = outCtx.createImageData(outW, outH)
-  const outPx = outData.data
-  const inBounds = (x: number, y: number) => x >= 0 && x < w && y >= 0 && y < h
-
-  for (let oy = 0; oy < outH; oy++) {
-    for (let ox = 0; ox < outW; ox++) {
-      const sx = ox + minX
-      const sy = oy + minY
-      const idx = (oy * outW + ox) * 4
-      if (inBounds(sx, sy) && isWhite(sx, sy)) {
-        // White figure on top
-        outPx[idx] = 255
-        outPx[idx + 1] = 255
-        outPx[idx + 2] = 255
-        outPx[idx + 3] = 255
-        continue
-      }
-      // Black outline: any white pixel within radius?
-      let near = false
-      for (let dy = -OUTLINE_R; dy <= OUTLINE_R && !near; dy++) {
-        for (let dx = -OUTLINE_R; dx <= OUTLINE_R; dx++) {
-          const nx = sx + dx
-          const ny = sy + dy
-          if (inBounds(nx, ny) && isWhite(nx, ny)) { near = true; break }
-        }
-      }
-      if (near) {
-        outPx[idx] = 0
-        outPx[idx + 1] = 0
-        outPx[idx + 2] = 0
-        outPx[idx + 3] = 255
-      }
-    }
+  out.width = fw + OUTLINE_R * 2
+  out.height = fh + OUTLINE_R * 2
+  const octx = out.getContext('2d')!
+  for (let i = 0; i < 16; i++) {
+    const ang = (i / 16) * Math.PI * 2
+    const dx = Math.round(Math.cos(ang) * OUTLINE_R)
+    const dy = Math.round(Math.sin(ang) * OUTLINE_R)
+    octx.drawImage(black, OUTLINE_R + dx, OUTLINE_R + dy)
   }
+  octx.drawImage(mask, OUTLINE_R, OUTLINE_R)
 
-  outCtx.putImageData(outData, 0, 0)
   return out.toDataURL()
 }
 
@@ -90,8 +98,8 @@ function Splash({ onDone }: SplashProps) {
   }, [])
 
   useEffect(() => {
-    const fadeTimer = setTimeout(() => setFading(true), 2500)
-    const doneTimer = setTimeout(() => onDone(), 3000)
+    const fadeTimer = setTimeout(() => setFading(true), 1500)
+    const doneTimer = setTimeout(() => onDone(), 2000)
     return () => {
       clearTimeout(fadeTimer)
       clearTimeout(doneTimer)
@@ -115,9 +123,9 @@ function Splash({ onDone }: SplashProps) {
       opacity: fading ? 0 : 1,
     }}>
       {rachettUrl && (
-        <img src={rachettUrl} alt="rachett" style={{ width: '130px', height: 'auto', marginBottom: '18px' }} />
+        <img src={rachettUrl} alt="rachett" style={{ width: '190px', height: 'auto', marginBottom: '18px' }} />
       )}
-      <p style={{ margin: 0, color: '#000', fontSize: '34px', fontWeight: '900', letterSpacing: '-1px' }}>rachett</p>
+      <p style={{ margin: 0, color: '#000', fontSize: '38px', fontWeight: '900', letterSpacing: '-1px' }}>rachett</p>
 
       <p style={{ position: 'absolute', bottom: '40px', margin: 0, color: '#336600', fontSize: '12px' }}>
         made by <span style={{ color: '#000', fontWeight: '700' }}>dwarves</span>
