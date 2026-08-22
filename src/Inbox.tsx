@@ -290,7 +290,7 @@ function Inbox() {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search name, number or message…"
+            placeholder="search"
             style={{ width: '100%', padding: '12px 40px', borderRadius: '12px', border: '1px solid #333', background: '#1a1a1a', color: '#fff', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }}
           />
           {search && (
@@ -368,6 +368,10 @@ function Inbox() {
                     <div style={{ background: '#111', border: `1px solid ${green}`, borderTop: 'none', borderRadius: '0 0 12px 12px', padding: '16px', marginBottom: '8px' }}>
                       {selected?.kind === 'guest' && selected.guest && (
                         <div style={{ marginBottom: '12px', padding: '12px', background: '#1a1a1a', borderRadius: '10px', border: '1px solid #2a2a2a' }}>
+                          {selected.guest.imageUrl && (
+                            <img src={selected.guest.imageUrl} alt="buyer photo" onClick={() => window.open(selected.guest?.imageUrl || '', '_blank')}
+                              style={{ width: '100%', maxHeight: 240, objectFit: 'cover', borderRadius: 8, marginBottom: 8, cursor: 'zoom-in' }} />
+                          )}
                           <p style={{ margin: '0 0 6px', color: '#aaa', fontSize: '13px', lineHeight: 1.5 }}>"{selected.guest.text}"</p>
                           <p style={{ margin: 0, color: '#555', fontSize: '12px' }}>
                             Guest buyer{selected.guestPhone ? ` · 📱 ${selected.guestPhone}` : ''}{selected.guest.productName ? ` · Asks about ${selected.guest.productName}` : ''} · Replies stay in rachett

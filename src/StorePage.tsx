@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, type ChangeEvent } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { collection, query, where, getDocs, addDoc, setDoc, doc } from 'firebase/firestore'
 import { db, auth } from './firebase'
@@ -13,6 +13,7 @@ import { useSellerStats, getSalesLabel, formatRating, renderStars, getBadgeStatu
 import { QUICK_REPLIES } from './quickReplies'
 import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder.ts'
 import { track } from './tracking'
+import { uploadImageToCloudinary } from './uploadImage'
 import ConfirmDialog from './ConfirmDialog'
 import ProductPreview from './ProductPreview'
 import { useDraft } from './useDraft'
@@ -380,6 +381,9 @@ const messageDeepLinkId = searchParams.get('messageId')
   const [guestPhone, setGuestPhone] = useState('')
   const [guestOtpInput, setGuestOtpInput] = useState('')
   const [guestMessageSent, setGuestMessageSent] = useState(false)
+  const guestFileRef = useRef<HTMLInputElement | null>(null)
+  const [guestImageUrl, setGuestImageUrl] = useState('')
+  const [guestUploading, setGuestUploading] = useState(false)
 
   // Seller stats for trust signals
   const { stats: sellerStats } = useSellerStats(sellerId)
@@ -628,7 +632,7 @@ const handleOrder = async () => {
 }
 
 const handleSendMessage = async () => {
-  if (!messageText.trim()) {
+  if (!messageText.trim() && !guestImageUrl) {
     showFeedback(notify.messageWriteRequired, 'error')
     return
   }
@@ -646,19 +650,37 @@ const handleSendMessage = async () => {
   try {
     await sendMessage(
       auth.currentUser.uid,
-      messageText.trim(),
+      messageText.trim() || '📷 Photo',
       seller.businessName || 'Seller',
-      auth.currentUser.displayName || 'Buyer'
+      auth.currentUser.displayName || 'Buyer',
+      guestImageUrl ? { imageUrl: guestImageUrl, type: 'image' } : undefined
     )
     console.log('Message sent')
     track('message_sent', auth.currentUser?.uid || null, detectPlatform(searchParams), { productId: messageProduct.id, productName: messageProduct.name, sellerId })
     clearMsgDraft()
     setShowQuickReplies(false)
     setMessageProduct(null)
+    setGuestImageUrl('')
     showFeedback(notify.messageSent, 'success')
   } catch (err: any) {
     console.error('opps! something is not adding up:', err?.code, err?.message, err)
     showFeedback(notify.messageFailed, 'error')
+  }
+}
+
+const handleGuestPhoto = async (e: ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0]
+  e.target.value = ''
+  if (!file) return
+  setGuestUploading(true)
+  try {
+    const url = await uploadImageToCloudinary(file)
+    setGuestImageUrl(url)
+  } catch (err) {
+    console.error('Photo upload failed:', err)
+    showFeedback('Photo upload failed. Try again.', 'error')
+  } finally {
+    setGuestUploading(false)
   }
 }
 
@@ -1050,7 +1072,20 @@ const handleSignupForAction = async (provider: any) => {
                   <span style={{ color: '#888', fontSize: 12, fontWeight: 700, display: 'block', marginBottom: 4 }}>📝 Draft</span>
                 )}
                 <textarea placeholder="Write your message..." value={messageText} onChange={e => setMessageText(e.target.value)}
-                  style={{ width: '100%', minHeight: '100px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '20px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
+                  style={{ width: '100%', minHeight: '100px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '8px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '20px' }}>
+                  <button onClick={() => guestFileRef.current?.click()} disabled={guestUploading}
+                    style={{ padding: '8px 12px', background: '#222', color: '#fff', border: '1px solid #333', borderRadius: '8px', cursor: guestUploading ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                    {guestUploading ? '⏳ Uploading…' : '📎 Add photo'}
+                  </button>
+                  <input ref={guestFileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleGuestPhoto} />
+                  {guestImageUrl && (
+                    <div style={{ position: 'relative' }}>
+                      <img src={guestImageUrl} alt="photo" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }} />
+                      <button onClick={() => setGuestImageUrl('')} style={{ position: 'absolute', top: -6, right: -6, background: '#ff4444', border: 'none', color: '#fff', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', fontSize: 11, lineHeight: 1 }}>✕</button>
+                    </div>
+                  )}
+                </div>
 
                 {/* Send Button */}
                 <button onClick={handleSendMessage}
@@ -1071,7 +1106,20 @@ const handleSignupForAction = async (provider: any) => {
                     <input placeholder="Phone number e.g. +256771234567" value={guestPhone} onChange={e => setGuestPhone(e.target.value)}
                       style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
                     <textarea placeholder="Write your message..." value={messageText} onChange={e => setMessageText(e.target.value)}
-                      style={{ width: '100%', minHeight: '80px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '20px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
+                      style={{ width: '100%', minHeight: '80px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '8px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '20px' }}>
+                      <button onClick={() => guestFileRef.current?.click()} disabled={guestUploading}
+                        style={{ padding: '8px 12px', background: '#222', color: '#fff', border: '1px solid #333', borderRadius: '8px', cursor: guestUploading ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                        {guestUploading ? '⏳ Uploading…' : '📎 Add photo'}
+                      </button>
+                      <input ref={guestFileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleGuestPhoto} />
+                      {guestImageUrl && (
+                        <div style={{ position: 'relative' }}>
+                          <img src={guestImageUrl} alt="photo" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }} />
+                          <button onClick={() => setGuestImageUrl('')} style={{ position: 'absolute', top: -6, right: -6, background: '#ff4444', border: 'none', color: '#fff', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', fontSize: 11, lineHeight: 1 }}>✕</button>
+                        </div>
+                      )}
+                    </div>
 
                     {otpState.error && (
                       <p style={{ color: '#ff4444', fontSize: '12px', marginBottom: '12px' }}>{otpState.error}</p>
@@ -1107,7 +1155,8 @@ const handleSignupForAction = async (provider: any) => {
                             senderPhone: otpState.phone,
                             productName: messageProduct.name,
                             productPrice: messageProduct.price,
-                            text: messageText.trim(),
+                            text: messageText.trim() || '📷 Photo',
+                            ...(guestImageUrl ? { imageUrl: guestImageUrl } : {}),
                             read: false,
                             sourcePlatform: detectPlatform(searchParams),
                             verified: true,
@@ -1123,6 +1172,7 @@ const handleSignupForAction = async (provider: any) => {
                             setGuestPhone('')
                             setGuestOtpInput('')
                             setGuestMessageSent(false)
+                            setGuestImageUrl('')
                             resetOTP()
                           }, 1500)
                         } catch (err) {
@@ -1166,7 +1216,7 @@ const handleSignupForAction = async (provider: any) => {
             )}
 
             {/* Cancel Button */}
-            <button onClick={() => { setMessageProduct(null); setShowQuickReplies(false); resetOTP(); setGuestName(''); setGuestPhone(''); setGuestOtpInput('') }}
+            <button onClick={() => { setMessageProduct(null); setShowQuickReplies(false); resetOTP(); setGuestName(''); setGuestPhone(''); setGuestOtpInput(''); setGuestImageUrl('') }}
               style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
               Cancel
             </button>

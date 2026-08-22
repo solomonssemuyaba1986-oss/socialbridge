@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { useConversation } from './useConversation'
 import { QUICK_REPLIES, SELLER_QUICK_REPLIES } from './quickReplies'
 import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder'
 import { auth } from './firebase'
 import { notify } from './notifications'
 import { useDraft } from './useDraft'
+import { uploadImageToCloudinary } from './uploadImage'
+import ProductPreview from './ProductPreview'
 
 const green = '#adff2f'
 
@@ -35,6 +37,9 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
   const [feedbackType, setFeedbackType] = useState<'success' | 'error' | 'info'>('success')
   const [feedbackVisible, setFeedbackVisible] = useState(false)
   const listRef = useRef<HTMLDivElement | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [previewImage, setPreviewImage] = useState<string | null>(null)
 
   const showFeedback = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
     setFeedbackMessage(msg)
@@ -143,6 +148,24 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
     await handleSend(reply)
   }
 
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // allow re-selecting the same file
+    if (!file) return
+    setUploadingImage(true)
+    try {
+      const url = await uploadImageToCloudinary(file)
+      const senderId = auth.currentUser?.uid
+      if (!senderId) return
+      await sendMessage(senderId, '📷 Photo', sellerName || 'Seller', buyerName || 'Buyer', { imageUrl: url, type: 'image' })
+    } catch (err) {
+      console.error('Photo upload failed:', err)
+      showFeedback(notify.messageFailed, 'error')
+    } finally {
+      setUploadingImage(false)
+    }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       <div style={{ borderBottom: '1px solid #222', paddingBottom: 12 }}>
@@ -195,6 +218,25 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
                 </div>
               )
             }
+            if (m.type === 'image' && m.imageUrl) {
+              const isSeller = m.senderId === sellerId
+              const isMe = m.senderId === auth.currentUser?.uid
+              const senderName = isMe ? 'Me' : (isSeller ? (sellerName || 'Seller') : (buyerName || 'Buyer'))
+              const senderIcon = isMe ? '👤' : (isSeller ? '🏪' : '👤')
+              const status = m.status || 'sent'
+              const statusInfo = { sent: { color: '#adff2f', label: 'Sent' }, delivered: { color: '#3399ff', label: 'Delivered' }, seen: { color: '#00e5ff', label: 'Seen' } }[status as 'sent' | 'delivered' | 'seen'] || { color: '#adff2f', label: 'Sent' }
+              return (
+                <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={{ fontSize: 12, color: isSeller ? '#3399ff' : '#ff4444', fontWeight: 600 }}>{senderIcon} {senderName}</div>
+                  <img src={m.imageUrl} alt="photo" onClick={() => setPreviewImage(m.imageUrl)}
+                    style={{ maxWidth: '75%', borderRadius: 12, border: `1px solid ${isSeller ? '#3399ff' : '#ff4444'}`, cursor: 'zoom-in', alignSelf: 'flex-start' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: '#666' }}>
+                    <span>{m.createdAt?.toDate ? m.createdAt.toDate().toLocaleString() : 'Now'}</span>
+                    {isMe && <span style={{ color: statusInfo.color, fontWeight: 700 }}>{statusInfo.label}</span>}
+                  </div>
+                </div>
+              )
+            }
             const status = m.status || 'sent'
             const statusStyles: Record<string, { color: string; label: string }> = {
               sent: { color: '#adff2f', label: 'Sent' },
@@ -228,9 +270,15 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button onClick={() => setShowQuickReplies(prev => !prev)} style={{ width: 46, height: 46, borderRadius: 16, background: '#222', border: '1px solid #333', color: '#fff', cursor: 'pointer', fontSize: 24, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+          <button onClick={() => fileInputRef.current?.click()} disabled={uploadingImage}
+            style={{ width: 46, height: 46, borderRadius: 16, background: uploadingImage ? '#333' : '#222', border: '1px solid #333', color: uploadingImage ? '#888' : '#fff', cursor: uploadingImage ? 'not-allowed' : 'pointer', fontSize: 20, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {uploadingImage ? '⏳' : '📎'}
+          </button>
+          <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
           <input value={text} onChange={e => setText(e.target.value)} placeholder="Write a reply..." style={{ flex: 1, padding: '14px 16px', borderRadius: 16, border: '1px solid #333', background: '#101010', color: '#fff', minHeight: 46 }} />
           <button onClick={() => handleSend()} style={{ background: '#adff2f', color: '#000', padding: '13px 22px', borderRadius: 16, border: 'none', fontWeight: 700, cursor: 'pointer' }}>Send</button>
         </div>
+        {uploadingImage && <p style={{ margin: 0, color: '#888', fontSize: 12 }}>Uploading photo…</p>}
 
         {showQuickReplies && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, background: '#111', border: '1px solid #222', borderRadius: 16, padding: 12 }}>
@@ -256,6 +304,11 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
         <div style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 2000, maxWidth: '400px', width: '90%', padding: '14px 16px', borderRadius: '14px', border: `1px solid ${feedbackType === 'success' ? '#2f8' : feedbackType === 'error' ? '#f55' : '#55d'}`, background: feedbackType === 'success' ? '#122a0d' : feedbackType === 'error' ? '#2a0d0d' : '#0d122a', color: '#fff', fontSize: '14px', textAlign: 'center' }}>
           {feedbackMessage}
         </div>
+      )}
+
+      {/* Full-screen photo preview */}
+      {previewImage && (
+        <ProductPreview images={[previewImage]} startIndex={0} onClose={() => setPreviewImage(null)} />
       )}
 
       {/* Order Modal */}

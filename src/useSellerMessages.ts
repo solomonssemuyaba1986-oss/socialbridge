@@ -18,6 +18,7 @@ export interface SellerMessage {
   verified?: boolean
   senderPhone?: string
   sourcePlatform?: string
+  imageUrl?: string
 }
 
 export function isUnreadMessage(msg: SellerMessage): boolean {

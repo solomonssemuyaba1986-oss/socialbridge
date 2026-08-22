@@ -60,8 +60,17 @@ export function useConversation(sellerId: string | null, buyerId: string | null)
     return unsub
   }, [conversationId])
 
-  const sendMessage = async (senderId: string, text: string, sellerName: string, buyerName: string) => {
+  const sendMessage = async (
+    senderId: string,
+    text: string,
+    sellerName: string,
+    buyerName: string,
+    opts?: { imageUrl?: string; type?: string }
+  ) => {
     if (!conversationId || !sellerId || !buyerId) return
+
+    const isImage = !!opts?.imageUrl
+    const lastMessage = isImage ? '📷 Photo' : text
 
     const convoRef = doc(db, 'conversations', conversationId)
     const convoSnap = await getDoc(convoRef)
@@ -69,7 +78,7 @@ export function useConversation(sellerId: string | null, buyerId: string | null)
     if (!convoSnap.exists()) {
       await setDoc(convoRef, {
         sellerId, buyerId, sellerName, buyerName,
-        lastMessage: text,
+        lastMessage,
         lastMessageAt: serverTimestamp(),
         lastMessageBy: senderId,
         lastMessageStatus: 'sent',
@@ -80,7 +89,7 @@ export function useConversation(sellerId: string | null, buyerId: string | null)
       })
     } else {
       const patch: Record<string, unknown> = {
-        lastMessage: text,
+        lastMessage,
         lastMessageAt: serverTimestamp(),
         lastMessageBy: senderId,
         lastMessageStatus: 'sent',
@@ -92,9 +101,14 @@ export function useConversation(sellerId: string | null, buyerId: string | null)
       await setDoc(convoRef, patch, { merge: true })
     }
 
-    await addDoc(collection(db, 'conversations', conversationId, 'messages'), {
+    const messageFields: Record<string, unknown> = {
       senderId, text, status: 'sent', createdAt: serverTimestamp()
-    })
+    }
+    if (isImage) {
+      messageFields.imageUrl = opts!.imageUrl
+      messageFields.type = opts?.type || 'image'
+    }
+    await addDoc(collection(db, 'conversations', conversationId, 'messages'), messageFields)
   }
 
   return { messages, loading, sendMessage, conversationId }

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from 'react'
+import { useEffect, useState, useMemo, useRef, type ChangeEvent } from 'react'
 import { collection, getDocs, query, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebase'
@@ -11,6 +11,7 @@ import { QUICK_REPLIES } from './quickReplies'
 import { getMainCategories } from './categories'
 import LoadingScreen from './LoadingScreen'
 import { useDraft } from './useDraft'
+import { uploadImageToCloudinary } from './uploadImage'
 import Fuse from 'fuse.js'
 
 interface Product {
@@ -67,6 +68,9 @@ function BrowsePage() {
   const [guestMessageSent, setGuestMessageSent] = useState(false)
   const { state: otpState, requestOTP, verifyOTP, reset: resetOTP } = useGuestOTP()
   const clickTimerRef = useRef<number | null>(null)
+  const guestFileRef = useRef<HTMLInputElement | null>(null)
+  const [guestImageUrl, setGuestImageUrl] = useState('')
+  const [guestUploading, setGuestUploading] = useState(false)
   const RECENT_SEARCH_LIMIT = 11
 
   // Load the signed-in user's store slug so the "Yours" badge + "Mine" filter work
@@ -191,7 +195,7 @@ function BrowsePage() {
   }
 
   const handleSendMessage = async () => {
-    if (!messageText.trim() || !messageProduct) return
+    if ((!messageText.trim() && !guestImageUrl) || !messageProduct) return
     if (!auth.currentUser) {
       // Guest flow
       if (otpState.step === 'verified') {
@@ -203,7 +207,8 @@ function BrowsePage() {
             senderPhone: otpState.phone,
             productName: messageProduct.name,
             productPrice: messageProduct.price,
-            text: messageText.trim(),
+            text: messageText.trim() || '📷 Photo',
+            ...(guestImageUrl ? { imageUrl: guestImageUrl } : {}),
             read: false,
             sourcePlatform: detectSource(),
             verified: true,
@@ -218,6 +223,7 @@ function BrowsePage() {
             setGuestPhone('')
             setGuestOtpInput('')
             setGuestMessageSent(false)
+            setGuestImageUrl('')
             resetOTP()
           }, 1500)
         } catch (err) {
@@ -235,7 +241,8 @@ function BrowsePage() {
         receiverUid: messageProduct.sellerId,
         productName: messageProduct.name,
         productPrice: messageProduct.price,
-        text: messageText.trim(),
+        text: messageText.trim() || '📷 Photo',
+        ...(guestImageUrl ? { imageUrl: guestImageUrl } : {}),
         read: false,
         sourcePlatform: detectSource(),
         createdAt: serverTimestamp(),
@@ -258,7 +265,24 @@ function BrowsePage() {
     setGuestPhone('')
     setGuestOtpInput('')
     setGuestMessageSent(false)
+    setGuestImageUrl('')
     resetOTP()
+  }
+
+  const handleGuestPhoto = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setGuestUploading(true)
+    try {
+      const url = await uploadImageToCloudinary(file)
+      setGuestImageUrl(url)
+    } catch (err) {
+      console.error('Photo upload failed:', err)
+      alert('Photo upload failed. Try again.')
+    } finally {
+      setGuestUploading(false)
+    }
   }
 
   useEffect(() => {
@@ -871,7 +895,20 @@ function BrowsePage() {
                   <span style={{ color: '#888', fontSize: 12, fontWeight: 700, display: 'block', marginBottom: 4 }}>📝 Draft</span>
                 )}
                 <textarea placeholder="Write your message..." value={messageText} onChange={e => setMessageText(e.target.value)}
-                  style={{ width: '100%', minHeight: '100px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '20px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
+                  style={{ width: '100%', minHeight: '100px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '8px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '20px' }}>
+                  <button onClick={() => guestFileRef.current?.click()} disabled={guestUploading}
+                    style={{ padding: '8px 12px', background: '#222', color: '#fff', border: '1px solid #333', borderRadius: '8px', cursor: guestUploading ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                    {guestUploading ? '⏳ Uploading…' : '📎 Add photo'}
+                  </button>
+                  <input ref={guestFileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleGuestPhoto} />
+                  {guestImageUrl && (
+                    <div style={{ position: 'relative' }}>
+                      <img src={guestImageUrl} alt="photo" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }} />
+                      <button onClick={() => setGuestImageUrl('')} style={{ position: 'absolute', top: -6, right: -6, background: '#ff4444', border: 'none', color: '#fff', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', fontSize: 11, lineHeight: 1 }}>✕</button>
+                    </div>
+                  )}
+                </div>
                 <button onClick={handleSendMessage}
                   style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
                   Send Message
@@ -897,7 +934,20 @@ function BrowsePage() {
                     <input placeholder="Phone number e.g. +256771234567" value={guestPhone} onChange={e => setGuestPhone(e.target.value)}
                       style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
                     <textarea placeholder="Write your message..." value={messageText} onChange={e => setMessageText(e.target.value)}
-                      style={{ width: '100%', minHeight: '80px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '20px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
+                      style={{ width: '100%', minHeight: '80px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '8px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '20px' }}>
+                      <button onClick={() => guestFileRef.current?.click()} disabled={guestUploading}
+                        style={{ padding: '8px 12px', background: '#222', color: '#fff', border: '1px solid #333', borderRadius: '8px', cursor: guestUploading ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                        {guestUploading ? '⏳ Uploading…' : '📎 Add photo'}
+                      </button>
+                      <input ref={guestFileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleGuestPhoto} />
+                      {guestImageUrl && (
+                        <div style={{ position: 'relative' }}>
+                          <img src={guestImageUrl} alt="photo" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }} />
+                          <button onClick={() => setGuestImageUrl('')} style={{ position: 'absolute', top: -6, right: -6, background: '#ff4444', border: 'none', color: '#fff', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', fontSize: 11, lineHeight: 1 }}>✕</button>
+                        </div>
+                      )}
+                    </div>
                     {otpState.error && <p style={{ color: '#ff4444', fontSize: '12px', marginBottom: '12px' }}>{otpState.error}</p>}
                     <button onClick={() => requestOTP(guestPhone)} disabled={otpState.loading || !guestName.trim() || !guestPhone.trim()}
                       style={{ width: '100%', padding: '14px', background: (otpState.loading || !guestName.trim() || !guestPhone.trim()) ? '#333' : green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (otpState.loading || !guestName.trim() || !guestPhone.trim()) ? 'not-allowed' : 'pointer', fontSize: '15px', marginBottom: '12px' }}>
