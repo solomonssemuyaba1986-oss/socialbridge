@@ -27,6 +27,8 @@ interface Seller {
   instagram?: string
   tiktok?: string
   showWhatsapp?: boolean
+  location?: string
+  geo?: { lat: number; lng: number }
 }
 
 function maskEmail(email: string): string {
@@ -710,6 +712,9 @@ const handleSignupForAction = async (provider: any) => {
         <p style={{ margin: '0 0 16px', color: '#888', fontSize: '15px', maxWidth: '360px', marginInline: 'auto' }}>
           {seller.bio}
         </p>
+        {seller.location && (
+          <p style={{ margin: '0 0 16px', color: '#aaa', fontSize: '13px', fontWeight: '600' }}>📍 {seller.location}</p>
+        )}
         {productDeepLinkId && (
           <div style={{ maxWidth: '520px', margin: '0 auto 18px', background: '#111', border: `1px solid ${green}`, borderRadius: '14px', padding: '16px' }}>
             <p style={{ margin: 0, color: '#fff', fontWeight: '700', fontSize: '15px' }}>See more products below</p>
