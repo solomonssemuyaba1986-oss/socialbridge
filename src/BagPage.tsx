@@ -9,6 +9,7 @@ import { useGuestOTP } from './useGuestOTP'
 import { useDraft } from './useDraft'
 import { QUICK_REPLIES } from './quickReplies'
 import { uploadImageToCloudinary } from './uploadImage'
+import ProductPreview from './ProductPreview'
 
 const green = '#adff2f'
 const SUPPORT_WHATSAPP = (import.meta.env.VITE_SUPPORT_WHATSAPP || '256703174968').trim()
@@ -58,6 +59,15 @@ function BagPage() {
   const [salesMap, setSalesMap] = useState<Record<string, number>>({})
   const [missingProducts, setMissingProducts] = useState<Record<string, boolean>>({})
   const [previewItem, setPreviewItem] = useState<typeof items[number] | null>(null)
+  const [previewImageIndex, setPreviewImageIndex] = useState(0)
+  const [fullPreview, setFullPreview] = useState(false)
+  const previewSwipeStart = useRef<{ x: number; y: number } | null>(null)
+
+  // Reset the preview carousel whenever a different product is opened
+  useEffect(() => {
+    setPreviewImageIndex(0)
+    setFullPreview(false)
+  }, [previewItem])
 
   // Fetch each item's sold count (social proof) + detect deleted products
   useEffect(() => {
@@ -305,9 +315,16 @@ function BagPage() {
             return (
               <div key={item.productId}
                 style={{ background: '#1a1a1a', borderRadius: '12px', padding: '14px', border: isMissing ? '1px solid #333' : '1px solid #222', display: 'flex', gap: '14px', alignItems: 'center', opacity: isMissing ? 0.85 : 1 }}>
-                <img src={item.imageUrl || 'https://placehold.co/80/1a1a1a/333333'} alt={item.productName}
-                  style={{ width: '72px', height: '72px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0, cursor: 'pointer', filter: isMissing ? 'grayscale(80%)' : 'none' }}
-                  onClick={() => setPreviewItem(item)} />
+                <div style={{ position: 'relative', flexShrink: 0 }}>
+                  <img src={item.imageUrl || 'https://placehold.co/80/1a1a1a/333333'} alt={item.productName}
+                    style={{ width: '72px', height: '72px', borderRadius: '8px', objectFit: 'cover', cursor: 'pointer', filter: isMissing ? 'grayscale(80%)' : 'none' }}
+                    onClick={() => setPreviewItem(item)} />
+                  {(item.images?.length || 0) > 1 && (
+                    <span style={{ position: 'absolute', bottom: 2, right: 2, background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '1px 5px', borderRadius: 10, fontSize: 9, fontWeight: 700, lineHeight: 1.5 }}>
+                      📷 {item.images?.length}
+                    </span>
+                  )}
+                </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: isMissing ? '#888' : '#fff', cursor: 'pointer' }} onClick={() => setPreviewItem(item)}>{item.productName}</p>
                   <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#888' }}>{item.businessName}</p>
@@ -553,8 +570,40 @@ function BagPage() {
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
               <button onClick={() => setPreviewItem(null)} style={{ background: 'transparent', border: 'none', color: '#666', fontSize: 20, cursor: 'pointer', padding: '0 4px' }}>✕</button>
             </div>
-            <img src={previewItem.imageUrl || 'https://placehold.co/600x400/1a1a1a/333333'} alt={previewItem.productName}
-              style={{ width: '100%', height: '240px', objectFit: 'cover', borderRadius: '12px', marginBottom: '16px' }} />
+            {(() => {
+              const imgs = previewItem.images?.length ? previewItem.images : [previewItem.imageUrl].filter(Boolean)
+              const current = imgs[previewImageIndex] || previewItem.imageUrl || ''
+              return (
+                <div style={{ position: 'relative', marginBottom: '16px' }}>
+                  <img src={current || 'https://placehold.co/600x400/1a1a1a/333333'} alt={previewItem.productName}
+                    onPointerDown={(e) => { previewSwipeStart.current = { x: e.clientX, y: e.clientY } }}
+                    onPointerUp={(e) => {
+                      const s = previewSwipeStart.current
+                      previewSwipeStart.current = null
+                      if (!s) return
+                      const dx = e.clientX - s.x
+                      const dy = e.clientY - s.y
+                      if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
+                        setPreviewImageIndex(prev => (dx < 0 ? Math.min(prev + 1, imgs.length - 1) : Math.max(prev - 1, 0)))
+                        return
+                      }
+                      setFullPreview(true)
+                    }}
+                    style={{ width: '100%', height: '240px', objectFit: 'cover', borderRadius: '12px', cursor: 'zoom-in' }} />
+                  {imgs.length > 1 && (
+                    <>
+                      <button onClick={() => setPreviewImageIndex(prev => (prev === 0 ? imgs.length - 1 : prev - 1))}
+                        style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.5)', border: 'none', color: '#fff', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
+                      <button onClick={() => setPreviewImageIndex(prev => (prev === imgs.length - 1 ? 0 : prev + 1))}
+                        style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.5)', border: 'none', color: '#fff', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
+                      <div style={{ position: 'absolute', bottom: '8px', right: '8px', background: 'rgba(0,0,0,0.6)', color: '#fff', padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '700' }}>
+                        {previewImageIndex + 1}/{imgs.length}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )
+            })()}
             <h3 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: '800', color: '#fff' }}>{previewItem.productName}</h3>
             <p style={{ margin: '0 0 8px', color: '#888', fontSize: '13px' }}>{previewItem.businessName}</p>
             <p style={{ margin: '0 0 10px', fontWeight: '800', fontSize: '16px', color: green }}>UGX {previewItem.productPrice}</p>
@@ -573,6 +622,15 @@ function BagPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Full-screen photo preview (tap the product photo to zoom/swipe all images) */}
+      {fullPreview && previewItem && (
+        <ProductPreview
+          images={previewItem.images?.length ? previewItem.images : [previewItem.imageUrl].filter(Boolean)}
+          startIndex={previewImageIndex}
+          onClose={() => setFullPreview(false)}
+        />
       )}
     </div>
   )
