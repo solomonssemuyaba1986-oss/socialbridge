@@ -49,9 +49,15 @@ function OrderHistory() {
   const updateOrderStatus = async (orderId: string, status: string) => {
     if (!userId) return
     const order = orders.find(o => o.id === orderId)
-    await updateDoc(doc(db, 'sellers', userId, 'orders', orderId), { status, read: true })
-    // Confirming the order = a real sale: bump the product's salesCount (social proof).
-    if (status === 'fulfilled' && order?.productId) {
+    const wasFulfilled = order?.status === 'fulfilled'
+    try {
+      await updateDoc(doc(db, 'sellers', userId, 'orders', orderId), { status, read: true })
+    } catch (err) {
+      console.error('Failed to update order status:', err)
+      return
+    }
+    // A real sale only when an order FIRST becomes fulfilled — never on repeats.
+    if (!wasFulfilled && status === 'fulfilled' && order?.productId) {
       try {
         await updateDoc(doc(db, 'sellers', userId, 'products', order.productId), { salesCount: increment(1) })
       } catch (err) {

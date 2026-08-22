@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 
-import { doc, setDoc, getDocs, collection, onSnapshot, updateDoc, deleteDoc, increment as firestoreIncrement } from 'firebase/firestore'
+import { doc, setDoc, getDocs, collection, onSnapshot, updateDoc, deleteDoc, increment as firestoreIncrement, runTransaction } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebase'
 
@@ -52,11 +52,18 @@ export interface BagCountData {
   baggedCount: number
 }
 
-/** Monotonic "people who have bagged this" counter — only ever goes up (on add). */
-export async function incrementBaggedCount(productId: string) {
+/** One point per distinct user: the ever-bagged counter only rises when this user hasn't bagged it before. */
+export async function incrementBaggedCount(productId: string, userId?: string) {
+  if (!userId) return // guests don't count toward ever-bagged (rules also block their writes)
   try {
     const ref = doc(db, 'bagCounts', productId)
-    await setDoc(ref, { baggedCount: firestoreIncrement(1) }, { merge: true })
+    const markerRef = doc(db, 'bagCounts', productId, 'baggers', userId)
+    await runTransaction(db, async (tx) => {
+      const markerSnap = await tx.get(markerRef)
+      if (markerSnap.exists()) return // already counted this user — no inflation from bag/remove/bag
+      tx.set(markerRef, { at: Date.now() })
+      tx.set(ref, { baggedCount: firestoreIncrement(1) }, { merge: true })
+    })
   } catch (e) {
     console.warn('Failed to update bagged count:', e)
   }
@@ -182,7 +189,7 @@ export function useBag() {
       if (prev.some(i => i.productId === item.productId)) return prev
       const newItem = { ...item, addedAt: Date.now(), quantity: 1 }
       incrementBagCount(item.productId, 1)
-      incrementBaggedCount(item.productId)
+      incrementBaggedCount(item.productId, uidRef.current ?? undefined)
       const uid = uidRef.current
       if (uid) {
         setDoc(doc(db, 'users', uid, 'bag', item.productId), newItem).catch(err => {

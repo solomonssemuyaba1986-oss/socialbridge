@@ -73,6 +73,12 @@ service cloud.firestore {
     match /bagCounts/{productId} {
       allow read: if true;
       allow write: if request.auth != null;
+
+      // One marker per user → the ever-bagged counter counts distinct people, not add-events.
+      match /baggers/{key} {
+        allow read: if true;
+        allow create: if request.auth != null && request.auth.uid == key;
+      }
     }
 
     match /feedback/{feedbackId} {
