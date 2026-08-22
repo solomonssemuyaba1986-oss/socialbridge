@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { collection, onSnapshot } from 'firebase/firestore'
 import { db, auth } from './firebase'
 import { onAuthStateChanged } from 'firebase/auth'
-import { useSellerLive } from './sellerLive'
+import Sidebar from './Sidebar'
 
 const green = '#adff2f'
 const amber = '#ffaa00'
@@ -153,7 +153,6 @@ function timeAgo(date: Date): string {
 
 function AnalyticsPage() {
   const navigate = useNavigate()
-  const location = useLocation()
   const [loading, setLoading] = useState(true)
   const [platformStats, setPlatformStats] = useState<PlatformStat[]>([])
   const [totalOrders, setTotalOrders] = useState(0)
@@ -271,18 +270,6 @@ function AnalyticsPage() {
 
 
 
-  const navItems = [
-    { label: 'Dashboard', path: '/dashboard', icon: '📊' },
-    { label: 'Products', path: '/products', icon: '🛍️' },
-    { label: 'Orders', path: '/orders', icon: '📦' },
-    { label: 'Inbox', path: '/inbox', icon: '📩' },
-    { label: 'Nearby', path: '/nearby', icon: '📍' },
-    { label: 'Analytics', path: '/analytics', icon: '📈' },
-    { label: 'Settings', path: '/edit-store', icon: '⚙️' },
-  ]
-
-  const { pendingOrdersCount } = useSellerLive()
-
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -293,35 +280,7 @@ function AnalyticsPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', display: 'flex' }}>
-      {/* Sidebar */}
-      <div style={{ position: 'fixed', left: 0, top: 0, bottom: 0, width: 260, background: '#070707', borderRight: '1px solid #111', padding: '28px 16px', display: 'flex', flexDirection: 'column', gap: '28px', zIndex: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
-          <div style={{ background: green, width: 34, height: 34, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16, color: '#000' }}>R</div>
-          <div>
-            <div style={{ fontWeight: 800, color: '#fff', fontSize: 16 }}>rachett</div>
-            <div style={{ color: '#777', fontSize: 12 }}>Analytics</div>
-          </div>
-        </div>
-        <div style={{ display: 'grid', gap: '6px' }}>
-          {navItems.map(item => {
-            const active = location.pathname === item.path
-            return (
-              <button key={item.path} onClick={() => navigate(item.path)}
-                style={{
-                  width: '100%', display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderRadius: '14px', border: 'none', cursor: 'pointer', textAlign: 'left', background: active ? '#0f2910' : 'transparent', color: active ? '#fff' : '#aaa', fontWeight: active ? 700 : 600, fontSize: '14px'
-                }}>
-                <span>{item.icon}</span>
-                <span style={{ flex: 1 }}>{item.label}</span>
-                {item.label === 'Orders' && pendingOrdersCount > 0 && (
-                  <span style={{ minWidth: '24px', height: '24px', borderRadius: '999px', background: green, color: '#000', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 900, padding: '0 6px', boxShadow: `0 0 0 2px rgba(173,255,47,0.2)` }}>
-                    {pendingOrdersCount}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      <Sidebar />
 
       {/* Main Content */}
       <div style={{ width: '100%', marginLeft: 260, padding: '24px 28px', minHeight: '100vh' }}>

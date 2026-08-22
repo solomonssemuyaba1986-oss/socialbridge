@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { doc, getDoc, collection, getDocs, updateDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 import { useSellerOrders } from './useSellerOrders'
-import { useSellerLive } from './sellerLive'
 import { notify } from './notifications'
 import LoadingScreen from './LoadingScreen'
+import Sidebar from './Sidebar'
 
 interface Seller {
   businessName: string
@@ -47,7 +47,6 @@ function Dashboard() {
   const [loading, setLoading] = useState(!initialCache)
   const [userId, setUserId] = useState<string>('')
   const navigate = useNavigate()
-  const location = useLocation()
   const green = '#adff2f'
 
   // Recovery email
@@ -86,23 +85,7 @@ function Dashboard() {
     }
   }
 
-  const navItems = [
-    { label: 'Dashboard', path: '/dashboard', icon: '📊' },
-    { label: 'Products', path: '/products', icon: '🛍️' },
-    { label: 'Orders', path: '/orders', icon: '📦' },
-    { label: 'Inbox', path: '/inbox', icon: '📩' },
-    { label: 'Nearby', path: '/nearby', icon: '📍' },
-    { label: 'Analytics', path: '/analytics', icon: '📈' },
-    { label: 'Marketing', path: '/dashboard', icon: '📣' },
-    { label: 'Payouts', path: '/dashboard', icon: '💸' },
-    { label: 'Settings', path: '/edit-store', icon: '⚙️' },
-    { label: 'Reviews', path: '/dashboard', icon: '⭐' },
-  ]
-
   const { orders, loading: ordersLoading } = useSellerOrders()
-
-  const { pendingOrdersCount, unreadMessages: liveUnreadMessages, unreadSellerConvo, unreadBuyerConvo } = useSellerLive()
-  const liveMessageUnread = liveUnreadMessages + unreadSellerConvo + unreadBuyerConvo
 
   // Waiting = orders you haven't worked on yet (not confirmed, out of stock, or needs details).
   const pendingOrders = orders.filter(o => !['fulfilled', 'out_of_stock', 'needs_details'].includes(o.status || ''))
@@ -200,41 +183,7 @@ function Dashboard() {
           `}</style>
         </div>
       )}
-      <div style={{ position: 'fixed', left: 0, top: 0, bottom: 0, width: 260, background: '#070707', borderRight: '1px solid #111', padding: '28px 16px', display: 'flex', flexDirection: 'column', gap: '28px', zIndex: showSpotlight ? 40 : 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
-          <div style={{ background: green, width: 34, height: 34, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16, color: '#000' }}>R</div>
-          <div>
-            <div style={{ fontWeight: 800, color: '#fff', fontSize: 16 }}>rachett</div>
-            <div style={{ color: '#777', fontSize: 12 }}>{seller.businessName}</div>
-          </div>
-        </div>
-        <div style={{ display: 'grid', gap: '6px' }}>
-          {navItems.map(item => {
-            const active = location.pathname === item.path || (item.path === '/dashboard' && location.pathname === '/dashboard')
-            const showBadge = item.label === 'Orders' ? pendingOrdersCount : item.label === 'Inbox' ? liveMessageUnread : 0
-            return (
-              <button key={item.path + item.label} onClick={() => navigate(item.path)}
-                style={{
-                  width: '100%', display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderRadius: '14px', border: 'none', cursor: 'pointer', textAlign: 'left', background: active ? '#0f2910' : 'transparent', color: active ? '#fff' : '#aaa', fontWeight: active ? 700 : 600, fontSize: '14px'
-                }}>
-                <span>{item.icon}</span>
-                <span style={{ flex: 1 }}>{item.label}</span>
-                {showBadge > 0 ? (
-                  <span style={{ minWidth: '24px', height: '24px', borderRadius: '999px', background: green, color: '#000', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 900, padding: '0 6px', boxShadow: `0 0 0 2px rgba(173,255,47,0.2)`, animation: showSpotlight ? 'rachettPulse 0.8s ease-in-out infinite' : 'none' }}>
-                    {showBadge}
-                  </span>
-                ) : null}
-              </button>
-            )
-          })}
-        </div>
-        <div style={{ marginTop: 'auto' }}>
-          <button onClick={() => { navigator.clipboard.writeText(storeLink); alert(notify.storeLinkCopied) }}
-            style={{ width: '100%', padding: '12px', borderRadius: '14px', border: '1px solid #222', background: '#111', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>
-            Copy Store Link
-          </button>
-        </div>
-      </div>
+      <Sidebar spotlight={showSpotlight} />
 
       <div style={{ width: '100%', marginLeft: 260, padding: '32px 28px', minHeight: '100vh' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
