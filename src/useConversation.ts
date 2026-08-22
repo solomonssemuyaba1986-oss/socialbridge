@@ -39,7 +39,7 @@ export async function sendConversationMessage(
     productImage?: string
   }
 ) {
-  if (!sellerId || !buyerId) return
+  if (!sellerId || !buyerId || sellerId === buyerId) return // never allow self-messaging
   const conversationId = getConversationId(sellerId, buyerId)
 
   const isImage = !!opts?.imageUrl

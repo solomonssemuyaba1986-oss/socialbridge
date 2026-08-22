@@ -11,6 +11,7 @@ import { QUICK_REPLIES } from './quickReplies'
 import { uploadImageToCloudinary } from './uploadImage'
 import ProductPreview from './ProductPreview'
 import { sendConversationMessage } from './useConversation'
+import { notify } from './notifications'
 
 const green = '#adff2f'
 const SUPPORT_WHATSAPP = (import.meta.env.VITE_SUPPORT_WHATSAPP || '256703174968').trim()
@@ -234,6 +235,10 @@ function BagPage() {
 
   const handleSendMessage = async () => {
     if ((!messageText.trim() && !guestImageUrl) || !messageTarget) return
+    if (auth.currentUser && messageTarget.sellerId === auth.currentUser.uid) {
+      alert(notify.messageSelfBlock)
+      return
+    }
     if (!auth.currentUser) {
       // Guest flow
       if (otpState.step === 'verified') {

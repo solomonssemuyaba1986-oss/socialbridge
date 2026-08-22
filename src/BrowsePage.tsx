@@ -13,6 +13,7 @@ import LoadingScreen from './LoadingScreen'
 import { useDraft } from './useDraft'
 import { uploadImageToCloudinary } from './uploadImage'
 import { sendConversationMessage } from './useConversation'
+import { notify } from './notifications'
 import Fuse from 'fuse.js'
 
 interface Product {
@@ -199,6 +200,10 @@ function BrowsePage() {
       navigate('/', { state: { scrollToProviders: true } })
       return
     }
+    if (orderProduct && orderProduct.sellerId === auth.currentUser.uid) {
+      alert(notify.messageSelfBlock)
+      return
+    }
     if (!buyerName.trim() || !deliveryArea.trim() || !orderProduct) return
     const sourcePlatform = detectSource()
     try {
@@ -244,6 +249,10 @@ function BrowsePage() {
 
   const handleSendMessage = async () => {
     if ((!messageText.trim() && !guestImageUrl) || !messageProduct) return
+    if (auth.currentUser && messageProduct.sellerId === auth.currentUser.uid) {
+      alert(notify.messageSelfBlock)
+      return
+    }
     if (!auth.currentUser) {
       // Guest flow
       if (otpState.step === 'verified') {
@@ -756,16 +765,24 @@ function BrowsePage() {
                     </div>
                   </div>
                   {!p.outOfStock && (
-                    <div style={{ display: 'flex', gap: '6px', padding: '0 12px 12px' }}>
-                      <button onClick={(e) => { e.stopPropagation(); setMessageProduct(p) }}
-                        style={{ flex: 1, padding: '8px', background: '#222', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' }}>
-                        💬 Message
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); setOrderProduct(p) }}
-                        style={{ flex: 1, padding: '8px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' }}>
-                        Buy Now
-                      </button>
-                    </div>
+                    p.sellerId === (userId || '') ? (
+                      <div style={{ padding: '0 12px 12px' }}>
+                        <div style={{ padding: '8px', background: '#111', color: '#666', borderRadius: '8px', fontSize: '11px', textAlign: 'center', border: '1px dashed #333' }}>
+                          This is your product
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: '6px', padding: '0 12px 12px' }}>
+                        <button onClick={(e) => { e.stopPropagation(); setMessageProduct(p) }}
+                          style={{ flex: 1, padding: '8px', background: '#222', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' }}>
+                          💬 Message
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); setOrderProduct(p) }}
+                          style={{ flex: 1, padding: '8px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' }}>
+                          Buy Now
+                        </button>
+                      </div>
+                    )
                   )}
                   {p.outOfStock && (
                     <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '700', fontSize: '13px', textAlign: 'center', padding: '8px' }}>
@@ -839,16 +856,22 @@ function BrowsePage() {
                   style={{ padding: '12px', background: isInBag(surveyProduct.id) ? '#1a2a1a' : '#222', color: green, border: `1px solid ${green}`, borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '14px' }}>
                   {isInBag(surveyProduct.id) ? '✓ In Bag — Tap to Remove' : `🛍️ Add to Bag (${formatBagCount(bagCounts[surveyProduct.id]?.baggedCount || 0)} bagged)`}
                 </button>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button onClick={() => { setMessageProduct(surveyProduct); setSurveyProduct(null) }}
-                    style={{ flex: 1, padding: '12px', background: '#222', color: '#fff', border: '1px solid #333', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '14px' }}>
-                    💬 Message
-                  </button>
-                  <button onClick={() => { setOrderProduct(surveyProduct); setSurveyProduct(null) }}
-                    style={{ flex: 1, padding: '12px', background: green, color: '#000', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '14px' }}>
-                    Buy Now
-                  </button>
-                </div>
+                {surveyProduct.sellerId === (userId || '') ? (
+                  <p style={{ margin: 0, padding: '12px', background: '#111', color: '#666', borderRadius: '10px', fontSize: '13px', textAlign: 'center', border: '1px dashed #333' }}>
+                    This is your product
+                  </p>
+                ) : (
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={() => { setMessageProduct(surveyProduct); setSurveyProduct(null) }}
+                      style={{ flex: 1, padding: '12px', background: '#222', color: '#fff', border: '1px solid #333', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '14px' }}>
+                      💬 Message
+                    </button>
+                    <button onClick={() => { setOrderProduct(surveyProduct); setSurveyProduct(null) }}
+                      style={{ flex: 1, padding: '12px', background: green, color: '#000', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '14px' }}>
+                      Buy Now
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>

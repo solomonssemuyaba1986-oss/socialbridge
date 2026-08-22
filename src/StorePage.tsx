@@ -643,6 +643,11 @@ const handleSendMessage = async () => {
     return
   }
 
+  if (auth.currentUser && sellerId === auth.currentUser.uid) {
+    showFeedback(notify.messageSelfBlock, 'error')
+    return
+  }
+
   if (!auth.currentUser) {
     setShowSignupSheet(true)
     showFeedback(notify.messageSignInRequired, 'info')
