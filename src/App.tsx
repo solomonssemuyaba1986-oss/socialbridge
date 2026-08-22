@@ -24,6 +24,7 @@ import RecoverPage from './RecoverPage.tsx'
 import HelpPage from './HelpPage.tsx'
 import TermsPage from './TermsPage.tsx'
 import { SellerLiveProvider } from './sellerLive.tsx'
+import NetworkGuard from './NetworkGuard.tsx'
 
 function BulkUploadWrapper() {
   const navigate = useNavigate()
@@ -81,6 +82,7 @@ function App() {
 
   return (
     <SellerLiveProvider>
+      <NetworkGuard />
       {location.pathname !== '/terms' && <TopNav variant={location.pathname === '/bag' ? 'bag' : 'default'} />}
       <Routes>
       <Route path="/" element={
