@@ -52,29 +52,49 @@ function BagPage() {
   const { state: otpState, requestOTP, verifyOTP, reset: resetOTP } = useGuestOTP()
   const sellerIdCache = useRef<Map<string, string>>(new Map())
   const [salesMap, setSalesMap] = useState<Record<string, number>>({})
+  const [missingProducts, setMissingProducts] = useState<Record<string, boolean>>({})
   const [previewItem, setPreviewItem] = useState<typeof items[number] | null>(null)
 
-  // Fetch each item's sold count (social proof) — motivates completing the purchase
+  // Fetch each item's sold count (social proof) + detect deleted products
   useEffect(() => {
     const ids = new Set(items.map(i => i.productId))
-    if (ids.size === 0) { setSalesMap({}); return }
+    if (ids.size === 0) { setSalesMap({}); setMissingProducts({}); return }
     let cancelled = false
     Promise.all(Array.from(ids).map(async pid => {
       const item = items.find(i => i.productId === pid)
       if (!item) return
       try {
         const snap = await getDoc(doc(db, 'sellers', item.sellerId, 'products', pid))
-        if (!cancelled && snap.exists()) {
+        if (cancelled) return
+        if (snap.exists()) {
           setSalesMap(prev => ({ ...prev, [pid]: snap.data().salesCount || 0 }))
+          setMissingProducts(prev => {
+            if (!prev[pid]) return prev
+            const next = { ...prev }
+            delete next[pid]
+            return next
+          })
+        } else {
+          // Product was deleted — flag it so the bag shows a clean "unavailable" state
+          setMissingProducts(prev => ({ ...prev, [pid]: true }))
+          setSalesMap(prev => {
+            if (!(pid in prev)) return prev
+            const next = { ...prev }
+            delete next[pid]
+            return next
+          })
         }
       } catch (err) {
-        console.warn('Failed to fetch sales count:', err)
+        console.warn('Failed to fetch product:', err)
       }
     }))
     return () => { cancelled = true }
   }, [items])
 
-  const total = items.reduce((sum, i) => sum + (Number(String(i.productPrice).replace(/[^0-9]/g, '')) || 0) * i.quantity, 0)
+  // Deleted products can't be bought — keep them out of the total
+  const total = items
+    .filter(i => !missingProducts[i.productId])
+    .reduce((sum, i) => sum + (Number(String(i.productPrice).replace(/[^0-9]/g, '')) || 0) * i.quantity, 0)
 
   const toTarget = (item: typeof items[number]): BagTarget => ({
     id: item.productId,
@@ -257,45 +277,58 @@ function BagPage() {
           </button>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {items.map(item => (
-            <div key={item.productId}
-              style={{ background: '#1a1a1a', borderRadius: '12px', padding: '14px', border: '1px solid #222', display: 'flex', gap: '14px', alignItems: 'center' }}>
-              <img src={item.imageUrl || 'https://placehold.co/80/1a1a1a/333333'} alt={item.productName}
-                style={{ width: '72px', height: '72px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0, cursor: 'pointer' }}
-                onClick={() => setPreviewItem(item)} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: '#fff', cursor: 'pointer' }} onClick={() => setPreviewItem(item)}>{item.productName}</p>
-                <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#888' }}>{item.businessName}</p>
-                <p style={{ margin: 0, fontWeight: '800', fontSize: '14px', color: green }}>UGX {item.productPrice}</p>
-                {(salesMap[item.productId] || 0) > 0 && (
-                  <p style={{ display: 'inline-block', margin: '6px 0 0', padding: '3px 10px', background: green, color: '#000', borderRadius: '999px', fontSize: '12px', fontWeight: '800', lineHeight: 1.4 }}>
-                    ✓ {formatCount(salesMap[item.productId] || 0)} bought
-                  </p>
-                )}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#0f0f0f', borderRadius: '8px', padding: '2px' }}>
-                  <button onClick={() => setQuantity(item.productId, item.quantity - 1)}
-                    style={{ width: '28px', height: '28px', background: '#222', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
-                  <span style={{ width: '28px', textAlign: 'center', fontSize: '13px', fontWeight: '700', color: '#fff' }}>{item.quantity}</span>
-                  <button onClick={() => setQuantity(item.productId, item.quantity + 1)}
-                    style={{ width: '28px', height: '28px', background: '#222', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+          {items.map(item => {
+            const isMissing = !!missingProducts[item.productId]
+            return (
+              <div key={item.productId}
+                style={{ background: '#1a1a1a', borderRadius: '12px', padding: '14px', border: isMissing ? '1px solid #333' : '1px solid #222', display: 'flex', gap: '14px', alignItems: 'center', opacity: isMissing ? 0.85 : 1 }}>
+                <img src={item.imageUrl || 'https://placehold.co/80/1a1a1a/333333'} alt={item.productName}
+                  style={{ width: '72px', height: '72px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0, cursor: 'pointer', filter: isMissing ? 'grayscale(80%)' : 'none' }}
+                  onClick={() => setPreviewItem(item)} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: isMissing ? '#888' : '#fff', cursor: 'pointer' }} onClick={() => setPreviewItem(item)}>{item.productName}</p>
+                  <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#888' }}>{item.businessName}</p>
+                  {isMissing ? (
+                    <p style={{ margin: 0, color: '#ff6b6b', fontSize: '12px', fontWeight: '700' }}>❌ Product no longer available</p>
+                  ) : (
+                    <>
+                      <p style={{ margin: 0, fontWeight: '800', fontSize: '14px', color: green }}>UGX {item.productPrice}</p>
+                      {(salesMap[item.productId] || 0) > 0 && (
+                        <p style={{ display: 'inline-block', margin: '6px 0 0', padding: '3px 10px', background: green, color: '#000', borderRadius: '999px', fontSize: '12px', fontWeight: '800', lineHeight: 1.4 }}>
+                          ✓ {formatCount(salesMap[item.productId] || 0)} bought
+                        </p>
+                      )}
+                    </>
+                  )}
                 </div>
-                <button onClick={() => openMessage(item)}
-                  style={{ padding: '6px 12px', background: '#222', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '11px', whiteSpace: 'nowrap' }}>
-                  💬 Message
-                </button>
-                <button onClick={() => openOrder(item)}
-                  style={{ padding: '6px 12px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '11px', whiteSpace: 'nowrap' }}>
-                  Buy Now
-                </button>
-                <button onClick={() => removeFromBag(item.productId)}
-                  style={{ padding: '6px 12px', background: 'transparent', color: '#888', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer', fontSize: '11px', whiteSpace: 'nowrap' }}>
-                  Remove
-                </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center' }}>
+                  {!isMissing && (
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#0f0f0f', borderRadius: '8px', padding: '2px' }}>
+                        <button onClick={() => setQuantity(item.productId, item.quantity - 1)}
+                          style={{ width: '28px', height: '28px', background: '#222', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+                        <span style={{ width: '28px', textAlign: 'center', fontSize: '13px', fontWeight: '700', color: '#fff' }}>{item.quantity}</span>
+                        <button onClick={() => setQuantity(item.productId, item.quantity + 1)}
+                          style={{ width: '28px', height: '28px', background: '#222', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                      </div>
+                      <button onClick={() => openMessage(item)}
+                        style={{ padding: '6px 12px', background: '#222', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                        💬 Message
+                      </button>
+                      <button onClick={() => openOrder(item)}
+                        style={{ padding: '6px 12px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                        Buy Now
+                      </button>
+                    </>
+                  )}
+                  <button onClick={() => removeFromBag(item.productId)}
+                    style={{ padding: '6px 12px', background: isMissing ? '#2a1515' : 'transparent', color: isMissing ? '#ff6b6b' : '#888', border: isMissing ? '1px solid #ff6b6b' : '1px solid #333', borderRadius: '8px', cursor: 'pointer', fontSize: '11px', whiteSpace: 'nowrap', fontWeight: isMissing ? 700 : 400 }}>
+                    Remove{isMissing ? ' item' : ''}
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
 
         {/* Total */}
