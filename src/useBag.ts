@@ -9,6 +9,7 @@ export interface BagItem {
   productName: string
   productPrice: string
   imageUrl: string
+  images?: string[]
   sellerSlug: string
   sellerId: string
   businessName: string
