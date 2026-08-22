@@ -79,6 +79,7 @@ function OrderHistory() {
     { label: 'Products', path: '/products', icon: '🛍️' },
     { label: 'Orders', path: '/orders', icon: '📦' },
     { label: 'Inbox', path: '/inbox', icon: '📩' },
+    { label: 'Nearby', path: '/nearby', icon: '📍' },
     { label: 'Settings', path: '/edit-store', icon: '⚙️' },
   ]
 

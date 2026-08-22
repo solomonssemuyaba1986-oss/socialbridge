@@ -91,6 +91,7 @@ function Dashboard() {
     { label: 'Products', path: '/products', icon: '🛍️' },
     { label: 'Orders', path: '/orders', icon: '📦' },
     { label: 'Inbox', path: '/inbox', icon: '📩' },
+    { label: 'Nearby', path: '/nearby', icon: '📍' },
     { label: 'Analytics', path: '/analytics', icon: '📈' },
     { label: 'Marketing', path: '/dashboard', icon: '📣' },
     { label: 'Payouts', path: '/dashboard', icon: '💸' },

@@ -276,6 +276,7 @@ function AnalyticsPage() {
     { label: 'Products', path: '/products', icon: '🛍️' },
     { label: 'Orders', path: '/orders', icon: '📦' },
     { label: 'Inbox', path: '/inbox', icon: '📩' },
+    { label: 'Nearby', path: '/nearby', icon: '📍' },
     { label: 'Analytics', path: '/analytics', icon: '📈' },
     { label: 'Settings', path: '/edit-store', icon: '⚙️' },
   ]
