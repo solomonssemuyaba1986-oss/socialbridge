@@ -52,7 +52,7 @@ export const notify = {
   // ---------- File Uploads ----------
   fileTypeInvalid: 'Please upload a JPG, PNG, or PDF file for this document.',
   fileTooLarge: 'File must be under 10MB. Try compressing it first.',
-  geolocationDenied: 'Location access denied. Please enter your location manually.',
+  geolocationDenied: 'Location access denied. Enable it in your browser settings (iPhone: Settings → Safari → Location), then try again.',
   geolocationUnavailable: 'Could not get your location. Please enter it manually.',
   uploading: 'Uploading — please wait...',
 
