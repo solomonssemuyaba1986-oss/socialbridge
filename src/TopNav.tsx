@@ -60,6 +60,7 @@ function TopNav({ variant = 'default' }: { variant?: 'default' | 'bag' }) {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button onClick={() => navigate(isBag ? '/help?topic=bag' : '/help')} style={{ background: 'transparent', color: '#888', border: '1px solid #2a2a2a', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>{isBag ? '❓ Bag help?' : '❓ Need help?'}</button>
           <button onClick={() => navigate('/feedback')} style={{ background: 'transparent', color: green, border: '1px solid #2a2a2a', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>💡 Feedback</button>
+          <button onClick={() => navigate('/nearby')} style={{ background: 'transparent', color: '#aaa', border: '1px solid #2a2a2a', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>📍 Nearby</button>
 
           {!user && (
             <>
