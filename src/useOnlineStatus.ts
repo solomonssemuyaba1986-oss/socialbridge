@@ -24,14 +24,14 @@ async function probeReachable(): Promise<boolean> {
 export function useOnlineStatus() {
   const [online, setOnline] = useState(() => navigator.onLine)
   const failedRef = useRef(0)
-  const runProbeRef = useRef<() => void>(() => {})
+  const runProbeRef = useRef<() => Promise<boolean>>(async () => false)
 
   useEffect(() => {
     let cancelled = false
 
-    const runProbe = async () => {
+    const runProbe = async (): Promise<boolean> => {
       const reachable = await probeReachable()
-      if (cancelled) return
+      if (cancelled) return reachable
       if (reachable) {
         failedRef.current = 0
         setOnline(true)
@@ -39,6 +39,7 @@ export function useOnlineStatus() {
         failedRef.current += 1
         if (failedRef.current >= 2) setOnline(false)
       }
+      return reachable
     }
     runProbeRef.current = runProbe
 
@@ -57,8 +58,9 @@ export function useOnlineStatus() {
     }
   }, [])
 
-  // Forces an immediate re-check (used by the "Try again" button on the offline screen)
-  const refresh = useCallback(() => { runProbeRef.current() }, [])
+  // Forces an immediate re-check and reports whether we're reachable
+  // (used by the "Try again" button on the offline screen).
+  const refresh = useCallback((): Promise<boolean> => runProbeRef.current(), [])
 
   return { online, refresh }
 }
