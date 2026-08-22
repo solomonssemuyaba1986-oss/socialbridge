@@ -28,6 +28,7 @@ function EditStore() {
 
   // Location
   const [location, setLocation] = useState('')
+  const [geo, setGeo] = useState<{ lat: number; lng: number } | null>(null)
   const [locationLoading, setLocationLoading] = useState(false)
 
   // Nationality
@@ -71,6 +72,7 @@ function EditStore() {
           setNationality(data.nationality || '')
           setShowWhatsapp(data.showWhatsapp !== false)
           setLocation(data.location || '')
+          setGeo(data.geo || null)
           if (data.idDocumentPath) {
             // Extract filename from path
             const parts = data.idDocumentPath.split('/')
@@ -120,6 +122,7 @@ function EditStore() {
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const { latitude, longitude } = position.coords
+        setGeo({ lat: latitude, lng: longitude }) // keep coords for the Nearby feature
         try {
           const res = await fetch(
             `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
@@ -228,6 +231,7 @@ function EditStore() {
         logoUrl: finalLogoUrl,
         nationality: nationality.trim(),
         location: location.trim(),
+        geo: geo || null,
         showWhatsapp,
       }
       if (idDocumentPath) {
