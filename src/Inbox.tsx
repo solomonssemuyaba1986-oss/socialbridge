@@ -78,6 +78,7 @@ function Inbox() {
   const { conversations: buyerConversations, unreadCount: unreadBuyerConversations, loading: buyerConversationsLoading } = useBuyerConversations()
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'unread'>('all')
+  const [search, setSearch] = useState('')
   const [logoMap, setLogoMap] = useState<Record<string, string>>({})
   const [draftTick, setDraftTick] = useState(0)
   const { isSeller, pendingOrdersCount } = useSellerLive()
@@ -175,7 +176,21 @@ function Inbox() {
 
   const totalUnread = unreadMessages + unreadSellerConversations + unreadBuyerConversations
   const loading = messagesLoading || conversationsLoading || buyerConversationsLoading
-  const visible = filter === 'unread' ? threads.filter(t => t.unread || t.key === selectedKey) : threads
+  const q = search.trim().toLowerCase()
+  const qDigits = q.replace(/[^\d+]/g, '')
+  const searched = q
+    ? threads.filter(t => {
+        const name = (t.name || '').toLowerCase()
+        const preview = (t.preview || '').toLowerCase()
+        const product = (t.guest?.productName || '').toLowerCase()
+        const rawPhone = (t.guest?.senderPhone || '').replace(/[^\d+]/g, '')
+        return name.includes(q)
+          || preview.includes(q)
+          || product.includes(q)
+          || (qDigits.length > 0 && rawPhone.includes(qDigits))
+      })
+    : threads
+  const visible = filter === 'unread' ? searched.filter(t => t.unread || t.key === selectedKey) : searched
   const selected = threads.find(t => t.key === selectedKey) || null
 
   const openChat = (key: string) => {
@@ -269,10 +284,25 @@ function Inbox() {
           )}
         </div>
 
+        {/* Search — name, phone number, or a word in a message */}
+        <div style={{ position: 'relative', marginBottom: '16px' }}>
+          <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#555', fontSize: '14px' }}>🔍</span>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search name, number or message…"
+            style={{ width: '100%', padding: '12px 40px', borderRadius: '12px', border: '1px solid #333', background: '#1a1a1a', color: '#fff', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }}
+          />
+          {search && (
+            <button onClick={() => setSearch('')}
+              style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '16px', padding: '4px' }}>✕</button>
+          )}
+        </div>
+
         {visible.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 20px' }}>
-            <div style={{ fontSize: '48px', marginBottom: '16px' }}>{filter === 'unread' ? '🎉' : '📭'}</div>
-            <p style={{ color: '#555', fontSize: '15px' }}>{filter === 'unread' ? 'No unread messages' : 'No messages yet'}</p>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>{search ? '🔍' : (filter === 'unread' ? '🎉' : '📭')}</div>
+            <p style={{ color: '#555', fontSize: '15px' }}>{search ? `No results for "${search}"` : (filter === 'unread' ? 'No unread messages' : 'No messages yet')}</p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
