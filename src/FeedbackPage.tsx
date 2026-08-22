@@ -100,7 +100,7 @@ function FeedbackPage() {
       <div style={{ maxWidth: '480px', margin: '0 auto' }}>
         <h1 style={{ margin: '0 0 4px', fontSize: '24px', fontWeight: '800' }}>💡 Send Feedback</h1>
         <p style={{ color: '#888', fontSize: '14px', margin: '0 0 24px' }}>
-          A feature you want, a change you need, or a bug you found — tell us anything. We build it right away
+          what annoys you? A feature you want, a change you need, or a bug you found — tell us anything. We build it right away
         </p>
 
         <label style={{ display: 'block', color: '#aaa', fontSize: '13px', fontWeight: '600', marginBottom: '8px' }}>

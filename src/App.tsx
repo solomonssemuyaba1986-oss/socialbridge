@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { onAuthStateChanged, getRedirectResult } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
+import { rememberUser } from './userMemory'
 import StorePage from './StorePage.tsx'
 import SignIn from './SignIn.tsx'
 import SetupStore from './SetupStore.tsx'
@@ -55,6 +56,7 @@ function App() {
       try {
         if (user) {
           setSignedIn(true)
+          rememberUser(user) // keep "Continue as" fresh for the next visit
           const docRef = doc(db, 'sellers', user.uid)
           const docSnap = await getDoc(docRef)
           if (docSnap.exists()) {

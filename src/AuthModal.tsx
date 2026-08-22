@@ -4,6 +4,7 @@ import type { AuthProvider, ConfirmationResult } from 'firebase/auth'
 import { auth, googleProvider, appleProvider, facebookProvider, createRecaptchaVerifier } from './firebase'
 import { COUNTRY_CODES } from './countryCodes'
 import { rememberUser } from './userMemory'
+import ContinueAs from './ContinueAs'
 
 const green = '#adff2f'
 
@@ -106,6 +107,9 @@ function AuthModal({ open, title, subtitle, onSuccess, onClose }: Props) {
         <div style={{ width: 48, height: 48, borderRadius: '50%', background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: 22, fontWeight: 800, color: '#000' }}>R</div>
         <h3 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 800 }}>{title || 'Create your account'}</h3>
         <p style={{ margin: '0 0 24px', color: '#888', fontSize: 14 }}>{subtitle || 'Sign in to save your store. Your details are safe.'}</p>
+
+        {/* One-tap continue as */}
+        <ContinueAs onSuccess={onSuccess} />
 
         {phoneOtpError && <p style={{ color: '#ff4444', fontSize: 13, margin: '0 0 12px' }}>{phoneOtpError}</p>}
 

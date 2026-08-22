@@ -8,6 +8,7 @@ import { notify } from './notifications'
 import { rememberUser } from './userMemory'
 import { COUNTRY_CODES, type CountryCode } from './countryCodes'
 import RecoveryModal from './RecoveryModal'
+import ContinueAs from './ContinueAs'
 
 interface SavedUser {
   displayName: string | null
@@ -302,6 +303,8 @@ function SignIn() {
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
           <div ref={providerSectionRef} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', width: '100%', maxWidth: '360px' }}>
+            {/* One-tap continue as */}
+            <ContinueAs beforeSignIn={ensureTerms} onSuccess={() => void routeAfterSignIn()} />
             {/* Google */}
             <button onClick={handleGoogleSignIn}
               style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: '#fff', color: '#000', border: 'none', padding: '16px 32px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px' }}>

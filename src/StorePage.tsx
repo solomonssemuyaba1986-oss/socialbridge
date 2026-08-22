@@ -16,6 +16,7 @@ import { track } from './tracking'
 import { uploadImageToCloudinary } from './uploadImage'
 import ConfirmDialog from './ConfirmDialog'
 import ProductPreview from './ProductPreview'
+import ContinueAs from './ContinueAs'
 import { useDraft } from './useDraft'
 
 interface Seller {
@@ -1231,6 +1232,9 @@ const handleSignupForAction = async (provider: any) => {
           <div className="rt-modal-box" style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '380px', border: '1px solid #222', textAlign: 'center' }}>
             <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: '800', color: '#fff' }}>Join rachett</h3>
             <p style={{ margin: '0 0 24px', color: '#888', fontSize: '14px' }}>Sign up to continue</p>
+
+            {/* One-tap continue as */}
+            <ContinueAs onSuccess={() => { setShowSignupSheet(false); showFeedback('Welcome back! You can now message the seller.', 'success') }} />
 
             {/* Google Sign In */}
             {/* Google */}

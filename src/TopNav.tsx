@@ -4,6 +4,7 @@ import { auth, googleProvider, facebookProvider, appleProvider } from './firebas
 import {signInWithPopup } from 'firebase/auth'
 import { notify } from './notifications'
 import { useSellerLive } from './sellerLive'
+import ContinueAs from './ContinueAs'
 
 function TopNav({ variant = 'default' }: { variant?: 'default' | 'bag' }) {
   const navigate = useNavigate()
@@ -113,6 +114,9 @@ function TopNav({ variant = 'default' }: { variant?: 'default' | 'bag' }) {
 
             <h3 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 800 }}>Welcome back</h3>
             <p style={{ margin: '0 0 28px', color: '#888', fontSize: 14 }}>Log into your rachett account.</p>
+
+            {/* One-tap continue as */}
+            <ContinueAs onSuccess={() => { setShowLoginModal(false); navigate('/onboarding') }} />
 
             {/* Google */}
             <button onClick={() => handleSocialSignIn(googleProvider, 'Google')} disabled={!!loginLoading}
