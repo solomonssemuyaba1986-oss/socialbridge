@@ -45,6 +45,7 @@ function SetupStore() {
   const [nationalitySearch, setNationalitySearch] = useState('')
   const [showCountryDropdown, setShowCountryDropdown] = useState(false)
   const [location, setLocation] = useState('')
+  const [geo, setGeo] = useState<{ lat: number; lng: number } | null>(null)
   const [locationLoading, setLocationLoading] = useState(false)
   const [errors, setErrors] = useState<SetupFormErrors>({})
   const [loading, setLoading] = useState(false)
@@ -309,6 +310,7 @@ function SetupStore() {
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const { latitude, longitude } = position.coords
+        setGeo({ lat: latitude, lng: longitude }) // keep coords for the Nearby feature
         try {
           // Reverse geocode with OpenStreetMap Nominatim (free, no key required)
           const res = await fetch(
@@ -336,7 +338,7 @@ function SetupStore() {
         console.error('Geolocation error:', err)
         setLocationLoading(false)
         if (err.code === 1) {
-          setErrors(e => ({ ...e, submit: 'Location access denied. Please enter your location manually.' }))
+          setErrors(e => ({ ...e, submit: 'Location access denied. Enable it in your browser settings (iPhone: Settings → Safari → Location), then try again.' }))
         } else {
           setErrors(e => ({ ...e, submit: 'Could not get location. Please enter manually.' }))
         }
@@ -426,6 +428,7 @@ function SetupStore() {
         tiktok: cleanedTiktok,
         nationality,
         location: location.trim(),
+        geo: geo || null,
         phoneVerified,
         showWhatsapp,
         idDocumentPath,
@@ -717,7 +720,10 @@ function SetupStore() {
           </button>
         </div>
         {locationLoading && <p style={{ color: '#888', fontSize: '12px', margin: '4px 0 16px' }}>Detecting your location...</p>}
-        {!locationLoading && <div style={{ marginBottom: '16px' }} />}
+        {!locationLoading && geo && (
+          <p style={{ color: '#2e7d32', fontSize: '12px', fontWeight: '700', margin: '4px 0 16px' }}>✓ Location detected — it'll be saved with your store</p>
+        )}
+        {!locationLoading && !geo && <div style={{ marginBottom: '16px' }} />}
 
         {/* National ID Upload */}
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>National ID <span style={{ color: '#888', fontWeight: '400', fontSize: '12px' }}>(optional for now)</span></label>
