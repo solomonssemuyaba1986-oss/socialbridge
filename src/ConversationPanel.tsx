@@ -39,6 +39,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
   const listRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [uploadingImage, setUploadingImage] = useState(false)
+  const [pendingImage, setPendingImage] = useState<string | null>(null)
   const [previewImage, setPreviewImage] = useState<string | null>(null)
 
   const showFeedback = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -126,7 +127,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
 
   const handleSend = async (newText?: string) => {
     const messageText = (newText !== undefined ? newText : text).trim()
-    if (!messageText) return
+    if (!messageText && !pendingImage) return
     const senderId = auth.currentUser?.uid
     if (!senderId) return
     if (senderId === sellerId && sellerId === buyerId) {
@@ -134,8 +135,15 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
       return
     }
     try {
-      await sendMessage(senderId, messageText, sellerName || 'Seller', buyerName || 'Buyer')
+      await sendMessage(
+        senderId,
+        messageText || '📷 Photo',
+        sellerName || 'Seller',
+        buyerName || 'Buyer',
+        pendingImage ? { imageUrl: pendingImage, type: 'image' } : undefined
+      )
       clearDraft()
+      setPendingImage(null)
       setShowQuickReplies(false)
     } catch (err) {
       console.error('Failed to send conversation message:', err)
@@ -155,9 +163,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
     setUploadingImage(true)
     try {
       const url = await uploadImageToCloudinary(file)
-      const senderId = auth.currentUser?.uid
-      if (!senderId) return
-      await sendMessage(senderId, '📷 Photo', sellerName || 'Seller', buyerName || 'Buyer', { imageUrl: url, type: 'image' })
+      setPendingImage(url) // stage it — nothing is sent until you hit Send
     } catch (err) {
       console.error('Photo upload failed:', err)
       showFeedback(notify.messageFailed, 'error')
@@ -230,6 +236,11 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
                   <div style={{ fontSize: 12, color: isSeller ? '#3399ff' : '#ff4444', fontWeight: 600 }}>{senderIcon} {senderName}</div>
                   <img src={m.imageUrl} alt="photo" onClick={() => setPreviewImage(m.imageUrl)}
                     style={{ maxWidth: '75%', borderRadius: 12, border: `1px solid ${isSeller ? '#3399ff' : '#ff4444'}`, cursor: 'zoom-in', alignSelf: 'flex-start' }} />
+                  {m.text && m.text !== '📷 Photo' && (
+                    <div style={{ maxWidth: '75%', background: '#111', color: '#eee', padding: '10px 14px', borderRadius: '4px 12px 12px 12px', borderTop: '1px solid #222', borderRight: '1px solid #222', borderBottom: '1px solid #222', borderLeft: `4px solid ${isSeller ? '#3399ff' : '#ff4444'}`, fontSize: 14, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                      {m.text}
+                    </div>
+                  )}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: '#666' }}>
                     <span>{m.createdAt?.toDate ? m.createdAt.toDate().toLocaleString() : 'Now'}</span>
                     {isMe && <span style={{ color: statusInfo.color, fontWeight: 700 }}>{statusInfo.label}</span>}
@@ -276,9 +287,21 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
           </button>
           <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
           <input value={text} onChange={e => setText(e.target.value)} placeholder="Write a reply..." style={{ flex: 1, padding: '14px 16px', borderRadius: 16, border: '1px solid #333', background: '#101010', color: '#fff', minHeight: 46 }} />
-          <button onClick={() => handleSend()} style={{ background: '#adff2f', color: '#000', padding: '13px 22px', borderRadius: 16, border: 'none', fontWeight: 700, cursor: 'pointer' }}>Send</button>
+          <button onClick={() => handleSend()} disabled={uploadingImage}
+            style={{ background: uploadingImage ? '#3a4d2a' : '#adff2f', color: '#000', padding: '13px 22px', borderRadius: 16, border: 'none', fontWeight: 700, cursor: uploadingImage ? 'not-allowed' : 'pointer' }}>Send</button>
         </div>
-        {uploadingImage && <p style={{ margin: 0, color: '#888', fontSize: 12 }}>Uploading photo…</p>}
+        {pendingImage ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#111', border: '1px solid #333', borderRadius: 12, padding: 8 }}>
+            <img src={pendingImage} alt="photo" style={{ width: 64, height: 64, borderRadius: 8, objectFit: 'cover' }} />
+            <div style={{ flex: 1, color: '#888', fontSize: 12, lineHeight: 1.4 }}>
+              {uploadingImage ? 'Uploading photo…' : 'Photo will send with your message.'}
+            </div>
+            <button onClick={() => setPendingImage(null)} disabled={uploadingImage}
+              style={{ width: 28, height: 28, background: '#ff4444', border: 'none', color: '#fff', borderRadius: '50%', cursor: uploadingImage ? 'not-allowed' : 'pointer', fontSize: 12, lineHeight: 1 }}>✕</button>
+          </div>
+        ) : uploadingImage ? (
+          <p style={{ margin: 0, color: '#888', fontSize: 12 }}>Uploading photo…</p>
+        ) : null}
 
         {showQuickReplies && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, background: '#111', border: '1px solid #222', borderRadius: 16, padding: 12 }}>
