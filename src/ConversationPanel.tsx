@@ -300,6 +300,37 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
                 </div>
               )
             }
+            if (m.type === 'product' || m.productName) {
+              const isSeller = m.senderId === sellerId
+              const isMe = m.senderId === auth.currentUser?.uid
+              const borderColor = isSeller ? '#3399ff' : '#ff4444'
+              const senderName = isMe ? 'Me' : (isSeller ? (sellerName || 'Seller') : (buyerName || 'Buyer'))
+              const senderIcon = isMe ? '👤' : (isSeller ? '🏪' : '👤')
+              const status = m.status || 'sent'
+              const statusInfo = { sent: { color: '#adff2f', label: 'Sent' }, delivered: { color: '#3399ff', label: 'Delivered' }, seen: { color: '#00e5ff', label: 'Seen' } }[status as 'sent' | 'delivered' | 'seen'] || { color: '#adff2f', label: 'Sent' }
+              const img = m.productImage || m.imageUrl || ''
+              return (
+                <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={{ fontSize: 12, color: borderColor, fontWeight: 600 }}>{senderIcon} {senderName}</div>
+                  <div style={{ alignSelf: 'flex-start', width: 'fit-content', maxWidth: '85%', background: '#111', border: `1px solid ${borderColor}`, borderRadius: '4px 12px 12px 12px', padding: 10, display: 'flex', gap: 10, alignItems: 'center', cursor: 'pointer' }} onClick={() => img && setPreviewImage(img)}>
+                    {img && (
+                      <img src={img} alt={m.productName || 'product'} style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
+                    )}
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ color: '#fff', fontWeight: 700, fontSize: 13 }}>🛍️ {m.productName || 'Product'}</div>
+                      {m.productPrice && <div style={{ color: green, fontWeight: 800, fontSize: 13, marginTop: 2 }}>UGX {m.productPrice}</div>}
+                    </div>
+                  </div>
+                  {m.text && m.text !== '🛍️ Product' && m.text !== '📷 Photo' && (
+                    <div style={{ maxWidth: '85%', background: '#111', color: '#eee', padding: '10px 14px', borderRadius: '4px 12px 12px 12px', borderTop: '1px solid #222', borderRight: '1px solid #222', borderBottom: '1px solid #222', borderLeft: `4px solid ${borderColor}`, fontSize: 14, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.text}</div>
+                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: '#666' }}>
+                    <span>{m.createdAt?.toDate ? m.createdAt.toDate().toLocaleString() : 'Now'}</span>
+                    {isMe && <span style={{ color: statusInfo.color, fontWeight: 700 }}>{statusInfo.label}</span>}
+                  </div>
+                </div>
+              )
+            }
             const status = m.status || 'sent'
             const statusStyles: Record<string, { color: string; label: string }> = {
               sent: { color: '#adff2f', label: 'Sent' },

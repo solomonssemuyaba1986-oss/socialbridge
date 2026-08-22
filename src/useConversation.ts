@@ -22,6 +22,80 @@ export async function markConversationRead(
   await setDoc(doc(db, 'conversations', conversationId), patch, { merge: true })
 }
 
+/** One conversation per seller↔buyer pair — products ride on the message, never split the thread. */
+export async function sendConversationMessage(
+  sellerId: string,
+  buyerId: string,
+  senderId: string,
+  text: string,
+  sellerName: string,
+  buyerName: string,
+  opts?: {
+    imageUrl?: string
+    type?: string
+    productId?: string
+    productName?: string
+    productPrice?: string
+    productImage?: string
+  }
+) {
+  if (!sellerId || !buyerId) return
+  const conversationId = getConversationId(sellerId, buyerId)
+
+  const isImage = !!opts?.imageUrl
+  const isProduct = !!opts?.productId || !!opts?.productName
+  let lastMessage: string
+  if (isImage) lastMessage = '📷 Photo'
+  else if (isProduct) lastMessage = `🛍️ ${opts!.productName || 'Product'}`
+  else lastMessage = text
+
+  const convoRef = doc(db, 'conversations', conversationId)
+  const convoSnap = await getDoc(convoRef)
+
+  if (!convoSnap.exists()) {
+    await setDoc(convoRef, {
+      sellerId, buyerId, sellerName, buyerName,
+      lastMessage,
+      lastMessageAt: serverTimestamp(),
+      lastMessageBy: senderId,
+      lastMessageStatus: 'sent',
+      unreadBySeller: senderId === buyerId,
+      unreadByBuyer: senderId === sellerId,
+      unreadBySellerCount: senderId === buyerId ? 1 : 0,
+      unreadByBuyerCount: senderId === sellerId ? 1 : 0
+    })
+  } else {
+    const patch: Record<string, unknown> = {
+      lastMessage,
+      lastMessageAt: serverTimestamp(),
+      lastMessageBy: senderId,
+      lastMessageStatus: 'sent',
+      unreadBySeller: senderId === buyerId,
+      unreadByBuyer: senderId === sellerId
+    }
+    if (senderId === buyerId) patch.unreadBySellerCount = increment(1)
+    if (senderId === sellerId) patch.unreadByBuyerCount = increment(1)
+    await setDoc(convoRef, patch, { merge: true })
+  }
+
+  const messageFields: Record<string, unknown> = {
+    senderId, text, status: 'sent', createdAt: serverTimestamp()
+  }
+  if (isImage) {
+    messageFields.imageUrl = opts!.imageUrl
+    messageFields.type = opts?.type || 'image'
+  } else if (isProduct) {
+    messageFields.type = 'product'
+  }
+  if (isProduct) {
+    if (opts!.productId) messageFields.productId = opts!.productId
+    if (opts!.productName) messageFields.productName = opts!.productName
+    if (opts!.productPrice) messageFields.productPrice = opts!.productPrice
+    if (opts!.productImage) messageFields.productImage = opts!.productImage
+  }
+  await addDoc(collection(db, 'conversations', conversationId, 'messages'), messageFields)
+}
+
 export function useConversation(sellerId: string | null, buyerId: string | null) {
   const [messages, setMessages] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -67,48 +141,8 @@ export function useConversation(sellerId: string | null, buyerId: string | null)
     buyerName: string,
     opts?: { imageUrl?: string; type?: string }
   ) => {
-    if (!conversationId || !sellerId || !buyerId) return
-
-    const isImage = !!opts?.imageUrl
-    const lastMessage = isImage ? '📷 Photo' : text
-
-    const convoRef = doc(db, 'conversations', conversationId)
-    const convoSnap = await getDoc(convoRef)
-
-    if (!convoSnap.exists()) {
-      await setDoc(convoRef, {
-        sellerId, buyerId, sellerName, buyerName,
-        lastMessage,
-        lastMessageAt: serverTimestamp(),
-        lastMessageBy: senderId,
-        lastMessageStatus: 'sent',
-        unreadBySeller: senderId === buyerId,
-        unreadByBuyer: senderId === sellerId,
-        unreadBySellerCount: senderId === buyerId ? 1 : 0,
-        unreadByBuyerCount: senderId === sellerId ? 1 : 0
-      })
-    } else {
-      const patch: Record<string, unknown> = {
-        lastMessage,
-        lastMessageAt: serverTimestamp(),
-        lastMessageBy: senderId,
-        lastMessageStatus: 'sent',
-        unreadBySeller: senderId === buyerId,
-        unreadByBuyer: senderId === sellerId
-      }
-      if (senderId === buyerId) patch.unreadBySellerCount = increment(1)
-      if (senderId === sellerId) patch.unreadByBuyerCount = increment(1)
-      await setDoc(convoRef, patch, { merge: true })
-    }
-
-    const messageFields: Record<string, unknown> = {
-      senderId, text, status: 'sent', createdAt: serverTimestamp()
-    }
-    if (isImage) {
-      messageFields.imageUrl = opts!.imageUrl
-      messageFields.type = opts?.type || 'image'
-    }
-    await addDoc(collection(db, 'conversations', conversationId, 'messages'), messageFields)
+    if (!sellerId || !buyerId) return
+    await sendConversationMessage(sellerId, buyerId, senderId, text, sellerName, buyerName, opts)
   }
 
   /** Send multiple photos atomically as one compact batch. A caption rides on the first photo. */

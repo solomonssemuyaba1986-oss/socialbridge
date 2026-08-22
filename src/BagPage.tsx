@@ -10,6 +10,7 @@ import { useDraft } from './useDraft'
 import { QUICK_REPLIES } from './quickReplies'
 import { uploadImageToCloudinary } from './uploadImage'
 import ProductPreview from './ProductPreview'
+import { sendConversationMessage } from './useConversation'
 
 const green = '#adff2f'
 const SUPPORT_WHATSAPP = (import.meta.env.VITE_SUPPORT_WHATSAPP || '256703174968').trim()
@@ -263,18 +264,22 @@ function BagPage() {
     }
     // Signed-in flow
     try {
-      await addDoc(collection(db, 'sellers', messageTarget.sellerId, 'messages'), {
-        senderName: auth.currentUser.displayName || 'Buyer',
-        senderUid: auth.currentUser.uid,
-        receiverUid: messageTarget.sellerId,
-        productName: messageTarget.name,
-        productPrice: messageTarget.price,
-        text: messageText.trim() || '📷 Photo',
-        ...(guestImageUrl ? { imageUrl: guestImageUrl } : {}),
-        read: false,
-        sourcePlatform: detectSource(),
-        createdAt: serverTimestamp(),
-      })
+      const buyerUid = auth.currentUser.uid
+      await sendConversationMessage(
+        messageTarget.sellerId,
+        buyerUid,
+        buyerUid,
+        messageText.trim() || (guestImageUrl ? '📷 Photo' : '🛍️ Product'),
+        messageTarget.businessName || 'Seller',
+        auth.currentUser.displayName || 'Buyer',
+        {
+          ...(guestImageUrl ? { imageUrl: guestImageUrl, type: 'image' } : {}),
+          productId: messageTarget.id,
+          productName: messageTarget.name,
+          productPrice: messageTarget.price,
+          productImage: messageTarget.imageUrl
+        }
+      )
       track('message_sent', auth.currentUser.uid, detectSource(), { productId: messageTarget.id, productName: messageTarget.name, sellerId: messageTarget.sellerId })
       clearMsgDraft()
       closeMessageModal()

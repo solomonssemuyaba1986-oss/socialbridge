@@ -70,6 +70,7 @@ type Thread = {
   buyerConvo?: BuyerConversation
   sellerConvo?: SellerConversation
   guest?: SellerMessage
+  guestMessages?: SellerMessage[]
 }
 function Inbox() {
   const navigate = useNavigate()
@@ -152,22 +153,37 @@ function Inbox() {
         sellerConvo: c,
       })
     })
+    // Group guest + legacy seller messages by sender so one person = one thread
+    const groupedMsgs = new Map<string, SellerMessage[]>()
     messages.forEach(m => {
+      const key = m.senderUid || m.id
+      const arr = groupedMsgs.get(key) || []
+      arr.push(m)
+      groupedMsgs.set(key, arr)
+    })
+    groupedMsgs.forEach((msgs) => {
+      msgs.sort((a, b) => (b.createdAt?.toDate?.()?.getTime() || 0) - (a.createdAt?.toDate?.()?.getTime() || 0))
+      const latest = msgs[0]
+      const unread = msgs.filter(isUnreadMessage)
+      const preview = latest.text && latest.text !== '🛍️ Product'
+        ? latest.text
+        : (latest.productName ? `🛍️ ${latest.productName}` : latest.text)
       list.push({
-        key: `msg-${m.id}`,
-        name: m.senderName || 'Guest',
-        avatarText: (m.senderName || 'G').charAt(0).toUpperCase(),
-        preview: m.text,
-        timeValue: m.createdAt?.toDate?.()?.getTime() || 0,
-        timeLabel: formatTime(m.createdAt),
-        unread: isUnreadMessage(m),
-        unreadCount: isUnreadMessage(m) ? 1 : 0,
-        verified: !!(m.verified && m.senderPhone),
-        platformIcon: platformMeta(m.sourcePlatform).icon,
-        platformLabel: platformMeta(m.sourcePlatform).label,
-        guestPhone: m.senderPhone ? maskPhone(m.senderPhone) : undefined,
+        key: `msg-${latest.senderUid || latest.id}`,
+        name: latest.senderName || 'Guest',
+        avatarText: (latest.senderName || 'G').charAt(0).toUpperCase(),
+        preview,
+        timeValue: latest.createdAt?.toDate?.()?.getTime() || 0,
+        timeLabel: formatTime(latest.createdAt),
+        unread: unread.length > 0,
+        unreadCount: unread.length,
+        verified: !!(latest.verified && latest.senderPhone),
+        platformIcon: platformMeta(latest.sourcePlatform).icon,
+        platformLabel: platformMeta(latest.sourcePlatform).label,
+        guestPhone: latest.senderPhone ? maskPhone(latest.senderPhone) : undefined,
         kind: 'guest',
-        guest: m,
+        guest: latest,
+        guestMessages: msgs.slice().reverse(), // chronological for display
       })
     })
     list.sort((a, b) => b.timeValue - a.timeValue)
@@ -366,18 +382,33 @@ function Inbox() {
 
                   {isSelected && chatProps && (
                     <div style={{ background: '#111', border: `1px solid ${green}`, borderTop: 'none', borderRadius: '0 0 12px 12px', padding: '16px', marginBottom: '8px' }}>
-                      {selected?.kind === 'guest' && selected.guest && (
-                        <div style={{ marginBottom: '12px', padding: '12px', background: '#1a1a1a', borderRadius: '10px', border: '1px solid #2a2a2a' }}>
-                          {selected.guest.imageUrl && (
-                            <img src={selected.guest.imageUrl} alt="buyer photo" onClick={() => window.open(selected.guest?.imageUrl || '', '_blank')}
-                              style={{ width: '100%', maxHeight: 240, objectFit: 'cover', borderRadius: 8, marginBottom: 8, cursor: 'zoom-in' }} />
-                          )}
-                          <p style={{ margin: '0 0 6px', color: '#aaa', fontSize: '13px', lineHeight: 1.5 }}>"{selected.guest.text}"</p>
-                          <p style={{ margin: 0, color: '#555', fontSize: '12px' }}>
-                            Guest buyer{selected.guestPhone ? ` · 📱 ${selected.guestPhone}` : ''}{selected.guest.productName ? ` · Asks about ${selected.guest.productName}` : ''} · Replies stay in rachett
-                          </p>
-                        </div>
-                      )}
+                      {selected?.kind === 'guest' && selected.guest && (() => {
+                        const msgs = selected.guestMessages && selected.guestMessages.length > 0 ? selected.guestMessages : [selected.guest]
+                        return (
+                          <div style={{ marginBottom: '12px', padding: '12px', background: '#1a1a1a', borderRadius: '10px', border: '1px solid #2a2a2a' }}>
+                            {msgs.map((g: any, gi: number) => (
+                              <div key={g.id || gi} style={{ marginBottom: gi < msgs.length - 1 ? 10 : 0, paddingBottom: gi < msgs.length - 1 ? 10 : 0, borderBottom: gi < msgs.length - 1 ? '1px solid #222' : 'none' }}>
+                                {g.productName && (
+                                  <div style={{ color: green, fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
+                                    🛍️ {g.productName}{g.productPrice ? ` · UGX ${g.productPrice}` : ''}
+                                  </div>
+                                )}
+                                {g.imageUrl && (
+                                  <img src={g.imageUrl} alt="buyer photo" onClick={() => window.open(g.imageUrl, '_blank')}
+                                    style={{ width: '100%', maxHeight: 180, objectFit: 'cover', borderRadius: 8, marginBottom: 6, cursor: 'zoom-in' }} />
+                                )}
+                                <p style={{ margin: '0 0 4px', color: '#ccc', fontSize: '13px', lineHeight: 1.5 }}>{g.text && g.text !== '🛍️ Product' ? g.text : ''}</p>
+                                <p style={{ margin: 0, color: '#555', fontSize: '11px' }}>
+                                  {g.createdAt?.toDate ? g.createdAt.toDate().toLocaleString() : ''}{g.sourcePlatform ? ` · ${platformMeta(g.sourcePlatform).label}` : ''}
+                                </p>
+                              </div>
+                            ))}
+                            <p style={{ margin: '8px 0 0', color: '#555', fontSize: '12px' }}>
+                              Guest buyer{selected.guestPhone ? ` · 📱 ${selected.guestPhone}` : ''} · Replies stay in rachett
+                            </p>
+                          </div>
+                        )
+                      })()}
                       <ConversationPanel {...chatProps} />
                     </div>
                   )}

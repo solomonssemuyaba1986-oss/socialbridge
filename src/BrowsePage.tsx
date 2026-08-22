@@ -12,6 +12,7 @@ import { getMainCategories } from './categories'
 import LoadingScreen from './LoadingScreen'
 import { useDraft } from './useDraft'
 import { uploadImageToCloudinary } from './uploadImage'
+import { sendConversationMessage } from './useConversation'
 import Fuse from 'fuse.js'
 
 interface Product {
@@ -282,18 +283,22 @@ function BrowsePage() {
     }
     // Signed-in flow
     try {
-      await addDoc(collection(db, 'sellers', messageProduct.sellerId, 'messages'), {
-        senderName: auth.currentUser.displayName || 'Buyer',
-        senderUid: auth.currentUser.uid,
-        receiverUid: messageProduct.sellerId,
-        productName: messageProduct.name,
-        productPrice: messageProduct.price,
-        text: messageText.trim() || '📷 Photo',
-        ...(guestImageUrl ? { imageUrl: guestImageUrl } : {}),
-        read: false,
-        sourcePlatform: detectSource(),
-        createdAt: serverTimestamp(),
-      })
+      const buyerUid = auth.currentUser.uid
+      await sendConversationMessage(
+        messageProduct.sellerId,
+        buyerUid,
+        buyerUid,
+        messageText.trim() || (guestImageUrl ? '📷 Photo' : '🛍️ Product'),
+        messageProduct.businessName || 'Seller',
+        auth.currentUser.displayName || 'Buyer',
+        {
+          ...(guestImageUrl ? { imageUrl: guestImageUrl, type: 'image' } : {}),
+          productId: messageProduct.id,
+          productName: messageProduct.name,
+          productPrice: messageProduct.price,
+          productImage: messageProduct.imageUrl
+        }
+      )
       track('message_sent', auth.currentUser.uid, detectSource(), { productId: messageProduct.id, productName: messageProduct.name, sellerId: messageProduct.sellerId })
       clearMsgDraft()
       setShowQuickReplies(false)
