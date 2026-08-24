@@ -53,6 +53,7 @@ function BrowsePage() {
   const { addToBag, removeFromBag, isInBag, count: bagCount } = useBag()
   const navigate = useNavigate()
   const [bagCounts, setBagCounts] = useState<Record<string, BagCountData>>({})
+  const [stores, setStores] = useState<{ slug: string; businessName: string; logoUrl: string; bio: string; aliases: string[] }[]>([])
   const [surveyProduct, setSurveyProduct] = useState<Product | null>(null)
   const [surveyImageIndex, setSurveyImageIndex] = useState(0)
   const [orderProduct, setOrderProduct] = useState<Product | null>(null)
@@ -402,32 +403,33 @@ function BrowsePage() {
     const term = search.trim()
     if (!term) return []
 
-    const storeMap = new Map<string, { sellerSlug: string; businessName: string; imageUrl: string; productCount: number; outOfStockCount: number }>()
+    // Product counts per store (from the products we loaded)
+    const counts = new Map<string, number>()
+    const outCounts = new Map<string, number>()
     products.forEach((p) => {
-      const existing = storeMap.get(p.sellerSlug)
-      if (!existing) {
-        storeMap.set(p.sellerSlug, {
-          sellerSlug: p.sellerSlug,
-          businessName: p.businessName,
-          imageUrl: p.imageUrl,
-          productCount: 1,
-          outOfStockCount: p.outOfStock ? 1 : 0,
-        })
-      } else {
-        existing.productCount += 1
-        existing.outOfStockCount += p.outOfStock ? 1 : 0
-      }
+      counts.set(p.sellerSlug, (counts.get(p.sellerSlug) || 0) + 1)
+      if (p.outOfStock) outCounts.set(p.sellerSlug, (outCounts.get(p.sellerSlug) || 0) + 1)
     })
 
-    const stores = Array.from(storeMap.values())
     const fuse = new Fuse(stores, {
-      keys: ['businessName'],
+      keys: ['businessName', 'aliases'],
       threshold: 0.35,
       includeScore: true,
     })
 
-    return fuse.search(term).map((r) => r.item).slice(0, 6)
-  }, [products, search])
+    return fuse.search(term).map((r) => {
+      const st = r.item
+      const termL = term.toLowerCase()
+      const nameMatches = st.businessName.toLowerCase().includes(termL) || termL.includes(st.businessName.toLowerCase())
+      const aliasMatched = (st.aliases || []).some(a => termL.includes(a.toLowerCase()) || a.toLowerCase().includes(termL))
+      return {
+        ...st,
+        productCount: counts.get(st.slug) || 0,
+        outOfStockCount: outCounts.get(st.slug) || 0,
+        renamed: aliasMatched && !nameMatches,
+      }
+    }).slice(0, 6)
+  }, [stores, products, search])
 
   // Popular products fallback (top 5 by order count)
   const popularProducts = useMemo(() => {
@@ -439,6 +441,10 @@ function BrowsePage() {
       try {
         const sellersSnap = await getDocs(collection(db, 'sellers'))
         console.log('BrowsePage: seller document count', sellersSnap.size)
+        setStores(sellersSnap.docs.map(d => {
+          const s = d.data()
+          return { slug: s.slug || '', businessName: s.businessName || '', logoUrl: s.logoUrl || '', bio: s.bio || '', aliases: Array.isArray(s.aliases) ? s.aliases.filter((a: unknown) => typeof a === 'string') : [] }
+        }))
         const allProducts: Product[] = []
         
         // Limit to first 50 sellers for MVP performance
@@ -616,12 +622,18 @@ function BrowsePage() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px' }}>
             {storeMatches.map(store => (
-              <div key={store.sellerSlug} onClick={() => navigate(`/store/${store.sellerSlug}`)}
+              <div key={store.slug} onClick={() => navigate(`/store/${store.slug}`)}
                 style={{ background: '#151515', borderRadius: '14px', cursor: 'pointer', overflow: 'hidden', border: '1px solid #222', minHeight: '170px', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ backgroundImage: `url(${store.imageUrl || 'https://placehold.co/300x180/111111/555555'})`, backgroundSize: 'cover', backgroundPosition: 'center', height: '110px' }} />
+                {store.renamed && (
+                  <div style={{ padding: '8px 12px', background: '#12210d', color: green, fontSize: '12px', fontWeight: '600', borderBottom: `1px solid ${green}`, lineHeight: 1.4 }}>
+                    ✏️ This seller is now called <strong>{store.businessName}</strong>
+                  </div>
+                )}
+                <div style={{ backgroundImage: `url(${store.logoUrl || 'https://placehold.co/300x180/111111/555555'})`, backgroundSize: 'cover', backgroundPosition: 'center', height: '110px' }} />
                 <div style={{ padding: '12px' }}>
                   <p style={{ margin: '0 0 6px', fontWeight: '800', color: '#fff', fontSize: '14px' }}>{store.businessName}</p>
-                  <p style={{ margin: 0, color: '#888', fontSize: '12px' }}>{store.productCount} product{store.productCount === 1 ? '' : 's'} • {store.outOfStockCount} unavailable</p>
+                  {store.bio && <p style={{ margin: '0 0 6px', color: '#888', fontSize: '12px', lineHeight: 1.4 }}>{store.bio}</p>}
+                  <p style={{ margin: 0, color: '#888', fontSize: '12px' }}>{store.productCount} product{store.productCount === 1 ? '' : 's'}{store.outOfStockCount > 0 ? ` • ${store.outOfStockCount} unavailable` : ''}</p>
                 </div>
               </div>
             ))}

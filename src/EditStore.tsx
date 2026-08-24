@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { auth, db, storage } from './firebase'
 import { doc, getDoc, updateDoc } from 'firebase/firestore'
@@ -9,6 +9,8 @@ import { notify } from './notifications'
 import ConfirmDialog from './ConfirmDialog'
 
 function EditStore() {
+  const originalNameRef = useRef('')
+  const aliasesRef = useRef<string[]>([])
   const [businessName, setBusinessName] = useState('')
   const [bio, setBio] = useState('')
   const [whatsapp, setWhatsapp] = useState('')
@@ -56,6 +58,8 @@ function EditStore() {
         const snap = await getDoc(docRef)
         if (snap.exists()) {
           const data = snap.data() as any
+          originalNameRef.current = data.businessName || ''
+          aliasesRef.current = Array.isArray(data.aliases) ? data.aliases.filter((a: unknown) => typeof a === 'string') : []
           setBusinessName(data.businessName || '')
           setBio(data.bio || '')
           const stored = (data.whatsapp || '').replace(/^0/, '')
@@ -233,6 +237,10 @@ function EditStore() {
         location: location.trim(),
         geo: geo || null,
         showWhatsapp,
+      }
+      // Remember the old name so buyers searching it still find the store under its new name.
+      if (originalNameRef.current && businessName.trim() !== originalNameRef.current && !aliasesRef.current.includes(originalNameRef.current)) {
+        updates.aliases = [...aliasesRef.current, originalNameRef.current].slice(-8)
       }
       if (idDocumentPath) {
         updates.idDocumentPath = idDocumentPath
