@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, type ChangeEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { collection, getDocs, query, where, addDoc, serverTimestamp, getDoc, doc } from 'firebase/firestore'
+import { collection, getDocs, query, where, addDoc, serverTimestamp, doc, onSnapshot } from 'firebase/firestore'
 import { db, auth } from './firebase'
 import { track, detectSource } from './tracking'
 import { useBag } from './useBag'
@@ -60,6 +60,7 @@ function BagPage() {
   const [guestUploading, setGuestUploading] = useState(false)
   const [salesMap, setSalesMap] = useState<Record<string, number>>({})
   const [missingProducts, setMissingProducts] = useState<Record<string, boolean>>({})
+  const [liveProducts, setLiveProducts] = useState<Record<string, { imageUrl?: string; images?: string[]; name?: string; price?: string; outOfStock?: boolean }>>({})
   const [previewItem, setPreviewItem] = useState<typeof items[number] | null>(null)
   const [previewImageIndex, setPreviewImageIndex] = useState(0)
   const [fullPreview, setFullPreview] = useState(false)
@@ -71,57 +72,85 @@ function BagPage() {
     setFullPreview(false)
   }, [previewItem])
 
-  // Fetch each item's sold count (social proof) + detect deleted products
+  // Live product data: images, name, price, sold count + deleted-product detection.
+  // Listens to each product so seller edits (image/price/name) reflect live in the bag.
   useEffect(() => {
     const ids = new Set(items.map(i => i.productId))
-    if (ids.size === 0) { setSalesMap({}); setMissingProducts({}); return }
-    let cancelled = false
-    Promise.all(Array.from(ids).map(async pid => {
-      const item = items.find(i => i.productId === pid)
-      if (!item) return
-      try {
-        const snap = await getDoc(doc(db, 'sellers', item.sellerId, 'products', pid))
-        if (cancelled) return
-        if (snap.exists()) {
-          setSalesMap(prev => ({ ...prev, [pid]: snap.data().salesCount || 0 }))
-          setMissingProducts(prev => {
-            if (!prev[pid]) return prev
-            const next = { ...prev }
-            delete next[pid]
-            return next
-          })
-        } else {
-          // Product was deleted — flag it so the bag shows a clean "unavailable" state
-          setMissingProducts(prev => ({ ...prev, [pid]: true }))
-          setSalesMap(prev => {
-            if (!(pid in prev)) return prev
-            const next = { ...prev }
-            delete next[pid]
-            return next
-          })
-        }
-      } catch (err) {
-        console.warn('Failed to fetch product:', err)
-      }
-    }))
-    return () => { cancelled = true }
+    if (ids.size === 0) { setSalesMap({}); setMissingProducts({}); setLiveProducts({}); return }
+    const unsubs: Array<() => void> = []
+    items.forEach(item => {
+      const unsub = onSnapshot(
+        doc(db, 'sellers', item.sellerId, 'products', item.productId),
+        (snap) => {
+          if (snap.exists()) {
+            const d = snap.data()
+            setSalesMap(prev => ({ ...prev, [item.productId]: d.salesCount || 0 }))
+            setLiveProducts(prev => ({ ...prev, [item.productId]: { imageUrl: d.imageUrl || '', images: d.images || [], name: d.name || '', price: d.price || '', outOfStock: !!d.outOfStock } }))
+            setMissingProducts(prev => {
+              if (!prev[item.productId]) return prev
+              const next = { ...prev }
+              delete next[item.productId]
+              return next
+            })
+          } else {
+            // Product was deleted — flag it so the bag shows a clean "unavailable" state
+            setMissingProducts(prev => ({ ...prev, [item.productId]: true }))
+            setSalesMap(prev => {
+              if (!(item.productId in prev)) return prev
+              const next = { ...prev }
+              delete next[item.productId]
+              return next
+            })
+            setLiveProducts(prev => {
+              if (!(item.productId in prev)) return prev
+              const next = { ...prev }
+              delete next[item.productId]
+              return next
+            })
+          }
+        },
+        (err) => console.warn('Failed to listen to product:', err)
+      )
+      unsubs.push(unsub)
+    })
+    return () => { unsubs.forEach(u => u()) }
   }, [items])
 
-  // Deleted products can't be bought — keep them out of the total
+  // Live view of a bag item: current image/name/price from the product doc,
+  // falling back to the saved snapshot only when the product was deleted.
+  const liveView = (item: typeof items[number]) => {
+    const live = liveProducts[item.productId]
+    return {
+      imageUrl: live?.imageUrl || item.imageUrl,
+      images: (live?.images?.length ? live.images : item.images) || [],
+      name: live?.name || item.productName,
+      price: live?.price || item.productPrice,
+      isMissing: !!missingProducts[item.productId],
+    }
+  }
+
+  // Deleted products can't be bought — keep them out of the total; otherwise use the live price.
   const total = items
     .filter(i => !missingProducts[i.productId])
-    .reduce((sum, i) => sum + (Number(String(i.productPrice).replace(/[^0-9]/g, '')) || 0) * i.quantity, 0)
+    .reduce((sum, i) => {
+      const live = liveProducts[i.productId]
+      const price = live?.price || i.productPrice
+      return sum + (Number(String(price).replace(/[^0-9]/g, '')) || 0) * i.quantity
+    }, 0)
 
-  const toTarget = (item: typeof items[number]): BagTarget => ({
-    id: item.productId,
-    name: item.productName,
-    price: item.productPrice,
-    description: '',
-    imageUrl: item.imageUrl,
-    sellerSlug: item.sellerSlug,
-    sellerId: item.sellerId,
-    businessName: item.businessName,
-  })
+  const toTarget = (item: typeof items[number]): BagTarget => {
+    const lv = liveView(item)
+    return {
+      id: item.productId,
+      name: lv.name,
+      price: lv.price,
+      description: '',
+      imageUrl: lv.imageUrl,
+      sellerSlug: item.sellerSlug,
+      sellerId: item.sellerId,
+      businessName: item.businessName,
+    }
+  }
 
   const resolveSellerId = async (slug: string, cached: string): Promise<string> => {
     if (cached) return cached
@@ -322,27 +351,28 @@ function BagPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {items.map(item => {
             const isMissing = !!missingProducts[item.productId]
+            const lv = liveView(item)
             return (
               <div key={item.productId}
                 style={{ background: '#1a1a1a', borderRadius: '12px', padding: '14px', border: isMissing ? '1px solid #333' : '1px solid #222', display: 'flex', gap: '14px', alignItems: 'center', opacity: isMissing ? 0.85 : 1 }}>
                 <div style={{ position: 'relative', flexShrink: 0 }}>
-                  <img src={item.imageUrl || 'https://placehold.co/80/1a1a1a/333333'} alt={item.productName}
+                  <img src={lv.imageUrl || 'https://placehold.co/80/1a1a1a/333333'} alt={lv.name}
                     style={{ width: '72px', height: '72px', borderRadius: '8px', objectFit: 'cover', cursor: 'pointer', filter: isMissing ? 'grayscale(80%)' : 'none' }}
                     onClick={() => setPreviewItem(item)} />
-                  {(item.images?.length || 0) > 1 && (
+                  {(lv.images.length || 0) > 1 && (
                     <span style={{ position: 'absolute', bottom: 2, right: 2, background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '1px 5px', borderRadius: 10, fontSize: 9, fontWeight: 700, lineHeight: 1.5 }}>
-                      📷 {item.images?.length}
+                      📷 {lv.images.length}
                     </span>
                   )}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: isMissing ? '#888' : '#fff', cursor: 'pointer' }} onClick={() => setPreviewItem(item)}>{item.productName}</p>
+                  <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: isMissing ? '#888' : '#fff', cursor: 'pointer' }} onClick={() => setPreviewItem(item)}>{lv.name}</p>
                   <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#888' }}>{item.businessName}</p>
                   {isMissing ? (
                     <p style={{ margin: 0, color: '#ff6b6b', fontSize: '12px', fontWeight: '700' }}>❌ Product no longer available</p>
                   ) : (
                     <>
-                      <p style={{ margin: 0, fontWeight: '800', fontSize: '14px', color: green }}>UGX {item.productPrice}</p>
+                      <p style={{ margin: 0, fontWeight: '800', fontSize: '14px', color: green }}>UGX {lv.price}</p>
                       {(salesMap[item.productId] || 0) > 0 && (
                         <p style={{ display: 'inline-block', margin: '6px 0 0', padding: '3px 10px', background: green, color: '#000', borderRadius: '999px', fontSize: '12px', fontWeight: '800', lineHeight: 1.4 }}>
                           ✓ {formatCount(salesMap[item.productId] || 0)} bought
@@ -581,11 +611,12 @@ function BagPage() {
               <button onClick={() => setPreviewItem(null)} style={{ background: 'transparent', border: 'none', color: '#666', fontSize: 20, cursor: 'pointer', padding: '0 4px' }}>✕</button>
             </div>
             {(() => {
-              const imgs = previewItem.images?.length ? previewItem.images : [previewItem.imageUrl].filter(Boolean)
-              const current = imgs[previewImageIndex] || previewItem.imageUrl || ''
+              const lv = liveView(previewItem)
+              const imgs = lv.images.length ? lv.images : [lv.imageUrl].filter(Boolean)
+              const current = imgs[previewImageIndex] || lv.imageUrl || ''
               return (
                 <div style={{ position: 'relative', marginBottom: '16px' }}>
-                  <img src={current || 'https://placehold.co/600x400/1a1a1a/333333'} alt={previewItem.productName}
+                  <img src={current || 'https://placehold.co/600x400/1a1a1a/333333'} alt={lv.name}
                     onPointerDown={(e) => { previewSwipeStart.current = { x: e.clientX, y: e.clientY } }}
                     onPointerUp={(e) => {
                       const s = previewSwipeStart.current
@@ -614,9 +645,9 @@ function BagPage() {
                 </div>
               )
             })()}
-            <h3 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: '800', color: '#fff' }}>{previewItem.productName}</h3>
+            <h3 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: '800', color: '#fff' }}>{liveView(previewItem).name}</h3>
             <p style={{ margin: '0 0 8px', color: '#888', fontSize: '13px' }}>{previewItem.businessName}</p>
-            <p style={{ margin: '0 0 10px', fontWeight: '800', fontSize: '16px', color: green }}>UGX {previewItem.productPrice}</p>
+            <p style={{ margin: '0 0 10px', fontWeight: '800', fontSize: '16px', color: green }}>UGX {liveView(previewItem).price}</p>
             {(salesMap[previewItem.productId] || 0) > 0 && (
               <p style={{ display: 'inline-block', margin: '0 0 18px', padding: '3px 10px', background: green, color: '#000', borderRadius: '999px', fontSize: '12px', fontWeight: '800', lineHeight: 1.4 }}>
                 ✓ {formatCount(salesMap[previewItem.productId] || 0)} bought
@@ -637,7 +668,7 @@ function BagPage() {
       {/* Full-screen photo preview (tap the product photo to zoom/swipe all images) */}
       {fullPreview && previewItem && (
         <ProductPreview
-          images={previewItem.images?.length ? previewItem.images : [previewItem.imageUrl].filter(Boolean)}
+          images={(() => { const lv = liveView(previewItem); return lv.images.length ? lv.images : [lv.imageUrl].filter(Boolean) })()}
           startIndex={previewImageIndex}
           onClose={() => setFullPreview(false)}
         />
