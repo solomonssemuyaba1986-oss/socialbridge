@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { doc, getDoc } from 'firebase/firestore'
+import { doc, onSnapshot } from 'firebase/firestore'
 import { db, auth } from './firebase'
 import { notify } from './notifications'
 import { useSellerLive } from './sellerLive'
@@ -20,9 +20,6 @@ const NAV_ITEMS = [
   { label: 'Reviews', path: '/dashboard', icon: '⭐' },
 ]
 
-// Cache the seller's store info so the sidebar is instant on every page.
-let cachedSeller: { businessName: string; slug: string } | null = null
-
 type Props = {
   /** Dashboard's new-order spotlight flash (raises the sidebar + pulses the badge). */
   spotlight?: boolean
@@ -34,22 +31,18 @@ function Sidebar({ spotlight }: Props) {
   const location = useLocation()
   const { pendingOrdersCount, unreadMessages, unreadSellerConvo, unreadBuyerConvo } = useSellerLive()
   const inboxUnread = unreadMessages + unreadSellerConvo + unreadBuyerConvo
-  const [sellerInfo, setSellerInfo] = useState(cachedSeller)
+  const [sellerInfo, setSellerInfo] = useState<{ businessName: string; slug: string } | null>(null)
 
+  // Live store name — always current (an edit in EditStore shows up right away).
   useEffect(() => {
-    if (cachedSeller) return
     const uid = auth.currentUser?.uid
     if (!uid) return
-    let cancelled = false
-    getDoc(doc(db, 'sellers', uid))
-      .then(snap => {
-        if (cancelled || !snap.exists()) return
-        const d = snap.data()
-        cachedSeller = { businessName: d.businessName || 'Seller panel', slug: d.slug || '' }
-        setSellerInfo(cachedSeller)
-      })
-      .catch(() => {})
-    return () => { cancelled = true }
+    const unsub = onSnapshot(doc(db, 'sellers', uid), (snap) => {
+      if (!snap.exists()) return
+      const d = snap.data()
+      setSellerInfo({ businessName: d.businessName || 'Seller panel', slug: d.slug || '' })
+    }, err => console.warn('Sidebar: seller doc', err))
+    return unsub
   }, [])
 
   const storeLink = sellerInfo?.slug ? `${window.location.origin}/store/${sellerInfo.slug}` : ''
