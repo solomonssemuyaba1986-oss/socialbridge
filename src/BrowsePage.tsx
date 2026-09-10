@@ -7,7 +7,7 @@ import { track, detectSource } from './tracking'
 import { useBag, getBagCounts, type BagCountData } from './useBag'
 import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder'
 import { useGuestOTP } from './useGuestOTP'
-import { QUICK_REPLIES } from './quickReplies'
+import QuickRepliesPanel from './QuickRepliesPanel'
 import { getMainCategories } from './categories'
 import LoadingScreen from './LoadingScreen'
 import { useDraft } from './useDraft'
@@ -957,13 +957,8 @@ function BrowsePage() {
               </button>
             </div>
             {showQuickReplies && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px', background: '#111', borderRadius: '10px', padding: '10px', border: '1px solid #2a2a2a' }}>
-                {QUICK_REPLIES.map(q => (
-                  <button key={q} onClick={() => { setMessageText(q); setShowQuickReplies(false) }}
-                    style={{ textAlign: 'left', padding: '9px 12px', background: '#1a1a1a', color: '#ddd', border: '1px solid #2a2a2a', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
-                    {q}
-                  </button>
-                ))}
+              <div style={{ marginBottom: '16px' }}>
+                <QuickRepliesPanel onPick={q => { setMessageText(q); setShowQuickReplies(false) }} />
               </div>
             )}
 
