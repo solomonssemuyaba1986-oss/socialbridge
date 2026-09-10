@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo, type ChangeEvent } from 'react'
 import { useConversation } from './useConversation'
-import { QUICK_REPLIES, SELLER_QUICK_REPLIES } from './quickReplies'
+import QuickRepliesPanel from './QuickRepliesPanel'
 import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder'
 import { auth } from './firebase'
 import { notify } from './notifications'
@@ -116,7 +116,6 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
 
   // Role-based quick replies: sellers see seller replies, buyers see buyer questions
   const isSellerViewing = auth.currentUser?.uid === sellerId
-  const quickReplies = isSellerViewing ? SELLER_QUICK_REPLIES : QUICK_REPLIES
 
   useEffect(() => {
     const el = listRef.current
@@ -399,13 +398,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
         ) : null}
 
         {showQuickReplies && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, background: '#111', border: '1px solid #222', borderRadius: 16, padding: 12 }}>
-            {quickReplies.map(reply => (
-              <button key={reply} onClick={() => handleQuickReply(reply)} style={{ padding: '12px 14px', borderRadius: 14, border: '1px solid #333', background: '#161616', color: '#fff', cursor: 'pointer', textAlign: 'left', fontSize: 13, lineHeight: 1.4 }}>
-                {reply}
-              </button>
-            ))}
-          </div>
+          <QuickRepliesPanel isSeller={isSellerViewing} onPick={handleQuickReply} />
         )}
 
         {/* Buy Now Button — only for the buyer (not the seller viewing their own conversation) */}
