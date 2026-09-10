@@ -560,18 +560,6 @@ function BrowsePage() {
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
 
-      {/* Navbar */}
-      <nav className="rt-topnav" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #1a1a1a' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }} onClick={() => navigate('/')}>
-          <div style={{ background: green, width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '13px', color: '#000' }}>R</div>
-          <span style={{ fontWeight: '800', fontSize: '18px' }}>rachett</span>
-        </div>
-        <button onClick={() => navigate('/')}
-          style={{ background: 'transparent', border: '1px solid #333', color: '#aaa', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
-          Sign in
-        </button>
-      </nav>
-
       {/* Hero */}
       <div style={{ textAlign: 'center', padding: '48px 20px 32px', borderBottom: '1px solid #1a1a1a' }}>
         <h1 className="rt-title-md" style={{ fontSize: '32px', fontWeight: '900', margin: '0 0 8px', letterSpacing: '-1px' }}>
