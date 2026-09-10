@@ -43,7 +43,8 @@ function BrowsePage() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [sortBy, setSortBy] = useState<'relevance' | 'price-asc' | 'price-desc' | 'newest' | 'popular'>('relevance')
-  const [priceRange, setPriceRange] = useState<[number, number]>([0, 10000000])
+  const [minPrice, setMinPrice] = useState('')
+  const [maxPrice, setMaxPrice] = useState('')
   const [hideOutOfStock, setHideOutOfStock] = useState(true)
   const [errorMsg, setErrorMsg] = useState<string>('')
   const [recentSearches, setRecentSearches] = useState<string[]>([])
@@ -512,10 +513,12 @@ function BrowsePage() {
       result = result.filter(p => !p.outOfStock)
     }
 
-    // Apply price range filter
+    // Apply price range filter (empty box = no limit on that side)
+    const minP = minPrice.trim() === '' ? 0 : Number(minPrice) || 0
+    const maxP = maxPrice.trim() === '' ? Number.MAX_SAFE_INTEGER : Number(maxPrice) || Number.MAX_SAFE_INTEGER
     result = result.filter(p => {
       const price = Number(String(p.price).replace(/,/g, '')) || 0
-      return price >= priceRange[0] && price <= priceRange[1]
+      return price >= minP && price <= maxP
     })
 
     // Fuzzy search
@@ -550,7 +553,7 @@ function BrowsePage() {
     }
 
     setFiltered(result)
-  }, [activeCategory, search, products, sortBy, priceRange, hideOutOfStock, ownerFilter, mySlug])
+  }, [activeCategory, search, products, sortBy, minPrice, maxPrice, hideOutOfStock, ownerFilter, mySlug])
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
@@ -658,18 +661,20 @@ function BrowsePage() {
           <label style={{ color: '#888' }}>Price: UGX</label>
           <input
             type="number"
+            inputMode="numeric"
             placeholder="Min"
-            value={priceRange[0]}
-            onChange={e => setPriceRange([Number(e.target.value) || 0, priceRange[1]])}
-            style={{ width: '80px', padding: '6px', borderRadius: '6px', border: '1px solid #333', background: '#1a1a1a', color: '#fff', fontSize: '13px' }}
+            value={minPrice}
+            onChange={e => setMinPrice(e.target.value.replace(/[^0-9]/g, ''))}
+            style={{ width: '90px', padding: '6px', borderRadius: '6px', border: '1px solid #333', background: '#1a1a1a', color: '#fff', fontSize: '13px' }}
           />
           <span style={{ color: '#555' }}>—</span>
           <input
             type="number"
+            inputMode="numeric"
             placeholder="Max"
-            value={priceRange[1]}
-            onChange={e => setPriceRange([priceRange[0], Number(e.target.value) || 10000000])}
-            style={{ width: '80px', padding: '6px', borderRadius: '6px', border: '1px solid #333', background: '#1a1a1a', color: '#fff', fontSize: '13px' }}
+            value={maxPrice}
+            onChange={e => setMaxPrice(e.target.value.replace(/[^0-9]/g, ''))}
+            style={{ width: '90px', padding: '6px', borderRadius: '6px', border: '1px solid #333', background: '#1a1a1a', color: '#fff', fontSize: '13px' }}
           />
         </div>
 
