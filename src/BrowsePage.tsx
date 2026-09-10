@@ -715,9 +715,9 @@ function BrowsePage() {
             {search && (
               <div style={{ marginBottom: '32px', paddingTop: '24px', borderTop: '1px solid #222' }}>
                 <p style={{ color: '#888', fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', marginBottom: '16px' }}>💡 Tips</p>
-                <ul style={{ color: '#666', fontSize: '13px', margin: 0, paddingLeft: '20px', textAlign: 'left', maxWidth: '300px', marginLeft: 'auto', marginRight: 'auto' }}>
-                  <li>Check spelling: "laptop" vs "lapto"</li>
-                  <li>Try broader terms: "laptop" instead of "gaming laptop"</li>
+                <ul style={{ color: '#666', fontSize: '13px', margin: 0, paddingLeft: '20px', textAlign: 'left', maxWidth: '320px', marginLeft: 'auto', marginRight: 'auto' }}>
+                  <li>Check the spelling of “{search.trim()}”</li>
+                  <li>Try a broader term, like “{search.trim().split(/\s+/)[0]}”</li>
                   <li>Browse by category instead</li>
                   <li>Check price & availability filters</li>
                 </ul>
