@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db, auth } from './firebase'
 
@@ -8,7 +8,7 @@ const SUPPORT_WHATSAPP = (import.meta.env.VITE_SUPPORT_WHATSAPP || '').trim()
 const FORMSPREE_ID = (import.meta.env.VITE_FORMSPREE_ID || '').trim()
 
 type FaqItem = { q: string; a: string }
-type FaqSection = { icon: string; title: string; items: FaqItem[] }
+type FaqSection = { icon: string; title: string; topic?: string; items: FaqItem[] }
 
 const FAQ_SECTIONS: FaqSection[] = [
   {
@@ -76,6 +76,37 @@ const FAQ_SECTIONS: FaqSection[] = [
     ],
   },
   {
+    icon: '🛍️',
+    title: 'Bag & Orders',
+    topic: 'bag',
+    items: [
+      {
+        q: 'How do I add items to my bag?',
+        a: 'Tap the 🛍️ button on any product while browsing, or on any store page. Items stay in your bag across pages and sync to your account when you sign in.',
+      },
+      {
+        q: 'How do I order from my bag?',
+        a: 'Open your bag, set the quantity, then tap Buy Now (or Message the seller). Your order is sent to the seller and a chat opens so you can arrange payment and delivery.',
+      },
+      {
+        q: 'How do I remove an item or clear my whole bag?',
+        a: 'Open your bag and tap Remove on a single item, or use Clear All at the top to empty the whole bag.',
+      },
+      {
+        q: 'An item in my bag says "no longer available" — what now?',
+        a: 'The seller removed that product. It is greyed out and left out of your total. Tap Remove to take it out, or browse the store for a similar item.',
+      },
+      {
+        q: 'The price changed after I added it — which price do I pay?',
+        a: 'Your bag always shows the current price and image. The price you agree on in the chat at order time is the price that counts.',
+      },
+      {
+        q: 'How do I track my order?',
+        a: 'Your orders and updates appear in your Inbox. Every order also opens a chat with the seller, so you can confirm delivery details right there.',
+      },
+    ],
+  },
+  {
     icon: '⚠️',
     title: 'Trust & Safety',
     items: [
@@ -89,6 +120,9 @@ const FAQ_SECTIONS: FaqSection[] = [
 
 function HelpPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const isBagHelp = searchParams.get('topic') === 'bag'
+  const sections = isBagHelp ? FAQ_SECTIONS.filter(s => s.topic === 'bag') : FAQ_SECTIONS
   const [openKey, setOpenKey] = useState<string | null>(null)
   const [issue, setIssue] = useState('')
   const [issueName, setIssueName] = useState('')
@@ -159,11 +193,15 @@ function HelpPage() {
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '24px 16px 60px' }}>
       <div style={{ maxWidth: 760, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <h1 style={{ margin: '0 0 6px', fontSize: 26, fontWeight: 800 }}>❓ Help & Support</h1>
-          <p style={{ margin: 0, color: '#888', fontSize: 14 }}>Answers to common questions — everything happens right here in rachett.</p>
+          <h1 style={{ margin: '0 0 6px', fontSize: 26, fontWeight: 800 }}>{isBagHelp ? '🛍️ Bag & Orders Help' : '❓ Help & Support'}</h1>
+          <p style={{ margin: 0, color: '#888', fontSize: 14 }}>
+            {isBagHelp
+              ? 'Everything about your bag, orders and delivery.'
+              : 'Answers to common questions — everything happens right here in rachett.'}
+          </p>
         </div>
 
-        {FAQ_SECTIONS.map((section, si) => (
+        {sections.map((section, si) => (
           <div key={section.title} style={{ marginBottom: 24 }}>
             <h2 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 700, color: green }}>
               {section.icon} {section.title}
@@ -197,15 +235,26 @@ function HelpPage() {
           </div>
         ))}
 
-        <div style={{ background: '#1a1a1a', border: '1px solid #222', borderRadius: 12, padding: '16px', textAlign: 'center', marginBottom: 24 }}>
-          <p style={{ margin: '0 0 10px', color: '#ccc', fontSize: 14 }}>Lost access to your account?</p>
-          <button
-            onClick={() => navigate('/recover')}
-            style={{ background: green, color: '#000', border: 'none', padding: '10px 20px', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: 13 }}
-          >
-            Recover your account
-          </button>
-        </div>
+        {isBagHelp && (
+          <div style={{ textAlign: 'center', marginBottom: 24 }}>
+            <button onClick={() => navigate('/help')}
+              style={{ background: 'transparent', color: green, border: `1px solid ${green}`, padding: '10px 20px', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
+              See all help →
+            </button>
+          </div>
+        )}
+
+        {!isBagHelp && (
+          <div style={{ background: '#1a1a1a', border: '1px solid #222', borderRadius: 12, padding: '16px', textAlign: 'center', marginBottom: 24 }}>
+            <p style={{ margin: '0 0 10px', color: '#ccc', fontSize: 14 }}>Lost access to your account?</p>
+            <button
+              onClick={() => navigate('/recover')}
+              style={{ background: green, color: '#000', border: 'none', padding: '10px 20px', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: 13 }}
+            >
+              Recover your account
+            </button>
+          </div>
+        )}
 
         <div style={{ background: '#1a1a1a', border: '1px solid #222', borderRadius: 12, padding: '20px', marginBottom: 24 }}>
           <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 800 }}>❓ Can't find your answer?</h3>
