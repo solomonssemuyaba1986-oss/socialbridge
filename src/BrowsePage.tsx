@@ -432,9 +432,11 @@ function BrowsePage() {
     }).slice(0, 6)
   }, [stores, products, search])
 
-  // Popular products fallback (top 5 by order count)
+  // Trending & recommended — what's actually moving (orders + sales)
   const popularProducts = useMemo(() => {
-    return [...products].sort((a, b) => (b.orderCount || 0) - (a.orderCount || 0)).slice(0, 5)
+    return [...products]
+      .sort((a, b) => ((b.orderCount || 0) * 2 + (b.salesCount || 0)) - ((a.orderCount || 0) * 2 + (a.salesCount || 0)))
+      .slice(0, 10)
   }, [products])
 
   useEffect(() => {
@@ -676,6 +678,12 @@ function BrowsePage() {
             onChange={e => setMaxPrice(e.target.value.replace(/[^0-9]/g, ''))}
             style={{ width: '90px', padding: '6px', borderRadius: '6px', border: '1px solid #333', background: '#1a1a1a', color: '#fff', fontSize: '13px' }}
           />
+          {(minPrice || maxPrice) && (
+            <button onClick={() => { setMinPrice(''); setMaxPrice('') }} title="Clear price filter"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 20, background: '#1a2a1a', color: green, border: `1px solid ${green}`, cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+              💵 {minPrice && maxPrice ? `UGX ${minPrice} – ${maxPrice}` : minPrice ? `UGX ${minPrice} +` : `≤ UGX ${maxPrice}`} ✕
+            </button>
+          )}
         </div>
 
         <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: hideOutOfStock ? green : '#888' }}>
@@ -710,39 +718,31 @@ function BrowsePage() {
         {loading ? (
           <LoadingScreen message="Fetching products for you..." />
         ) : filtered.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '80px 20px' }}>
-            <div style={{ fontSize: '48px', marginBottom: '16px' }}>🛍️</div>
-            <h3 style={{ fontWeight: '700', margin: '0 0 8px', fontSize: '16px' }}>No products found</h3>
-            <p style={{ color: '#555', margin: '0 0 24px', fontSize: '14px' }}>
-              {search ? `Try a different search term, or check similar products below` : 'Try a different category or check trending items'}
+          <div style={{ padding: '24px 0' }}>
+            {/* One small line — the trending grid does the talking */}
+            <p style={{ margin: '0 0 24px', color: '#777', fontSize: 13, textAlign: 'center' }}>
+              {(minPrice || maxPrice)
+                ? '😕 No products in that price range yet — here are some you may like 👇'
+                : search
+                  ? '😕 Nothing matched that — here are some you may like 👇'
+                  : '😕 Nothing here yet — here are some you may like 👇'}
             </p>
-            
-            {search && (
-              <div style={{ marginBottom: '32px', paddingTop: '24px', borderTop: '1px solid #222' }}>
-                <p style={{ color: '#888', fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', marginBottom: '16px' }}>💡 Tips</p>
-                <ul style={{ color: '#666', fontSize: '13px', margin: 0, paddingLeft: '20px', textAlign: 'left', maxWidth: '320px', marginLeft: 'auto', marginRight: 'auto' }}>
-                  <li>Check the spelling of “{search.trim()}”</li>
-                  <li>Try a broader term, like “{search.trim().split(/\s+/)[0]}”</li>
-                  <li>Browse by category instead</li>
-                  <li>Check price & availability filters</li>
-                </ul>
-              </div>
-            )}
 
             {popularProducts.length > 0 && (
-              <div style={{ marginTop: '32px', paddingTop: '24px', borderTop: '1px solid #222' }}>
-                <p style={{ color: '#888', fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', marginBottom: '16px' }}>⭐ Popular products</p>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px' }}>
+              <div>
+                <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 800, color: '#fff' }}>🔥 Trending &amp; recommended</h2>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 14 }}>
                   {popularProducts.map(p => (
                     <div key={p.id} onClick={() => navigate(`/store/${p.sellerSlug}`)}
                       style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222', cursor: 'pointer', position: 'relative' }}>
                       {p.sellerSlug === mySlug && mySlug && (
                       <div style={{ position: 'absolute', top: '6px', left: '6px', background: green, color: '#000', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: '800', zIndex: 2 }}>Yours</div>
                     )}
-                    {renderCardImages(p, 120)}
-                      <div style={{ padding: '10px' }}>
-                        <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '12px', color: '#fff', lineHeight: '1.2' }}>{p.name}</p>
-                        <p style={{ margin: 0, fontWeight: '800', color: green, fontSize: '12px' }}>UGX {p.price}</p>
+                    {renderCardImages(p, 190)}
+                      <div style={{ padding: '12px' }}>
+                        <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: '#fff', lineHeight: '1.3' }}>{p.name}</p>
+                        <p style={{ margin: '0 0 8px', color: '#555', fontSize: '12px' }}>{p.businessName}</p>
+                        <p style={{ margin: 0, fontWeight: '800', color: green, fontSize: '14px' }}>UGX {p.price}</p>
                       </div>
                       {p.outOfStock && (
                         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '700', fontSize: '12px', textAlign: 'center', padding: '8px' }}>
