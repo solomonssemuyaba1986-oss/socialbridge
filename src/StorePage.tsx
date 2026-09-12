@@ -12,6 +12,9 @@ import { useBag, getBagCounts, type BagCountData } from './useBag'
 import { useSellerStats, getSalesLabel, formatRating, renderStars, getBadgeStatusLabel } from './useSellerStats.ts'
 import QuickRepliesPanel from './QuickRepliesPanel'
 import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder.ts'
+import { haversineKm } from './geo'
+import { formatDistance, isApproximatePin, type GeoSource, type Place } from './place'
+import { useBuyerLocation } from './useBuyerLocation'
 import { track } from './tracking'
 import { uploadImageToCloudinary } from './uploadImage'
 import ConfirmDialog from './ConfirmDialog'
@@ -30,6 +33,8 @@ interface Seller {
   tiktok?: string
   showWhatsapp?: boolean
   location?: string
+  place?: Place
+  geoSource?: GeoSource
   geo?: { lat: number; lng: number }
 }
 
@@ -390,6 +395,10 @@ const messageDeepLinkId = searchParams.get('messageId')
   // Seller stats for trust signals
   const { stats: sellerStats } = useSellerStats(sellerId)
 
+  // The buyer's own area — only used on this screen to show "1.2 km away".
+  // Stays on their device; we never send it to the database.
+  const { area: buyerArea } = useBuyerLocation()
+
   const showFeedback = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setFeedbackMessage(message)
     setFeedbackType(type)
@@ -742,7 +751,19 @@ const handleSignupForAction = async (provider: any) => {
           {seller.bio}
         </p>
         {seller.location && (
-          <p style={{ margin: '0 0 16px', color: '#aaa', fontSize: '13px', fontWeight: '600' }}>📍 {seller.location}</p>
+          <p style={{ margin: '0 0 16px', color: '#aaa', fontSize: '13px', fontWeight: '600' }}>
+            📍 {seller.location}
+            {buyerArea && seller.geo && (
+              <span style={{ color: green }}>
+                {' · '}
+                {formatDistance(
+                  haversineKm(buyerArea.lat, buyerArea.lng, seller.geo.lat, seller.geo.lng),
+                  { approximate: isApproximatePin(seller.geoSource) },
+                )}{' '}
+                away
+              </span>
+            )}
+          </p>
         )}
         {productDeepLinkId && (
           <div style={{ maxWidth: '520px', margin: '0 auto 18px', background: '#111', border: `1px solid ${green}`, borderRadius: '14px', padding: '16px' }}>
