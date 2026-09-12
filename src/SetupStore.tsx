@@ -6,6 +6,14 @@ import { useNavigate } from 'react-router-dom'
 import { COUNTRIES } from './countries'
 import { COUNTRY_CODES, type CountryCode } from './countryCodes'
 import AuthModal from './AuthModal'
+import {
+  placeLabel,
+  resolveSellerLocation,
+  reverseGeocode,
+  type GeoPoint,
+  type GeoSource,
+  type Place,
+} from './place'
 
 const OTP_SERVER_URL = import.meta.env.VITE_OTP_SERVER_URL || 'http://localhost:3001'
 
@@ -45,7 +53,9 @@ function SetupStore() {
   const [nationalitySearch, setNationalitySearch] = useState('')
   const [showCountryDropdown, setShowCountryDropdown] = useState(false)
   const [location, setLocation] = useState('')
-  const [geo, setGeo] = useState<{ lat: number; lng: number } | null>(null)
+  const [geo, setGeo] = useState<GeoPoint | null>(null)
+  const [place, setPlace] = useState<Place | null>(null)
+  const [geoSource, setGeoSource] = useState<GeoSource | null>(null)
   const [locationLoading, setLocationLoading] = useState(false)
   const [errors, setErrors] = useState<SetupFormErrors>({})
   const [loading, setLoading] = useState(false)
@@ -309,30 +319,18 @@ function SetupStore() {
     setLocationLoading(true)
     navigator.geolocation.getCurrentPosition(
       async (position) => {
-        const { latitude, longitude } = position.coords
-        setGeo({ lat: latitude, lng: longitude }) // keep coords for the Nearby feature
-        try {
-          // Reverse geocode with OpenStreetMap Nominatim (free, no key required)
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
-          )
-          const data = await res.json()
-          if (data && data.display_name) {
-            // Extract city/district + country from the display name
-            const city = data.address?.city || data.address?.town || data.address?.county || data.address?.state_district || ''
-            const country = data.address?.country || ''
-            const fallback = data.display_name.split(',')[0]?.trim() || ''
-            const result = [city, country].filter(Boolean).join(', ')
-            setLocation(result || fallback)
-          } else {
-            setLocation(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`)
-          }
-        } catch {
-          // Fall back to coordinates if reverse geocoding fails
-          setLocation(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`)
-        } finally {
-          setLocationLoading(false)
+        const point = { lat: position.coords.latitude, lng: position.coords.longitude }
+        setGeo(point) // exact pin for the Nearby feature
+        setGeoSource('gps')
+        // Keep the whole place (city *and* area) — that's what gives "Kampala, Nakawa".
+        const hit = await reverseGeocode(point)
+        if (hit) {
+          setPlace(hit.place)
+          setLocation(placeLabel(hit.place) || hit.label)
+        } else {
+          setLocation(`${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}`)
         }
+        setLocationLoading(false)
       },
       (err) => {
         console.error('Geolocation error:', err)
@@ -417,6 +415,10 @@ function SetupStore() {
       const isPhoneSignIn = !!user.phoneNumber && !user.email
       const recoveryEmail = isPhoneSignIn ? '' : (cleanedEmail || user.email || '')
 
+      // Typed an area but never dropped a pin? Geocode it so the store can still
+      // show up on Nearby (with an honestly-labelled approximate distance).
+      const resolved = await resolveSellerLocation({ locationText: location, geo, place, geoSource })
+
       await setDoc(doc(db, 'sellers', user.uid), {
         businessName: cleanedName,
         bio: cleanedBio,
@@ -427,8 +429,10 @@ function SetupStore() {
         instagram: cleanedInstagram,
         tiktok: cleanedTiktok,
         nationality,
-        location: location.trim(),
-        geo: geo || null,
+        location: resolved.label || location.trim(),
+        geo: resolved.geo,
+        place: resolved.place,
+        geoSource: resolved.geoSource,
         phoneVerified,
         showWhatsapp,
         idDocumentPath,
@@ -710,7 +714,7 @@ function SetupStore() {
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Location</label>
         <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>Your city or district — helps buyers find you. Type manually or use auto-detect.</p>
         <div style={{ display: 'flex', gap: '8px', marginBottom: '4px' }}>
-          <input value={location} onChange={e => setLocation(e.target.value)}
+          <input value={location} onChange={e => { setLocation(e.target.value); setGeo(null); setPlace(null); setGeoSource(null) }}
             placeholder="e.g. Kampala, Uganda"
             style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '15px', boxSizing: 'border-box' }} />
           <button onClick={handleUseMyLocation} disabled={locationLoading}
@@ -720,10 +724,13 @@ function SetupStore() {
           </button>
         </div>
         {locationLoading && <p style={{ color: '#888', fontSize: '12px', margin: '4px 0 16px' }}>Detecting your location...</p>}
-        {!locationLoading && geo && (
-          <p style={{ color: '#2e7d32', fontSize: '12px', fontWeight: '700', margin: '4px 0 16px' }}>✓ Location detected — it'll be saved with your store</p>
+        {!locationLoading && geoSource === 'gps' && (
+          <p style={{ color: '#2e7d32', fontSize: '12px', fontWeight: '700', margin: '4px 0 16px' }}>✓ Exact pin saved — buyers nearby will see how far you are</p>
         )}
-        {!locationLoading && !geo && <div style={{ marginBottom: '16px' }} />}
+        {!locationLoading && geoSource !== 'gps' && !!location.trim() && (
+          <p style={{ color: '#888', fontSize: '12px', margin: '4px 0 16px' }}>📍 We'll place your store using this area (approximate). Tap the pin button for an exact one.</p>
+        )}
+        {!locationLoading && geoSource !== 'gps' && !location.trim() && <div style={{ marginBottom: '16px' }} />}
 
         {/* National ID Upload */}
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>National ID <span style={{ color: '#888', fontWeight: '400', fontSize: '12px' }}>(optional for now)</span></label>
