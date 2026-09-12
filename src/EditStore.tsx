@@ -7,6 +7,14 @@ import { COUNTRIES } from './countries'
 import { COUNTRY_CODES, type CountryCode } from './countryCodes'
 import { notify } from './notifications'
 import ConfirmDialog from './ConfirmDialog'
+import {
+  placeLabel,
+  resolveSellerLocation,
+  reverseGeocode,
+  type GeoPoint,
+  type GeoSource,
+  type Place,
+} from './place'
 
 function EditStore() {
   const originalNameRef = useRef('')
@@ -30,7 +38,9 @@ function EditStore() {
 
   // Location
   const [location, setLocation] = useState('')
-  const [geo, setGeo] = useState<{ lat: number; lng: number } | null>(null)
+  const [geo, setGeo] = useState<GeoPoint | null>(null)
+  const [place, setPlace] = useState<Place | null>(null)
+  const [geoSource, setGeoSource] = useState<GeoSource | null>(null)
   const [locationLoading, setLocationLoading] = useState(false)
 
   // Nationality
@@ -77,6 +87,8 @@ function EditStore() {
           setShowWhatsapp(data.showWhatsapp !== false)
           setLocation(data.location || '')
           setGeo(data.geo || null)
+          setPlace(data.place || null)
+          setGeoSource(data.geoSource || (data.geo ? 'gps' : null))
           if (data.idDocumentPath) {
             // Extract filename from path
             const parts = data.idDocumentPath.split('/')
@@ -125,27 +137,18 @@ function EditStore() {
     setLocationLoading(true)
     navigator.geolocation.getCurrentPosition(
       async (position) => {
-        const { latitude, longitude } = position.coords
-        setGeo({ lat: latitude, lng: longitude }) // keep coords for the Nearby feature
-        try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
-          )
-          const data = await res.json()
-          if (data && data.display_name) {
-            const city = data.address?.city || data.address?.town || data.address?.county || data.address?.state_district || ''
-            const country = data.address?.country || ''
-            const fallback = data.display_name.split(',')[0]?.trim() || ''
-            const result = [city, country].filter(Boolean).join(', ')
-            setLocation(result || fallback)
-          } else {
-            setLocation(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`)
-          }
-        } catch {
-          setLocation(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`)
-        } finally {
-          setLocationLoading(false)
+        const point = { lat: position.coords.latitude, lng: position.coords.longitude }
+        setGeo(point) // exact pin for the Nearby feature
+        setGeoSource('gps')
+        // Keep the whole place (city *and* area) — that's what gives "Kampala, Nakawa".
+        const hit = await reverseGeocode(point)
+        if (hit) {
+          setPlace(hit.place)
+          setLocation(placeLabel(hit.place) || hit.label)
+        } else {
+          setLocation(`${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}`)
         }
+        setLocationLoading(false)
       },
       (err) => {
         console.error('Geolocation error:', err)
@@ -225,6 +228,9 @@ function EditStore() {
       }
 
       const fullNumber = getStoredFullNumber()
+      // Typed an area but never dropped a pin? Geocode it so the store can still
+      // show up on Nearby (with an honestly-labelled approximate distance).
+      const resolved = await resolveSellerLocation({ locationText: location, geo, place, geoSource })
       const updates: Record<string, any> = {
         businessName: businessName.trim(),
         bio: bio.trim(),
@@ -234,8 +240,10 @@ function EditStore() {
         tiktok: tiktok.trim().replace(/^@+/, ''),
         logoUrl: finalLogoUrl,
         nationality: nationality.trim(),
-        location: location.trim(),
-        geo: geo || null,
+        location: resolved.label || location.trim(),
+        geo: resolved.geo,
+        place: resolved.place,
+        geoSource: resolved.geoSource,
         showWhatsapp,
       }
       // Remember the old name so buyers searching it still find the store under its new name.
@@ -357,7 +365,7 @@ function EditStore() {
         <label>Location</label>
         <p style={{ fontSize: '12px', color: '#666', margin: '4px 0 4px' }}>Your city or district — helps buyers find you. Type manually or use auto-detect.</p>
         <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-          <input value={location} onChange={e => setLocation(e.target.value)}
+          <input value={location} onChange={e => { setLocation(e.target.value); setGeo(null); setPlace(null); setGeoSource(null) }}
             placeholder="e.g. Kampala, Uganda"
             style={{ flex: 1, padding: '10px 12px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '14px', boxSizing: 'border-box' }} />
           <button onClick={handleUseMyLocation} disabled={locationLoading}
@@ -365,6 +373,9 @@ function EditStore() {
             {locationLoading ? '⏳' : '📍 Detect'}
           </button>
         </div>
+        {locationLoading && <p style={{ fontSize: '12px', color: '#888', margin: '0 0 8px' }}>Detecting your location…</p>}
+        {!locationLoading && geoSource === 'gps' && <p style={{ fontSize: '12px', color: '#2e7d32', fontWeight: '700', margin: '0 0 8px' }}>✓ Exact pin saved — buyers nearby will see how far you are.</p>}
+        {!locationLoading && geoSource !== 'gps' && !!location.trim() && <p style={{ fontSize: '12px', color: '#888', margin: '0 0 8px' }}>📍 We'll place your store using this area (approximate). Tap Detect for an exact pin.</p>}
 
         {/* National ID Upload */}
         <label>National ID</label>
