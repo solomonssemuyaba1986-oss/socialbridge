@@ -7,6 +7,7 @@ import { useSellerOrders } from './useSellerOrders'
 import { notify } from './notifications'
 import LoadingScreen from './LoadingScreen'
 import Sidebar from './Sidebar'
+import { resolveSellerLocation, type GeoSource, type Place } from './place'
 
 interface Seller {
   businessName: string
@@ -14,6 +15,10 @@ interface Seller {
   slug: string
   whatsapp?: string
   logoUrl?: string
+  location?: string
+  geo?: { lat: number; lng: number } | null
+  place?: Place | null
+  geoSource?: GeoSource | null
   recoveryEmail?: string
   recoveryEmailVerified?: boolean
   recoveryEmailPromptCount?: number
@@ -129,6 +134,33 @@ function Dashboard() {
         const docSnap = await getDoc(doc(db, 'sellers', user.uid))
         if (docSnap.exists()) {
           const data = docSnap.data() as Seller
+          // Self-heal older stores: a seller who typed an area but never dropped a
+          // pin has no coordinates, so they'd be invisible on Nearby. Fix it quietly
+          // the first time they open their dashboard.
+          if (data.location && !data.geo) {
+            const resolved = await resolveSellerLocation({
+              locationText: data.location,
+              geo: null,
+              place: data.place || null,
+              geoSource: null,
+            })
+            if (resolved.geo) {
+              data.geo = resolved.geo
+              data.place = resolved.place
+              data.geoSource = resolved.geoSource
+              data.location = resolved.label || data.location
+              try {
+                await updateDoc(doc(db, 'sellers', user.uid), {
+                  geo: resolved.geo,
+                  place: resolved.place,
+                  geoSource: resolved.geoSource,
+                  location: data.location,
+                })
+              } catch (err) {
+                console.warn('Location backfill failed:', err)
+              }
+            }
+          }
           setSeller(data)
           const prodSnap = await getDocs(collection(db, 'sellers', user.uid, 'products'))
           const prodList = prodSnap.docs.map(d => ({ id: d.id, ...d.data() } as Product))
