@@ -3,7 +3,7 @@ import { formatBagCount, green, productImages, type CardProduct } from './produc
 
 type Props = {
   p: CardProduct
-  /** Pinned to the top-left of the photo — "1.3 km" or "≈ 3 km (area)". */
+  /** Pinned to the top-left of the photo — "1.3 km" or "~3 km" when approximate. */
   distanceLabel?: string
   inBag: boolean
   bagged: number

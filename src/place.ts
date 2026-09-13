@@ -145,8 +145,8 @@ export async function resolveSellerLocation(opts: {
 
 /**
  * "350 m" / "1.2 km" / "24 km".
- * When the seller's point is only a town (not a GPS pin) we mark it approximate,
- * e.g. "≈ 3 km (area)" — so we never state a precision we don't have.
+ * When the seller's point is only a town (not a GPS pin) we mark it with a
+ * tilde — "~3 km" — so we never state a precision we don't have.
  */
 export function formatDistance(km: number, opts: { approximate?: boolean } = {}): string {
   if (!isFinite(km) || km < 0) return ''
@@ -154,7 +154,7 @@ export function formatDistance(km: number, opts: { approximate?: boolean } = {})
   if (km < 1) value = `${Math.max(10, Math.round((km * 1000) / 10) * 10)} m`
   else if (km < 10) value = `${km.toFixed(1)} km`
   else value = `${Math.round(km)} km`
-  return opts.approximate ? `≈ ${value} (area)` : value
+  return opts.approximate ? `~${value}` : value
 }
 
 /** True when the seller's point came from a typed area rather than a GPS pin. */

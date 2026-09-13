@@ -250,24 +250,41 @@ function NearbyPage() {
     [matching, range],
   )
 
-  const popular = useMemo(() => {
+  /** Ranked by what's actually moving — both the hero and the rail draw from this. */
+  const popularRanked = useMemo(() => {
     const score = (p: DiscoveryProduct) => (p.orderCount || 0) * 2 + (p.salesCount || 0)
     const hot = matching.filter(p => score(p) > 0).sort((a, b) => score(b) - score(a))
     const rest = matching.filter(p => score(p) === 0)
-    return [...hot, ...rest].slice(0, RAIL_LIMIT)
+    return [...hot, ...rest]
   }, [matching])
 
-  const hero = nearby[0] || popular[0] || matching[0] || null
+  const hero = nearby[0] || popularRanked[0] || matching[0] || null
   /** Rails only make sense once there's enough to fill them without repeating. */
   const showRails = matching.length >= 6
   /** True once at least one product carries a listing date. */
   const hasNewest = matching.some(p => p.createdAtMs !== undefined)
+
+  // The hero already leads the page — keep it out of the rails and grids so a
+  // small catalogue doesn't feel like the same products on repeat.
+  const popular = useMemo(
+    () => popularRanked.filter(p => p.id !== hero?.id).slice(0, RAIL_LIMIT),
+    [popularRanked, hero],
+  )
+  const nearbyGrid = useMemo(
+    () => nearby.filter(p => p.id !== hero?.id),
+    [nearby, hero],
+  )
+  const others = useMemo(
+    () => matching.filter(p => p.id !== hero?.id),
+    [matching, hero],
+  )
 
   const fresh = useMemo(() => {
     if (hasNewest) {
       // Real "newest" — newest listing first, items without a date last.
       return [...matching]
         .sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0))
+        .filter(p => p.id !== hero?.id)
         .slice(0, RAIL_LIMIT)
     }
     // No createdAt anywhere yet → shuffled picks, reshuffled on demand.
@@ -301,10 +318,11 @@ function NearbyPage() {
       if (hero) ids.add(hero.id)
       add(popular)
       add(fresh)
-      add(nearby.slice(0, CLOSEST_GRID_LIMIT))
+      add(nearbyGrid.slice(0, CLOSEST_GRID_LIMIT))
+      add(others.slice(0, CLOSEST_GRID_LIMIT))
     }
     return [...ids]
-  }, [searching, searchResults, hero, popular, fresh, nearby])
+  }, [searching, searchResults, hero, popular, fresh, nearbyGrid, others])
 
   useEffect(() => {
     if (displayedIds.length === 0) return
@@ -436,7 +454,13 @@ function NearbyPage() {
         <div style={{ position: 'relative', marginBottom: '10px' }}>
           <input
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => {
+              const value = e.target.value
+              setSearch(value)
+              // Search looks across every category — otherwise a category tapped
+              // earlier silently hides the results the buyer just asked for.
+              if (value.trim() && activeCategory !== 'All') setActiveCategory('All')
+            }}
             placeholder="Search products near you — shoes, charger, dress…"
             style={{ width: '100%', padding: '14px 16px', borderRadius: '12px', border: '1px solid #333', background: '#111', color: '#fff', fontSize: '15px', boxSizing: 'border-box' }}
           />
@@ -641,12 +665,7 @@ function NearbyPage() {
 
             {/* 📍 Nearest first — or simply everything, before an area is set */}
             {area ? (
-              nearby.length > 0 ? (
-                <section style={{ marginBottom: '26px' }}>
-                  <SectionHeader title={`📍 Closest to you · within ${range} km`} />
-                  <Grid>{nearby.slice(0, CLOSEST_GRID_LIMIT).map(p => cardFor(p))}</Grid>
-                </section>
-              ) : (
+              nearby.length === 0 ? (
                 <p style={{ color: '#888', fontSize: '13px', border: '1px dashed #262626', borderRadius: '12px', padding: '14px', marginBottom: '26px' }}>
                   Nothing inside {range} km{activeCategory !== 'All' ? ` in ${activeCategory}` : ''} yet — showing picks from further out.{' '}
                   <button onClick={() => setRange(widerRange)}
@@ -654,11 +673,16 @@ function NearbyPage() {
                     Widen to {widerRange} km
                   </button>
                 </p>
-              )
+              ) : nearbyGrid.length > 0 ? (
+                <section style={{ marginBottom: '26px' }}>
+                  <SectionHeader title={`📍 Closest to you · within ${range} km`} />
+                  <Grid>{nearbyGrid.slice(0, CLOSEST_GRID_LIMIT).map(p => cardFor(p))}</Grid>
+                </section>
+              ) : null
             ) : (
               <section style={{ marginBottom: '26px' }}>
                 <SectionHeader title="🛍️ Explore products" />
-                <Grid>{matching.slice(0, CLOSEST_GRID_LIMIT).map(p => cardFor(p))}</Grid>
+                <Grid>{others.slice(0, CLOSEST_GRID_LIMIT).map(p => cardFor(p))}</Grid>
               </section>
             )}
           </>
