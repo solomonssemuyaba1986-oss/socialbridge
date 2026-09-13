@@ -99,7 +99,8 @@ function BulkUpload({ sellerId, onDone }: { sellerId: string, onDone: () => void
         name: draft.name,
         price: draft.price,
         description: '',
-        imageUrl
+        imageUrl,
+        createdAt: new Date()
       })
 
       setDrafts(prev => prev.map((d, idx) => idx === i ? { ...d, uploading: false, uploaded: true, imageUrl } : d))

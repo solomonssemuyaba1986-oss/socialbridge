@@ -32,6 +32,16 @@ export function productImages(p: CardProduct): string[] {
   return p.imageUrl ? [p.imageUrl] : []
 }
 
+/** Firestore Timestamp, Date or number → milliseconds. Older records have none. */
+export function toMillis(value: unknown): number | undefined {
+  if (value && typeof value === 'object' && typeof (value as { toMillis?: () => number }).toMillis === 'function') {
+    return (value as { toMillis: () => number }).toMillis()
+  }
+  if (value instanceof Date) return value.getTime()
+  if (typeof value === 'number') return value
+  return undefined
+}
+
 /**
  * Deterministic shuffle (mulberry32). Same seed → same order, so a "random" feed
  * stays still while the user scrolls, and reshuffles only when they tap 🔀.

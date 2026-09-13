@@ -14,6 +14,7 @@ import { useDraft } from './useDraft'
 import { uploadImageToCloudinary } from './uploadImage'
 import { sendConversationMessage } from './useConversation'
 import { notify } from './notifications'
+import { toMillis } from './productCardUtils'
 import Fuse from 'fuse.js'
 
 interface Product {
@@ -31,6 +32,8 @@ interface Product {
   outOfStock?: boolean
   orderCount?: number
   salesCount?: number
+  createdAt?: unknown
+  updatedAt?: unknown
 }
 
 const categories = ['All', ...getMainCategories()]
@@ -548,8 +551,8 @@ function BrowsePage() {
         return priceB - priceA
       })
     } else if (sortBy === 'newest') {
-      // Assume products are already in newest-first order from Firestore
-      // If we had createdAt, we'd sort by that
+      // Real newest-first using the product's createdAt (older items go last).
+      result.sort((a, b) => (toMillis(b.createdAt) ?? 0) - (toMillis(a.createdAt) ?? 0))
     } else if (sortBy === 'popular') {
       result.sort((a, b) => (b.orderCount || 0) - (a.orderCount || 0))
     }

@@ -568,7 +568,7 @@ const handleImageUpload = async (file: File) => {
     if (!category) return alert(notify.productCategoryRequired)
     if (!subCategory) return alert(notify.productSubcategoryRequired)
     await addDoc(collection(db, 'sellers', sellerId, 'products'), {
-      name, price, description, imageUrl, category, subCategory
+      name, price, description, imageUrl, category, subCategory, createdAt: new Date()
     })
     setName(''); setPrice(''); setDescription(''); setImageUrl(''); setCategory(''); setSubCategory('')
     setShowForm(false)

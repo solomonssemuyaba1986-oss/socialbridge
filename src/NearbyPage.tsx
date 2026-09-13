@@ -13,7 +13,7 @@ import ProductCardSkeleton from './ProductCardSkeleton'
 import ProductActions from './ProductActions'
 import ProductPreview from './ProductPreview'
 import { getMainCategories } from './categories'
-import { green, productImages, seededShuffle, type CardProduct } from './productCardUtils'
+import { green, productImages, seededShuffle, toMillis, type CardProduct } from './productCardUtils'
 import { detectSource, track } from './tracking'
 
 interface NearbySeller {
@@ -31,6 +31,8 @@ interface NearbySeller {
 interface DiscoveryProduct extends CardProduct {
   /** Distance to the seller — undefined when we don't know the buyer's area. */
   distanceKm?: number
+  /** When the seller listed it, in ms. Missing on older products. */
+  createdAtMs?: number
 }
 
 const RANGE_PRESETS = [5, 10, 25, 40]
@@ -199,6 +201,7 @@ function NearbyPage() {
               outOfStock: Boolean(data.outOfStock),
               orderCount: Number(data.orderCount) || 0,
               salesCount: Number(data.salesCount) || 0,
+              createdAtMs: toMillis(data.createdAt),
               sellerId: seller.id,
               sellerSlug: seller.slug,
               businessName: seller.businessName,
@@ -257,16 +260,24 @@ function NearbyPage() {
   const hero = nearby[0] || popular[0] || matching[0] || null
   /** Rails only make sense once there's enough to fill them without repeating. */
   const showRails = matching.length >= 6
+  /** True once at least one product carries a listing date. */
+  const hasNewest = matching.some(p => p.createdAtMs !== undefined)
 
   const fresh = useMemo(() => {
-    // Keep it genuinely different from the hero + Popular rail when we can.
+    if (hasNewest) {
+      // Real "newest" — newest listing first, items without a date last.
+      return [...matching]
+        .sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0))
+        .slice(0, RAIL_LIMIT)
+    }
+    // No createdAt anywhere yet → shuffled picks, reshuffled on demand.
     const seen = new Set<string>()
     if (hero) seen.add(hero.id)
     popular.forEach(p => seen.add(p.id))
     const rest = matching.filter(p => !seen.has(p.id))
     const pool = rest.length >= 4 ? rest : matching
     return seededShuffle(pool, shuffleSeed).slice(0, RAIL_LIMIT)
-  }, [matching, popular, hero, shuffleSeed])
+  }, [matching, popular, hero, shuffleSeed, hasNewest])
 
   const searchResults = useMemo(() => {
     const term = search.trim()
@@ -381,7 +392,7 @@ function NearbyPage() {
           <div>
             <h1 style={{ margin: '0 0 4px', fontSize: '23px', fontWeight: '800' }}>📍 Nearby</h1>
             <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>
-              Discover what you can buy around you — no need to search.
+              Discover what you can buy around you — from neighbourhood sellers.
             </p>
           </div>
           {area && (
@@ -606,16 +617,18 @@ function NearbyPage() {
               </section>
             )}
 
-            {/* 🎲 Shuffled picks — reshuffle on demand */}
+            {/* 🆕 Newest when we have dates, 🎲 shuffled when we don't */}
             {showRails && fresh.length > 1 && (
               <section>
                 <SectionHeader
-                  title="🎲 Fresh picks near you"
+                  title={hasNewest ? '🆕 New near you' : '🎲 Fresh picks near you'}
                   action={
-                    <button onClick={() => setShuffleSeed(Date.now())}
-                      style={{ padding: '7px 13px', background: '#1a1a1a', border: '1px solid #333', color: '#ddd', borderRadius: '999px', fontWeight: '700', fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                      🔀 Shuffle
-                    </button>
+                    hasNewest ? undefined : (
+                      <button onClick={() => setShuffleSeed(Date.now())}
+                        style={{ padding: '7px 13px', background: '#1a1a1a', border: '1px solid #333', color: '#ddd', borderRadius: '999px', fontWeight: '700', fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        🔀 Shuffle
+                      </button>
+                    )
                   }
                 />
                 <Rail>
