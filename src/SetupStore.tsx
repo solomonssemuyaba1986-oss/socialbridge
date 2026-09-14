@@ -56,6 +56,18 @@ function clearSetupDraft() {
   }
 }
 
+/** Is this shop link free? Module scope so effects can use it safely. */
+async function isHandleFree(handle: string): Promise<boolean | null> {
+  try {
+    const q = query(collection(db, 'sellers'), where('slug', '==', handle))
+    const snapshot = await getDocs(q)
+    return snapshot.empty
+  } catch (err) {
+    console.warn('Handle check failed:', err)
+    return null
+  }
+}
+
 function SetupStore() {
   const [businessName, setBusinessName] = useState(() => readSetupDraft().businessName || '')
   const [storeHandle, setStoreHandle] = useState(() => readSetupDraft().storeHandle || '')
@@ -184,7 +196,7 @@ function SetupStore() {
     return input.toLowerCase().trim().replace(/[^a-z0-9_-]/g, '').replace(/-+/g, '-').replace(/_+/g, '_').slice(0, 30)
   }
 
-  // Debounced handle availability check
+  // Debounced handle availability check while typing
   const handleCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const checkHandleAvailability = async (handle: string) => {
     if (handle.length < 3) {
@@ -192,16 +204,26 @@ function SetupStore() {
       return
     }
     setHandleChecking(true)
-    try {
-      const q = query(collection(db, 'sellers'), where('slug', '==', handle))
-      const snapshot = await getDocs(q)
-      setHandleAvailable(snapshot.empty)
-    } catch {
-      setHandleAvailable(null)
-    } finally {
-      setHandleChecking(false)
-    }
+    const free = await isHandleFree(handle)
+    setHandleAvailable(free)
+    setHandleChecking(false)
   }
+
+  // A link restored from the saved draft never went through the typing check —
+  // verify it on arrival, otherwise "Create" would look broken.
+  const autoCheckedRef = useRef('')
+  useEffect(() => {
+    if (storeHandle.length < 3 || handleAvailable !== null) return
+    if (autoCheckedRef.current === storeHandle) return
+    autoCheckedRef.current = storeHandle
+    const t = setTimeout(async () => {
+      setHandleChecking(true)
+      const free = await isHandleFree(storeHandle)
+      setHandleAvailable(free)
+      setHandleChecking(false)
+    }, 0)
+    return () => clearTimeout(t)
+  }, [storeHandle, handleAvailable])
 
   const handleHandleChange = (val: string) => {
     const cleaned = sanitizeHandle(val)
@@ -236,7 +258,8 @@ function SetupStore() {
     setErrors(e => ({ ...e, idDocument: undefined }))
   }
 
-  const validateForm = (): boolean => {
+  /** Collects every problem — the caller decides where to show it. */
+  const validateForm = (): SetupFormErrors => {
     const newErrors: SetupFormErrors = {}
     const cleanedName = sanitizeInput(businessName)
     if (!cleanedName) {
@@ -257,8 +280,15 @@ function SetupStore() {
     if (!nationality) {
       newErrors.nationality = 'Please select your country'
     }
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
+    return newErrors
+  }
+
+  /** Any failure must be visible where the seller is standing — never silent. */
+  const showSubmitError = (message: string) => {
+    setErrors(e => ({ ...e, submit: message }))
+    window.setTimeout(() => {
+      document.getElementById('setup-submit-error')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 80)
   }
 
   const handleWhatsappChange = (val: string) => {
@@ -318,7 +348,19 @@ function SetupStore() {
     : COUNTRIES
 
   const handleSubmit = async () => {
-    if (!validateForm()) return
+    // Anything missing sends them to the step that owns it — no invisible failures.
+    const problems = validateForm()
+    if (Object.keys(problems).length > 0) {
+      setErrors(problems)
+      const targetStep = problems.businessName || problems.bio ? 1 : problems.nationality ? 2 : 3
+      if (targetStep !== step) setStep(targetStep)
+      showSubmitError(
+        problems.whatsapp
+          ? 'Check your phone number, then tap Create My Shop again.'
+          : 'Almost — finish the highlighted field, then tap Create My Shop again.',
+      )
+      return
+    }
     const user = auth.currentUser
     if (!user) {
       // Everything is filled in — NOW ask how to save it. Their effort is already on
@@ -336,14 +378,26 @@ function SetupStore() {
       const cleanedBio = sanitizeInput(bio, 500)
       const cleanedEmail = email ? sanitizeInput(email) : ''
       if (!storeHandle || storeHandle.length < 3) {
-        setErrors({ submit: 'Please choose a store handle (at least 3 characters).' })
         setLoading(false)
+        showSubmitError('Please choose your shop link (at least 3 characters).')
         return
       }
+      // The debounced check may never have run (e.g. the link came from the saved
+      // draft), so verify the link live right now instead of silently doing nothing.
       if (handleAvailable !== true) {
-        setErrors({ submit: 'This store handle is already taken. Please choose another.' })
-        setLoading(false)
-        return
+        setHandleChecking(true)
+        const free = await isHandleFree(storeHandle)
+        setHandleChecking(false)
+        setHandleAvailable(free)
+        if (free !== true) {
+          setLoading(false)
+          showSubmitError(
+            free === false
+              ? `"${storeHandle}" is already taken — pick another shop link.`
+              : 'We could not check your shop link. Check your connection and try again.',
+          )
+          return
+        }
       }
       const slug = storeHandle
       const fullNumber = getFullWhatsapp()
@@ -403,9 +457,9 @@ function SetupStore() {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to create store'
       if ((error as any)?.code === 'permission-denied') {
-        setErrors({ submit: 'Permission denied: cannot create store. Check authentication or Firestore rules.' })
+        showSubmitError('Permission denied: cannot create store. Check authentication or Firestore rules.')
       } else {
-        setErrors({ submit: errorMessage })
+        showSubmitError(errorMessage)
       }
       console.error('Setup error:', error)
     } finally {
@@ -916,6 +970,12 @@ function SetupStore() {
 
         {step === 3 && (
           <>
+        {errors.submit && (
+          <div id="setup-submit-error" style={{ background: '#fee', border: '1px solid #fcc', borderRadius: '8px', padding: '12px', marginBottom: '12px', color: '#b71c1c', fontSize: '13px', fontWeight: '600' }}>
+            {errors.submit}
+          </div>
+        )}
+
         {missing.length > 0 && (
           <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
             <p style={{ margin: '0 0 6px', fontSize: '13px', fontWeight: '700', color: '#9a3412' }}>Almost there — still needed:</p>
