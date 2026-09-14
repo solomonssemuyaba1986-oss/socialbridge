@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { auth, db, storage } from './firebase'
+import { auth, db, storage, googleProvider, facebookProvider, appleProvider, createRecaptchaVerifier } from './firebase'
+import { signInWithPopup, signInWithPhoneNumber, type ConfirmationResult, type AuthProvider } from 'firebase/auth'
 import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore'
 import { ref, uploadBytes } from 'firebase/storage'
 import { useNavigate } from 'react-router-dom'
 import { COUNTRIES } from './countries'
 import { COUNTRY_CODES, type CountryCode } from './countryCodes'
-import AuthModal from './AuthModal'
 import {
   placeLabel,
   resolveSellerLocation,
@@ -55,7 +55,6 @@ function SetupStore() {
   const [locationLoading, setLocationLoading] = useState(false)
   const [errors, setErrors] = useState<SetupFormErrors>({})
   const [loading, setLoading] = useState(false)
-  const [showAuthModal, setShowAuthModal] = useState(() => !auth.currentUser)
   // The number is private by default (verification, security, payouts). Sellers can
   // choose to show it on their store later from Edit Store.
   const [showWhatsapp] = useState(false)
@@ -85,6 +84,12 @@ function SetupStore() {
   const [createdSlug, setCreatedSlug] = useState('')
   /** Tracked separately so the UI reacts the moment sign-in succeeds. */
   const [signedInUid, setSignedInUid] = useState<string | null>(auth.currentUser?.uid || null)
+  // Inline sign-in on the last step — no pop-ups on this page.
+  const [signingIn, setSigningIn] = useState('')
+  const [signInError, setSignInError] = useState('')
+  const [smsCode, setSmsCode] = useState('')
+  const [codeSent, setCodeSent] = useState(false)
+  const confirmationRef = useRef<ConfirmationResult | null>(null)
 
   const goNext = (to: number) => {
     if (to === 2) {
@@ -95,9 +100,6 @@ function SetupStore() {
     if (to === 3) {
       // The phone number lives on step 3 — only the country is checked here.
       if (!nationality) { setErrors(e => ({ ...e, nationality: 'Select your country to continue.' })); return }
-      // Last step is "save your shop" — if they're not signed in yet, offer the
-      // choices (Google · Facebook · Apple · Phone) straight away.
-      if (!auth.currentUser) setShowAuthModal(true)
     }
     setErrors({})
     setStep(to)
@@ -260,8 +262,8 @@ function SetupStore() {
     if (!validateForm()) return
     const user = auth.currentUser
     if (!user) {
-      // Guest: open the sign-in popup — their filled-in store stays safe
-      setShowAuthModal(true)
+      // Not signed in yet — point them at the sign-in choices on this step.
+      setErrors({ submit: 'Choose how you want to sign in above, then tap Create My Shop.' })
       return
     }
     setLoading(true)
@@ -347,11 +349,13 @@ function SetupStore() {
   }
 
   const handleAuthSuccess = () => {
-    setShowAuthModal(false)
     const finish = () => {
       const u = auth.currentUser
       if (!u) return
       setSignedInUid(u.uid)
+      setSignInError('')
+      setCodeSent(false)
+      setSmsCode('')
       // Pull in whatever the account already knows, so nothing gets retyped.
       if (u.email) setEmail(prev => prev || (u.email as string))
       if (u.phoneNumber) {
@@ -368,6 +372,90 @@ function SetupStore() {
     }
     if (auth.currentUser) finish()
     else setTimeout(finish, 300)
+  }
+
+  /** Google · Facebook · Apple — inline, right on the last step. */
+  const socialSignIn = async (provider: AuthProvider, name: string) => {
+    setSigningIn(name)
+    setSignInError('')
+    try {
+      await signInWithPopup(auth, provider)
+      handleAuthSuccess()
+    } catch (err) {
+      const code = (err as { code?: string })?.code || ''
+      console.error(`${name} sign-in failed:`, err)
+      setSignInError(
+        code === 'auth/popup-blocked'
+          ? `Your browser blocked the ${name} window — tap again and allow pop-ups.`
+          : code === 'auth/operation-not-allowed'
+            ? `${name} sign-in isn't switched on yet. Try another option.`
+            : `Couldn't sign in with ${name}. Please try again.`,
+      )
+    } finally {
+      setSigningIn('')
+    }
+  }
+
+  /**
+   * Phone — the seller types the number once (above) and one code does double duty:
+   * it creates/logs into the account AND verifies the number.
+   */
+  const sendPhoneCode = async () => {
+    if (!whatsappIsValid) {
+      setSignInError('Type your phone number above first — then tap this.')
+      return
+    }
+    setSigningIn('Phone')
+    setSignInError('')
+    try {
+      const verifier = createRecaptchaVerifier('setup-recaptcha')
+      const result = await signInWithPhoneNumber(auth, getFullWhatsapp(), verifier)
+      confirmationRef.current = result
+      setCodeSent(true)
+    } catch (err) {
+      const code = (err as { code?: string })?.code || ''
+      console.error('Phone sign-in failed:', err)
+      setSignInError(
+        code === 'auth/operation-not-allowed'
+          ? "Phone sign-in isn't switched on yet — use Google, Facebook or Apple instead."
+          : code === 'auth/invalid-phone-number'
+            ? 'That phone number looks wrong — check the country code and the number.'
+            : 'Could not send the code. Check your connection and try again.',
+      )
+    } finally {
+      setSigningIn('')
+    }
+  }
+
+  const confirmPhoneCode = async () => {
+    if (!confirmationRef.current) {
+      setSignInError('That code expired — request a new one.')
+      return
+    }
+    setSigningIn('Phone')
+    setSignInError('')
+    try {
+      await confirmationRef.current.confirm(smsCode)
+      handleAuthSuccess()
+    } catch (err) {
+      const code = (err as { code?: string })?.code || ''
+      console.error('Phone code failed:', err)
+      setSignInError(code === 'auth/invalid-verification-code' ? 'Wrong code — try again.' : 'Verification failed. Please try again.')
+    } finally {
+      setSigningIn('')
+    }
+  }
+
+  const switchAccount = async () => {
+    try {
+      await auth.signOut()
+    } catch (err) {
+      console.warn('Sign out failed:', err)
+    }
+    setSignedInUid(null)
+    setPhoneVerified(false)
+    setCodeSent(false)
+    setSmsCode('')
   }
 
   /**
@@ -499,32 +587,8 @@ function SetupStore() {
           Sign in so this shop is yours — choose whatever is easiest.
         </p>
 
-        {/* How do you want to sign in? (Google · Facebook · Apple · Phone) */}
-        {signedInUid ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '16px', padding: '10px 12px', background: '#e8f5e9', borderRadius: '8px', border: '1px solid #c8e6c9' }}>
-            <span style={{ color: '#2e7d32', fontSize: '13px', fontWeight: '700' }}>
-              ✓ Signed in{auth.currentUser?.email ? ` as ${auth.currentUser.email}` : auth.currentUser?.phoneNumber ? ` as ${auth.currentUser.phoneNumber}` : ''}
-            </span>
-            <button onClick={() => setShowAuthModal(true)}
-              style={{ background: 'transparent', border: 'none', color: '#2e7d32', cursor: 'pointer', fontSize: '12px', textDecoration: 'underline' }}>
-              Not you?
-            </button>
-          </div>
-        ) : (
-          <div style={{ marginBottom: '16px', padding: '14px', background: '#f8f8f8', borderRadius: '8px', border: '1px solid #eee' }}>
-            <p style={{ fontSize: '13px', color: '#444', margin: '0 0 4px', fontWeight: '700' }}>How do you want to sign in?</p>
-            <p style={{ fontSize: '12px', color: '#777', margin: '0 0 10px' }}>
-              Google · Facebook · Apple · Phone number — pick whatever is easiest for you.
-            </p>
-            <button onClick={() => setShowAuthModal(true)}
-              style={{ width: '100%', padding: '12px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '14px' }}>
-              Choose how to sign in →
-            </button>
-          </div>
-        )}
-
-        {/* Phone number — ONE field. For phone sign-in it becomes the login (one code
-            verifies it); for the others it's the payout/contact number. */}
+        {/* Phone number — ONE field. If they sign in with phone, the code sent here
+            verifies it; otherwise it's the payout/contact number. */}
         {(!phoneVerified || !whatsappIsValid) && (
           <>
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Phone number <span style={{ color: '#888', fontWeight: '400', fontSize: '12px' }}>— needed</span></label>
@@ -576,6 +640,67 @@ function SetupStore() {
           <div style={{ marginBottom: '16px', padding: '10px 12px', background: '#e8f5e9', borderRadius: '8px', border: '1px solid #c8e6c9', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ color: '#2e7d32', fontSize: '16px' }}>✓</span>
             <span style={{ color: '#2e7d32', fontSize: '13px', fontWeight: '600' }}>Phone verified — {getFullWhatsapp()}</span>
+          </div>
+        )}
+
+        {/* How do you want to sign in? — inline, no pop-ups */}
+        {signedInUid ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '16px', padding: '10px 12px', background: '#e8f5e9', borderRadius: '8px', border: '1px solid #c8e6c9' }}>
+            <span style={{ color: '#2e7d32', fontSize: '13px', fontWeight: '700' }}>
+              ✓ Signed in{auth.currentUser?.email ? ` as ${auth.currentUser.email}` : auth.currentUser?.phoneNumber ? ` as ${auth.currentUser.phoneNumber}` : ''}
+            </span>
+            <button onClick={switchAccount}
+              style={{ background: 'transparent', border: 'none', color: '#2e7d32', cursor: 'pointer', fontSize: '12px', textDecoration: 'underline' }}>
+              Not you?
+            </button>
+          </div>
+        ) : (
+          <div style={{ marginBottom: '16px', padding: '14px', background: '#f8f8f8', borderRadius: '8px', border: '1px solid #eee' }}>
+            <p style={{ fontSize: '13px', color: '#444', margin: '0 0 10px', fontWeight: '700' }}>How do you want to sign in?</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button onClick={() => socialSignIn(googleProvider, 'Google')} disabled={!!signingIn}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '12px', background: '#fff', color: '#000', border: '1px solid #ddd', borderRadius: '8px', fontWeight: '700', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
+                <img src="https://www.google.com/favicon.ico" width="18" alt="" />
+                {signingIn === 'Google' ? 'Signing in…' : 'Continue with Google'}
+              </button>
+              <button onClick={() => socialSignIn(facebookProvider, 'Facebook')} disabled={!!signingIn}
+                style={{ width: '100%', padding: '12px', background: '#1877F2', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
+                {signingIn === 'Facebook' ? 'Signing in…' : 'Continue with Facebook'}
+              </button>
+              <button onClick={() => socialSignIn(appleProvider, 'Apple')} disabled={!!signingIn}
+                style={{ width: '100%', padding: '12px', background: '#000', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
+                {signingIn === 'Apple' ? 'Signing in…' : 'Continue with Apple'}
+              </button>
+              <button onClick={sendPhoneCode} disabled={!!signingIn}
+                style={{ width: '100%', padding: '12px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
+                {signingIn === 'Phone' ? 'Sending code…' : 'Use my phone number'}
+              </button>
+            </div>
+
+            {codeSent && (
+              <div style={{ marginTop: '12px' }}>
+                <p style={{ fontSize: '13px', color: '#333', margin: '0 0 6px' }}>
+                  We sent a 6-digit code to <strong>{getFullWhatsapp()}</strong>
+                </p>
+                <input value={smsCode} onChange={e => setSmsCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="123456" inputMode="numeric"
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', marginBottom: '8px', fontSize: '20px', textAlign: 'center', letterSpacing: '8px', boxSizing: 'border-box' }} />
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button onClick={confirmPhoneCode} disabled={!!signingIn || smsCode.length < 6}
+                    style={{ flex: 1, padding: '12px', background: (signingIn || smsCode.length < 6) ? '#ccc' : '#4CAF50', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (signingIn || smsCode.length < 6) ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
+                    {signingIn === 'Phone' ? 'Checking…' : 'Verify & continue'}
+                  </button>
+                  <button onClick={sendPhoneCode} disabled={!!signingIn}
+                    style={{ padding: '12px 16px', background: 'transparent', color: '#666', border: '1px solid #ddd', borderRadius: '8px', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '13px' }}>
+                    Resend
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {signInError && <p style={{ color: '#c33', fontSize: '12px', margin: '10px 0 0' }}>{signInError}</p>}
+            {/* Firebase needs this invisible reCAPTCHA slot for phone sign-in */}
+            <div id="setup-recaptcha" />
           </div>
         )}
 
@@ -740,14 +865,6 @@ function SetupStore() {
         </div>
           </>
         )}
-
-      <AuthModal
-        open={showAuthModal}
-        title="Create your account"
-        subtitle="Choose whatever is easiest — Google, Facebook, Apple or your phone number."
-        onSuccess={handleAuthSuccess}
-        onClose={() => setShowAuthModal(false)}
-      />
       </div>
     </div>
   )
