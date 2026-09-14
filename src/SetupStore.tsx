@@ -15,8 +15,6 @@ import {
   type Place,
 } from './place'
 
-const OTP_SERVER_URL = import.meta.env.VITE_OTP_SERVER_URL || 'http://localhost:3001'
-
 interface SetupFormErrors {
   businessName?: string
   bio?: string
@@ -47,7 +45,7 @@ function SetupStore() {
       : ''
   )
   const [email, setEmail] = useState(auth.currentUser?.email || '')
-  const [nationality, setNationality] = useState('Uganda')
+  const [nationality, setNationality] = useState('')
   const [nationalitySearch, setNationalitySearch] = useState('')
   const [showCountryDropdown, setShowCountryDropdown] = useState(false)
   const [location, setLocation] = useState('')
@@ -61,22 +59,14 @@ function SetupStore() {
   // The number is private by default (verification, security, payouts). Sellers can
   // choose to show it on their store later from Edit Store.
   const [showWhatsapp] = useState(false)
-  const [logoFile, setLogoFile] = useState<File | null>(null)
-  const [logoPreview, setLogoPreview] = useState('')
-  const [uploadingLogo, setUploadingLogo] = useState(false)
-
   // National ID upload
   const [idFile, setIdFile] = useState<File | null>(null)
   const [idFileName, setIdFileName] = useState('')
   const [uploadingId, setUploadingId] = useState(false)
 
-  // Phone OTP verification
-  // If user signed in via Firebase Phone Auth, phone is already verified
+  // Phone verification — comes free from Firebase phone sign-in (one SMS, at the
+  // "save your shop" step). Social sign-ins can earn the badge later.
   const [phoneVerified, setPhoneVerified] = useState(!!auth.currentUser?.phoneNumber)
-  const [phoneOtpSent, setPhoneOtpSent] = useState(false)
-  const [phoneOtpInput, setPhoneOtpInput] = useState('')
-  const [phoneOtpLoading, setPhoneOtpLoading] = useState(false)
-  const [phoneOtpError, setPhoneOtpError] = useState('')
 
   // Country-aware phone helpers.
   // Dial codes already include "+" (e.g. '+256', '+1-684'), so strip everything to
@@ -87,26 +77,27 @@ function SetupStore() {
   const getFullWhatsapp = () => `+${dialDigits}${localDigits}`
   const whatsappIsValid = /^\+[1-9]\d{7,14}$/.test(getFullWhatsapp())
 
-  // Multi-step onboarding — step 0 is "create your account" so the shop belongs
-  // to an account from the start (and email/phone can be prefilled).
-  const [step, setStep] = useState<number>(() => (auth.currentUser ? 1 : 0))
-  const totalSteps = 4
+  // Multi-step onboarding — 3 steps, account LAST so sellers see the whole shop
+  // before we ask them to sign in.
+  const [step, setStep] = useState(1)
+  const totalSteps = 3
+  /** Set once the shop is created — we show a celebration instead of redirecting. */
+  const [createdSlug, setCreatedSlug] = useState('')
+  /** Tracked separately so the UI reacts the moment sign-in succeeds. */
+  const [signedInUid, setSignedInUid] = useState<string | null>(auth.currentUser?.uid || null)
 
   const goNext = (to: number) => {
-    // The shop must belong to an account — if sign-in was skipped/closed, ask again.
-    if (!auth.currentUser) {
-      setShowAuthModal(true)
-      return
-    }
     if (to === 2) {
-      if (!businessName.trim()) { setErrors(e => ({ ...e, businessName: 'Business name is required' })); return }
-      if (storeHandle.length < 3) { setErrors(e => ({ ...e, submit: 'Choose a store handle (at least 3 characters) to continue.' })); return }
+      if (!businessName.trim()) { setErrors(e => ({ ...e, businessName: 'Shop name is required' })); return }
+      if (storeHandle.length < 3) { setErrors(e => ({ ...e, submit: 'Choose your shop link (at least 3 characters) to continue.' })); return }
+      if (!bio.trim()) { setErrors(e => ({ ...e, bio: 'Tell buyers what you sell to continue.' })); return }
     }
     if (to === 3) {
-      if (!whatsappIsValid) { setErrors(e => ({ ...e, whatsapp: 'Enter a valid phone number to continue — e.g. 771234567 or 0771234567.' })); return }
-    }
-    if (to === 4) {
-      if (!nationality) { setErrors(e => ({ ...e, nationality: 'Select your nationality to continue.' })); return }
+      // The phone number lives on step 3 — only the country is checked here.
+      if (!nationality) { setErrors(e => ({ ...e, nationality: 'Select your country to continue.' })); return }
+      // Last step is "save your shop" — if they're not signed in yet, offer the
+      // choices (Google · Facebook · Apple · Phone) straight away.
+      if (!auth.currentUser) setShowAuthModal(true)
     }
     setErrors({})
     setStep(to)
@@ -158,90 +149,6 @@ function SetupStore() {
     if (handleCheckTimer.current) clearTimeout(handleCheckTimer.current)
     if (cleaned.length >= 3) {
       handleCheckTimer.current = setTimeout(() => checkHandleAvailability(cleaned), 400)
-    }
-  }
-
-  const resizeImage = (file: File, maxWidth = 1024, quality = 0.8): Promise<Blob> => {
-    return new Promise((resolve, reject) => {
-      const img = new Image()
-      img.onload = () => {
-        try {
-          const scale = Math.min(1, maxWidth / img.width)
-          const w = Math.round(img.width * scale)
-          const h = Math.round(img.height * scale)
-          const canvas = document.createElement('canvas')
-          canvas.width = w
-          canvas.height = h
-          const ctx = canvas.getContext('2d')!
-          ctx.drawImage(img, 0, 0, w, h)
-          canvas.toBlob((blob) => {
-            if (blob) resolve(blob)
-            else reject(new Error('Image resize failed'))
-          }, 'image/jpeg', quality)
-        } catch (err) {
-          reject(err)
-        }
-      }
-      img.onerror = (e) => reject(e)
-      img.src = URL.createObjectURL(file)
-    })
-  }
-
-  // -- Phone OTP verification --
-  const sendPhoneOtp = async () => {
-    if (!whatsappIsValid) {
-      setPhoneOtpError('Enter a valid phone number with country code first')
-      return
-    }
-    setPhoneOtpLoading(true)
-    setPhoneOtpError('')
-    const normalized = getFullWhatsapp()
-    try {
-      const res = await fetch(`${OTP_SERVER_URL}/api/otp/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: normalized }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setPhoneOtpError(data.error || 'Failed to send OTP')
-      } else {
-        setPhoneOtpSent(true)
-        if (data.debugOtp) {
-          console.log(`[OTP Debug] Seller verification code: ${data.debugOtp}`)
-        }
-      }
-    } catch {
-      setPhoneOtpError('Verification is offline right now — you can continue and verify later.')
-    } finally {
-      setPhoneOtpLoading(false)
-    }
-  }
-
-  const verifyPhoneOtp = async () => {
-    if (!phoneOtpInput || phoneOtpInput.length < 6) {
-      setPhoneOtpError('Enter the 6-digit code')
-      return
-    }
-    const normalized = getFullWhatsapp()
-    setPhoneOtpLoading(true)
-    setPhoneOtpError('')
-    try {
-      const res = await fetch(`${OTP_SERVER_URL}/api/otp/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: normalized, otp: phoneOtpInput }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setPhoneOtpError(data.error || 'Invalid code')
-      } else {
-        setPhoneVerified(true)
-      }
-    } catch {
-      setPhoneOtpError('Verification is offline right now — you can continue and verify later.')
-    } finally {
-      setPhoneOtpLoading(false)
     }
   }
 
@@ -297,23 +204,15 @@ function SetupStore() {
     const digits = val.replace(/\D/g, '').slice(0, 14)
     setWhatsapp(digits)
     setErrors(e => ({ ...e, whatsapp: undefined }))
-    // Reset OTP state when number changes
-    if (digits !== whatsapp) {
-      setPhoneOtpSent(false)
-      setPhoneVerified(false)
-      setPhoneOtpInput('')
-      setPhoneOtpError('')
-    }
+    // A different number is a different number — it can't stay "verified".
+    if (digits !== whatsapp) setPhoneVerified(false)
   }
 
   const handleWhatsappCountryChange = (c: CountryCode) => {
     setSelectedCountry(c)
     setShowWhatsappCountryDropdown(false)
     setWhatsappCountrySearch('')
-    setPhoneOtpSent(false)
     setPhoneVerified(false)
-    setPhoneOtpInput('')
-    setPhoneOtpError('')
     setErrors(e => ({ ...e, whatsapp: undefined }))
   }
 
@@ -384,26 +283,9 @@ function SetupStore() {
       const slug = storeHandle
       const fullNumber = getFullWhatsapp()
 
-      // Upload logo (optional)
-      let finalLogoUrl = user.photoURL || ''
-      if (logoFile) {
-        try {
-          setUploadingLogo(true)
-          const processedBlob = await resizeImage(logoFile, 1024, 0.8)
-          const processedFile = new File([processedBlob], 'logo.jpg', { type: 'image/jpeg' })
-           const formData = new FormData()
-           formData.append('file', processedFile)
-           formData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'p2z65zrv')
-          const res = await fetch(`https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'dzudmmuxg'}/image/upload`, { method: 'POST', body: formData })
-           const cloudData = await res.json()
-           finalLogoUrl = cloudData.secure_url
-           setUploadingLogo(false)
-        } catch (err) {
-          console.error('Logo upload failed', err)
-        } finally {
-          setUploadingLogo(false)
-        }
-      }
+      // Logo: use the sign-in photo when we have one (Google/Facebook/Apple);
+      // phone-only sellers get their initials until they add one in Edit Store.
+      const finalLogoUrl = user.photoURL || ''
 
       // Upload National ID to Firebase Storage (private)
       let idDocumentPath = ''
@@ -448,9 +330,9 @@ function SetupStore() {
         recoveryEmailLastPrompted: isPhoneSignIn ? null : null,
         createdAt: new Date(),
       })
-      // A shop with no products shows buyers nothing — send them straight to
-      // adding their first product instead of dumping them on the dashboard.
-      navigate('/products')
+      // Celebration, not a redirect — the seller sees their live shop link and
+      // the one next action (add a product), plus a WhatsApp share for their bio.
+      setCreatedSlug(slug)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to create store'
       if ((error as any)?.code === 'permission-denied') {
@@ -469,6 +351,7 @@ function SetupStore() {
     const finish = () => {
       const u = auth.currentUser
       if (!u) return
+      setSignedInUid(u.uid)
       // Pull in whatever the account already knows, so nothing gets retyped.
       if (u.email) setEmail(prev => prev || (u.email as string))
       if (u.phoneNumber) {
@@ -481,7 +364,6 @@ function SetupStore() {
         // Firebase already proved this number — no need to ask twice.
         setPhoneVerified(true)
       }
-      setStep(s => (s === 0 ? 1 : s))
       window.scrollTo(0, 0)
     }
     if (auth.currentUser) finish()
@@ -495,9 +377,45 @@ function SetupStore() {
   const missing: { label: string; step: number }[] = []
   if (!businessName.trim() || storeHandle.length < 3) missing.push({ label: 'Shop name & link', step: 1 })
   if (!bio.trim()) missing.push({ label: 'What do you sell?', step: 1 })
-  if (!whatsappIsValid) missing.push({ label: 'Phone number', step: 2 })
-  if (!nationality) missing.push({ label: 'Country', step: 3 })
+  if (!nationality) missing.push({ label: 'Country', step: 2 })
+  if (!whatsappIsValid) missing.push({ label: 'Phone number', step: 3 })
+  if (!signedInUid) missing.push({ label: 'Sign in to save your shop', step: 3 })
   const isFormReady = missing.length === 0
+
+  // ── Celebration: a real payoff instead of a silent redirect ──────────────
+  if (createdSlug) {
+    const shopUrl = `${window.location.origin}/store/${createdSlug}`
+    const shareText = `Buy from my shop on rachett: ${shopUrl}`
+    return (
+      <div style={{ minHeight: '100vh', background: '#f9f9f9', fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+        <div style={{ background: '#fff', borderRadius: '16px', padding: '32px', maxWidth: '460px', width: '100%', textAlign: 'center', boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}>
+          <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#adff2f', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 30, margin: '0 auto 16px' }}>🎉</div>
+          <h1 style={{ fontSize: '22px', fontWeight: 800, margin: '0 0 8px', color: '#1a1a1a' }}>Your shop is live!</h1>
+          <p style={{ color: '#666', fontSize: '14px', margin: '0 0 16px' }}>
+            <strong>{businessName || storeHandle}</strong> is open for business.
+          </p>
+          <div style={{ background: '#f5f5f5', border: '1px dashed #ddd', borderRadius: '10px', padding: '12px', marginBottom: '18px', wordBreak: 'break-all', fontSize: '14px', color: '#333', fontWeight: 600 }}>
+            {shopUrl}
+          </div>
+          <a href={`https://wa.me/?text=${encodeURIComponent(shareText)}`} target="_blank" rel="noreferrer"
+            style={{ display: 'block', width: '100%', padding: '14px', background: '#25D366', color: '#fff', borderRadius: '8px', fontWeight: 700, textDecoration: 'none', fontSize: '16px', marginBottom: '10px', boxSizing: 'border-box' }}>
+            Share on WhatsApp
+          </a>
+          <button onClick={() => navigate('/products')}
+            style={{ width: '100%', padding: '14px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, fontSize: '16px', cursor: 'pointer', marginBottom: '10px' }}>
+            Add your first product →
+          </button>
+          <p style={{ color: '#888', fontSize: '12px', margin: '0 0 12px' }}>
+            Buyers find shops by their products — one product is enough to start.
+          </p>
+          <button onClick={() => navigate('/dashboard')}
+            style={{ width: '100%', padding: '10px', background: 'transparent', color: '#888', border: 'none', cursor: 'pointer', fontSize: '14px' }}>
+            Go to my Dashboard
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={{ minHeight: '100vh', background: '#f9f9f9', fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
@@ -512,33 +430,15 @@ function SetupStore() {
         )}
 
         {/* Step Progress */}
-        {step > 0 && (
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px' }}>
-              {[1, 2, 3, 4].map(n => (
-                <div key={n} style={{ flex: 1, height: '6px', borderRadius: '3px', background: step >= n ? '#1a1a1a' : '#e5e5e5' }} />
-              ))}
-            </div>
-            <p style={{ fontSize: '13px', color: '#888', margin: '0 0 20px', fontWeight: '600' }}>
-              Step {step} of {totalSteps} — {step === 1 ? 'Your shop' : step === 2 ? 'Phone number' : step === 3 ? 'About you' : 'Finish'}
-            </p>
-          </>
-        )}
-
-        {/* Step 0 — the account comes first, so nothing is retyped or lost */}
-        {step === 0 && (
-          <>
-            <h2 style={{ fontSize: '19px', fontWeight: '800', margin: '0 0 6px', color: '#1a1a1a' }}>First, create your account</h2>
-            <p style={{ fontSize: '14px', color: '#666', margin: '0 0 18px', lineHeight: 1.5 }}>
-              Choose whatever is easiest for you — Google, Facebook, Apple or your phone number.
-              Your shop belongs to this account, so you can manage it from any device later.
-            </p>
-            <button onClick={() => setShowAuthModal(true)}
-              style={{ width: '100%', padding: '14px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '700', cursor: 'pointer' }}>
-              Choose how to sign in →
-            </button>
-          </>
-        )}
+        {/* Step Progress — 3 steps, account last */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px' }}>
+          {[1, 2, 3].map(n => (
+            <div key={n} style={{ flex: 1, height: '6px', borderRadius: '3px', background: step >= n ? '#1a1a1a' : '#e5e5e5' }} />
+          ))}
+        </div>
+        <p style={{ fontSize: '13px', color: '#888', margin: '0 0 20px', fontWeight: '600' }}>
+          Step {step} of {totalSteps} — {step === 1 ? 'Your shop' : step === 2 ? 'About you' : 'Save your shop'}
+        </p>
 
         {step === 1 && (
           <>
@@ -594,7 +494,39 @@ function SetupStore() {
 
         {step === 2 && (
           <>
-        {/* Phone number — required as a contact/identity, but verification is optional */}
+        <h2 style={{ fontSize: '19px', fontWeight: '800', margin: '0 0 6px', color: '#1a1a1a' }}>Save your shop</h2>
+        <p style={{ fontSize: '14px', color: '#666', margin: '0 0 16px', lineHeight: 1.5 }}>
+          Sign in so this shop is yours — choose whatever is easiest.
+        </p>
+
+        {/* How do you want to sign in? (Google · Facebook · Apple · Phone) */}
+        {signedInUid ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '16px', padding: '10px 12px', background: '#e8f5e9', borderRadius: '8px', border: '1px solid #c8e6c9' }}>
+            <span style={{ color: '#2e7d32', fontSize: '13px', fontWeight: '700' }}>
+              ✓ Signed in{auth.currentUser?.email ? ` as ${auth.currentUser.email}` : auth.currentUser?.phoneNumber ? ` as ${auth.currentUser.phoneNumber}` : ''}
+            </span>
+            <button onClick={() => setShowAuthModal(true)}
+              style={{ background: 'transparent', border: 'none', color: '#2e7d32', cursor: 'pointer', fontSize: '12px', textDecoration: 'underline' }}>
+              Not you?
+            </button>
+          </div>
+        ) : (
+          <div style={{ marginBottom: '16px', padding: '14px', background: '#f8f8f8', borderRadius: '8px', border: '1px solid #eee' }}>
+            <p style={{ fontSize: '13px', color: '#444', margin: '0 0 4px', fontWeight: '700' }}>How do you want to sign in?</p>
+            <p style={{ fontSize: '12px', color: '#777', margin: '0 0 10px' }}>
+              Google · Facebook · Apple · Phone number — pick whatever is easiest for you.
+            </p>
+            <button onClick={() => setShowAuthModal(true)}
+              style={{ width: '100%', padding: '12px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '14px' }}>
+              Choose how to sign in →
+            </button>
+          </div>
+        )}
+
+        {/* Phone number — ONE field. For phone sign-in it becomes the login (one code
+            verifies it); for the others it's the payout/contact number. */}
+        {(!phoneVerified || !whatsappIsValid) && (
+          <>
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Phone number <span style={{ color: '#888', fontWeight: '400', fontSize: '12px' }}>— needed</span></label>
         <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>
           Pick your country code, then type your number — e.g. <strong>771234567</strong> or <strong>0771234567</strong>.
@@ -637,47 +569,7 @@ function SetupStore() {
 
         {errors.whatsapp && <p style={{ color: '#c33', fontSize: '12px', margin: '4px 0 8px' }}>{errors.whatsapp}</p>}
 
-        {/* Optional verification — skipping is fine, it only affects the ✓ badge */}
-        {whatsappIsValid && !phoneVerified && (
-          <div style={{ marginBottom: '16px', padding: '12px', background: '#f8f8f8', borderRadius: '8px', border: '1px solid #eee' }}>
-            {!phoneOtpSent ? (
-              <>
-                <p style={{ fontSize: '13px', color: '#444', margin: '0 0 4px', fontWeight: '700' }}>Optional: verify this number</p>
-                <p style={{ fontSize: '12px', color: '#777', margin: '0 0 10px' }}>
-                  Verified sellers earn the ✓ Real Seller badge, and buyers trust them more. You can skip this and do it later.
-                </p>
-                <button onClick={sendPhoneOtp} disabled={phoneOtpLoading}
-                  style={{ width: '100%', padding: '10px', background: phoneOtpLoading ? '#ccc' : '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: phoneOtpLoading ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
-                  {phoneOtpLoading ? 'Sending...' : 'Verify now (earn ✓ Verified)'}
-                </button>
-              </>
-            ) : (
-              <>
-                <p style={{ fontSize: '13px', color: '#666', margin: '0 0 8px' }}>A 6-digit code was sent to <strong>{getFullWhatsapp()}</strong></p>
-                <input
-                  value={phoneOtpInput}
-                  onChange={e => setPhoneOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="000000"
-                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', marginBottom: '8px', fontSize: '18px', textAlign: 'center', letterSpacing: '8px', boxSizing: 'border-box' }}
-                />
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button onClick={verifyPhoneOtp} disabled={phoneOtpLoading || phoneOtpInput.length < 6}
-                    style={{ flex: 1, padding: '10px', background: (phoneOtpLoading || phoneOtpInput.length < 6) ? '#ccc' : '#4CAF50', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: (phoneOtpLoading || phoneOtpInput.length < 6) ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
-                    {phoneOtpLoading ? 'Verifying...' : 'Verify Code'}
-                  </button>
-                  <button onClick={() => { setPhoneOtpSent(false); setPhoneOtpInput(''); setPhoneOtpError('') }}
-                    style={{ padding: '10px 16px', background: 'transparent', color: '#888', border: '1px solid #ddd', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
-                    Resend
-                  </button>
-                </div>
-                <button onClick={() => { setPhoneOtpSent(false); setPhoneOtpInput(''); setPhoneOtpError('') }}
-                  style={{ width: '100%', marginTop: '8px', padding: '6px', background: 'transparent', color: '#888', border: 'none', cursor: 'pointer', fontSize: '13px' }}>
-                  Skip verification for now — you can do it later
-                </button>
-              </>
-            )}
-            {phoneOtpError && <p style={{ color: '#c33', fontSize: '12px', margin: '8px 0 0' }}>{phoneOtpError}</p>}
-          </div>
+          </>
         )}
 
         {phoneVerified && (
@@ -693,24 +585,20 @@ function SetupStore() {
 
           </>
         )}
-        {step === 2 && (
+        {step === 3 && (
           <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-            <button onClick={() => setStep(1)}
+            <button onClick={() => setStep(2)}
               style={{ flex: 1, padding: '14px', background: '#f0f0f0', color: '#333', border: '1px solid #ddd', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}>
               ← Back
-            </button>
-            <button onClick={() => goNext(3)}
-              style={{ flex: 2, padding: '14px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}>
-              Continue →
             </button>
           </div>
         )}
 
-        {step === 3 && (
+        {step === 2 && (
           <>
-        {/* Country — defaults to Uganda; stored on the store as `nationality` */}
+        {/* Country — no assumptions; the seller picks it */}
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Country</label>
-        <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>Where are you selling from? Uganda is already picked — change it if you're elsewhere.</p>
+        <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>Where are you selling from?</p>
         <div style={{ position: 'relative', marginBottom: '4px' }}>
           <div
             onClick={() => setShowCountryDropdown(!showCountryDropdown)}
@@ -813,38 +701,21 @@ function SetupStore() {
 
           </>
         )}
-        {step === 3 && (
+        {step === 2 && (
           <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-            <button onClick={() => setStep(2)}
+            <button onClick={() => setStep(1)}
               style={{ flex: 1, padding: '14px', background: '#f0f0f0', color: '#333', border: '1px solid #ddd', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}>
               ← Back
             </button>
-            <button onClick={() => goNext(4)}
+            <button onClick={() => goNext(3)}
               style={{ flex: 2, padding: '14px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}>
               Continue →
             </button>
           </div>
         )}
 
-        {step === 4 && (
+        {step === 3 && (
           <>
-        <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Email</label>
-        <input value={email} onChange={e => setEmail(e.target.value)}
-          placeholder="you@example.com"
-          style={{ width: '100%', padding: '12px', borderRadius: '8px', border: errors.email ? '2px solid #c33' : '1px solid #ddd', marginTop: '8px', marginBottom: '4px', fontSize: '15px', boxSizing: 'border-box' }} />
-        {errors.email && <p style={{ color: '#c33', fontSize: '12px', margin: '4px 0 16px' }}>{errors.email}</p>}
-        {!errors.email && <div style={{ marginBottom: '16px' }} />}
-
-        <p style={{ fontSize: '12px', color: '#888', margin: '0 0 16px' }}>
-          Instagram, TikTok and a logo can wait — you can add them any time from your Dashboard after your shop is open.
-        </p>
-
-        <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Logo (optional)</label>
-        <div style={{ margin: '8px 0 12px' }}>
-          <input type="file" accept="image/*" onChange={e => { const f = e.target.files?.[0]; if (f) { setLogoFile(f); setLogoPreview(URL.createObjectURL(f)) } }} />
-        </div>
-        {logoPreview && <div style={{ marginBottom: '12px' }}><img src={logoPreview} alt="logo preview" style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 8 }} /></div>}
-
         {missing.length > 0 && (
           <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
             <p style={{ margin: '0 0 6px', fontSize: '13px', fontWeight: '700', color: '#9a3412' }}>Almost there — still needed:</p>
@@ -858,13 +729,13 @@ function SetupStore() {
         )}
 
         <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-          <button onClick={() => setStep(3)}
+          <button onClick={() => setStep(2)}
             style={{ flex: 1, padding: '14px', background: '#f0f0f0', color: '#333', border: '1px solid #ddd', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}>
             ← Back
           </button>
-          <button onClick={handleSubmit} disabled={loading || uploadingLogo || uploadingId || !isFormReady}
-            style={{ flex: 2, padding: '14px', background: loading || uploadingLogo || uploadingId || !isFormReady ? '#ccc' : '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: loading || uploadingLogo || uploadingId || !isFormReady ? 'not-allowed' : 'pointer' }}>
-            {loading || uploadingLogo || uploadingId ? 'Creating...' : 'Create My Store'}
+          <button onClick={handleSubmit} disabled={loading || uploadingId || !isFormReady}
+            style={{ flex: 2, padding: '14px', background: loading || uploadingId || !isFormReady ? '#ccc' : '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: loading || uploadingId || !isFormReady ? 'not-allowed' : 'pointer' }}>
+            {loading || uploadingId ? 'Creating...' : 'Create My Shop'}
           </button>
         </div>
           </>
