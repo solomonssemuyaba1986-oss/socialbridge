@@ -1,8 +1,14 @@
 import { useRef, useState, type ChangeEvent } from 'react'
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
+import { signInAnonymously } from 'firebase/auth'
 import { useNavigate } from 'react-router-dom'
 import { auth, db } from './firebase'
-import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder'
+import {
+  createBuyerOrder,
+  incrementProductOrderCount,
+  createOrderConversation,
+  sendGuestOrderRequest,
+} from './createBuyerOrder'
 import { useGuestOTP } from './useGuestOTP'
 import { useDraft } from './useDraft'
 import { uploadImageToCloudinary } from './uploadImage'
@@ -36,6 +42,13 @@ export default function ProductActions({
   const [deliveryArea, setDeliveryArea] = useState('')
   const [orderMessage, setOrderMessage] = useState('')
   const [orderSuccess, setOrderSuccess] = useState(false)
+  /** What to tell the buyer after a guest order: the ref, their phone, which channel we used. */
+  const [orderResult, setOrderResult] = useState<{
+    ref?: string
+    phone: string
+    channel: 'account' | 'request'
+  } | null>(null)
+  const [placingOrder, setPlacingOrder] = useState(false)
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [guestName, setGuestName] = useState('')
   const [guestPhone, setGuestPhone] = useState('')
@@ -54,6 +67,8 @@ export default function ProductActions({
 
   const closeOrder = () => {
     setOrderSuccess(false)
+    setOrderResult(null)
+    setPlacingOrder(false)
     onCloseOrder()
   }
 
@@ -121,6 +136,112 @@ export default function ProductActions({
     } catch (err) {
       console.error('Order failed:', err)
       alert('Failed to place order. Try again.')
+    }
+  }
+
+  /**
+   * Guest checkout. The buyer verifies their phone (the same OTP the messaging flow
+   * already uses), then we give them a real anonymous account so their order behaves
+   * exactly like a signed-in buyer's — real order, real thread, visible to seller.
+   *
+   * If Anonymous sign-in isn't enabled in Firebase, we fall back to an order request
+   * the seller sees in the Inbox they already watch. The buyer is never dead-ended.
+   */
+  const handleGuestOrder = async () => {
+    if (!orderProduct) return
+    if (!buyerName.trim() || !deliveryArea.trim()) {
+      alert('Please add your name and the area we should deliver to.')
+      return
+    }
+    const phone = (otpState.phone || guestPhone).trim()
+    if (!phone) return
+    setPlacingOrder(true)
+    const sourcePlatform = detectSource()
+
+    let buyerUid = ''
+    try {
+      const cred = await signInAnonymously(auth)
+      buyerUid = cred.user.uid
+    } catch (err) {
+      console.warn('Anonymous sign-in unavailable — sending an order request instead:', err)
+    }
+
+    try {
+      if (buyerUid) {
+        // Full path: a real order + a conversation the buyer can come back to.
+        const { orderId } = await createBuyerOrder(orderProduct.sellerId, {
+          buyerName: buyerName.trim(),
+          buyerUid,
+          buyerPhone: phone,
+          verified: true,
+          productName: orderProduct.name,
+          productPrice: orderProduct.price,
+          productId: orderProduct.id,
+          quantity,
+          deliveryArea: deliveryArea.trim(),
+          status: 'pending',
+          read: false,
+          sourcePlatform,
+          createdAt: new Date(),
+        })
+        await createOrderConversation({
+          sellerId: orderProduct.sellerId,
+          buyerId: buyerUid,
+          sellerName: orderProduct.businessName,
+          buyerName: buyerName.trim(),
+          orderId,
+          productName: orderProduct.name,
+          productPrice: orderProduct.price,
+          quantity,
+        })
+        await incrementProductOrderCount(orderProduct.sellerId, orderProduct.id, orderProduct.orderCount || 0)
+        track('order_placed', buyerUid, sourcePlatform, {
+          productId: orderProduct.id,
+          productName: orderProduct.name,
+          sellerId: orderProduct.sellerId,
+          guest: true,
+        })
+        setOrderResult({ ref: orderId, phone, channel: 'account' })
+      } else {
+        // Fallback: the seller still gets product, quantity, area and the buyer's phone.
+        await sendGuestOrderRequest({
+          sellerId: orderProduct.sellerId,
+          buyerName: buyerName.trim(),
+          buyerPhone: phone,
+          productName: orderProduct.name,
+          productPrice: orderProduct.price,
+          productId: orderProduct.id,
+          quantity,
+          deliveryArea: deliveryArea.trim(),
+          note: orderMessage.trim() || undefined,
+          sourcePlatform,
+        })
+        track('order_placed', null, sourcePlatform, {
+          productId: orderProduct.id,
+          productName: orderProduct.name,
+          sellerId: orderProduct.sellerId,
+          guest: true,
+          channel: 'request',
+        })
+        setOrderResult({ phone, channel: 'request' })
+      }
+
+      setOrderSuccess(true)
+      setTimeout(() => {
+        setBuyerName('')
+        setQuantity('1')
+        setDeliveryArea('')
+        setOrderMessage('')
+        setOrderSuccess(false)
+        setOrderResult(null)
+        setPlacingOrder(false)
+        onCloseOrder()
+      }, 5000)
+    } catch (err) {
+      console.error('Guest order failed:', err)
+      alert('Could not send your order. Check your connection and try again.')
+    } finally {
+      setPlacingOrder(false)
     }
   }
 
@@ -223,8 +344,19 @@ export default function ProductActions({
                 <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '28px', color: '#000', fontWeight: '800' }}>
                   ✓
                 </div>
-                <h3 style={{ color: '#fff', fontWeight: '800', fontSize: '18px', margin: '0 0 8px' }}>Order Sent!</h3>
-                <p style={{ color: '#888', fontSize: '14px', margin: 0 }}>The seller will contact you to confirm delivery.</p>
+                <h3 style={{ color: '#fff', fontWeight: '800', fontSize: '18px', margin: '0 0 8px' }}>
+                  {orderResult?.channel === 'request' ? 'Order request sent!' : 'Order Sent!'}
+                </h3>
+                {orderResult?.ref && (
+                  <p style={{ color: green, fontSize: '14px', fontWeight: '800', margin: '0 0 8px' }}>Ref: {orderResult.ref}</p>
+                )}
+                <p style={{ color: '#888', fontSize: '14px', margin: 0 }}>
+                  {orderResult
+                    ? orderResult.channel === 'request'
+                      ? `${orderProduct.businessName} will call you on ${orderResult.phone} to confirm.`
+                      : `${orderProduct.businessName} will reply in your Inbox — and call you on ${orderResult.phone}.`
+                    : 'The seller will contact you to confirm delivery.'}
+                </p>
               </div>
             ) : (
               <>
@@ -234,22 +366,72 @@ export default function ProductActions({
                 <p style={{ margin: '0 0 24px', color: green, fontSize: '14px', fontWeight: '700', textAlign: 'left' }}>
                   UGX {orderProduct.price} each
                 </p>
+                {!auth.currentUser && (
+                  <p style={{ color: '#888', fontSize: '13px', margin: '0 0 16px', textAlign: 'left' }}>
+                    No account needed — verify your phone and the seller gets your order.
+                  </p>
+                )}
                 {orderProduct.imageUrl && (
                   <img src={orderProduct.imageUrl} alt={orderProduct.name}
                     style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '10px', marginBottom: '16px' }} />
                 )}
                 <input placeholder="Your name" value={buyerName} onChange={e => setBuyerName(e.target.value)}
                   style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+                {!auth.currentUser && (
+                  <input placeholder="Phone number e.g. +256771234567" value={guestPhone} onChange={e => setGuestPhone(e.target.value)}
+                    style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+                )}
                 <input placeholder="Quantity" value={quantity} onChange={e => setQuantity(e.target.value)} type="number" min="1"
                   style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
                 <input placeholder="Delivery area e.g. Nakawa, Kampala" value={deliveryArea} onChange={e => setDeliveryArea(e.target.value)}
                   style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
                 <textarea placeholder="Write a message to the seller (optional)" value={orderMessage} onChange={e => setOrderMessage(e.target.value)}
                   style={{ width: '100%', minHeight: '80px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '20px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
-                <button onClick={handleOrder}
-                  style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
-                  Send Order
-                </button>
+                {auth.currentUser ? (
+                  <button onClick={handleOrder}
+                    style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
+                    Send Order
+                  </button>
+                ) : (
+                  <>
+                    {otpState.step === 'verified' ? (
+                      <button onClick={handleGuestOrder} disabled={placingOrder}
+                        style={{ width: '100%', padding: '14px', background: placingOrder ? '#333' : green, color: placingOrder ? '#888' : '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: placingOrder ? 'not-allowed' : 'pointer', fontSize: '15px', marginBottom: '12px' }}>
+                        {placingOrder ? 'Sending your order…' : 'Place Order'}
+                      </button>
+                    ) : otpState.step === 'phone' || otpState.step === 'otp' ? (
+                      <>
+                        <p style={{ color: '#888', fontSize: '13px', marginBottom: '12px', textAlign: 'left' }}>
+                          We sent a 6-digit code to <strong style={{ color: '#fff' }}>{otpState.phone}</strong>.
+                        </p>
+                        <input placeholder="Enter 6-digit code" value={guestOtpInput}
+                          onChange={e => setGuestOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                          style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '20px', background: '#111', color: '#fff', textAlign: 'center', letterSpacing: '8px' }} />
+                        {otpState.error && <p style={{ color: '#ff4444', fontSize: '12px', marginBottom: '12px' }}>{otpState.error}</p>}
+                        <button onClick={async () => {
+                          const verified = await verifyOTP(guestOtpInput, buyerName)
+                          if (verified) await handleGuestOrder()
+                        }} disabled={otpState.loading || guestOtpInput.length !== 6}
+                          style={{ width: '100%', padding: '14px', background: (otpState.loading || guestOtpInput.length !== 6) ? '#333' : green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (otpState.loading || guestOtpInput.length !== 6) ? 'not-allowed' : 'pointer', fontSize: '15px', marginBottom: '12px' }}>
+                          {otpState.loading ? 'Verifying...' : 'Verify & Order'}
+                        </button>
+                        <button onClick={resetOTP}
+                          style={{ width: '100%', padding: '8px', background: 'transparent', color: '#888', border: 'none', cursor: 'pointer', fontSize: '13px', marginBottom: '12px' }}>
+                          ← Use a different number
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        {otpState.error && <p style={{ color: '#ff4444', fontSize: '12px', marginBottom: '12px' }}>{otpState.error}</p>}
+                        <button onClick={() => requestOTP(guestPhone)}
+                          disabled={otpState.loading || !buyerName.trim() || !guestPhone.trim() || !deliveryArea.trim()}
+                          style={{ width: '100%', padding: '14px', background: (otpState.loading || !buyerName.trim() || !guestPhone.trim() || !deliveryArea.trim()) ? '#333' : green, color: (otpState.loading || !buyerName.trim() || !guestPhone.trim() || !deliveryArea.trim()) ? '#888' : '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (otpState.loading || !buyerName.trim() || !guestPhone.trim() || !deliveryArea.trim()) ? 'not-allowed' : 'pointer', fontSize: '15px', marginBottom: '12px' }}>
+                          {otpState.loading ? 'Sending code…' : 'Verify & Order'}
+                        </button>
+                      </>
+                    )}
+                  </>
+                )}
                 <button onClick={closeOrder}
                   style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
                   Cancel

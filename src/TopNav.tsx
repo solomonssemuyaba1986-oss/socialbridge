@@ -10,6 +10,8 @@ function TopNav({ variant = 'default' }: { variant?: 'default' | 'bag' }) {
   const navigate = useNavigate()
   const location = useLocation()
   const user = auth.currentUser
+  /** Anonymous buyers can shop and chat, but they're not sellers — show them the sign-in UI. */
+  const isGuest = !!user?.isAnonymous
   const green = '#adff2f'
   const isBag = variant === 'bag'
   const isHome = location.pathname === '/'
@@ -20,7 +22,7 @@ function TopNav({ variant = 'default' }: { variant?: 'default' | 'bag' }) {
 
   const handleBack = () => {
     if (window.history.length > 1) navigate(-1)
-    else navigate(user ? '/dashboard' : '/')
+    else navigate(user && !user.isAnonymous ? '/dashboard' : '/')
   }
 
   const [showLoginModal, setShowLoginModal] = useState(false)
@@ -65,7 +67,7 @@ function TopNav({ variant = 'default' }: { variant?: 'default' | 'bag' }) {
             <button onClick={() => navigate('/nearby')} style={{ background: 'transparent', color: '#aaa', border: '1px solid #2a2a2a', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>📍 Nearby</button>
           )}
 
-          {!user && (
+          {(!user || isGuest) && (
             <>
               <button onClick={() => setShowLoginModal(true)}
                 style={{ background: 'transparent', color: '#fff', border: '1px solid #333', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
@@ -88,11 +90,11 @@ function TopNav({ variant = 'default' }: { variant?: 'default' | 'bag' }) {
                   </span>
                 )}
               </button>
-              {isSeller ? (
+              {!isGuest && (isSeller ? (
                 <button onClick={() => navigate('/dashboard')} style={{ background: 'transparent', color: '#fff', border: '1px solid #333', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Manage Store</button>
               ) : (
                 <button onClick={() => navigate('/setup')} style={{ background: green, color: '#000', border: 'none', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>🛍️ Become a seller</button>
-              )}
+              ))}
             </>
           )}
         </div>

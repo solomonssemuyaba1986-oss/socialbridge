@@ -40,6 +40,8 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [slug, setSlug] = useState<string | null>(null)
   const [signedIn, setSignedIn] = useState(false)
+  /** Anonymous buyers are real accounts to Firestore, but not sellers — keep them out of store areas. */
+  const [isGuest, setIsGuest] = useState(false)
   const [showSplash, setShowSplash] = useState(true)
 
   useEffect(() => {
@@ -55,8 +57,10 @@ function App() {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       try {
         if (user) {
+          const guest = !!user.isAnonymous
           setSignedIn(true)
-          rememberUser(user) // keep "Continue as" fresh for the next visit
+          setIsGuest(guest)
+          if (!guest) rememberUser(user) // keep "Continue as" fresh for the next visit
           const docRef = doc(db, 'sellers', user.uid)
           const docSnap = await getDoc(docRef)
           if (docSnap.exists()) {
@@ -64,6 +68,7 @@ function App() {
           }
         } else {
           setSignedIn(false)
+          setIsGuest(false)
           setSlug(null)
         }
       } catch (err) {
@@ -83,30 +88,33 @@ function App() {
     <LoadingScreen message="Getting everything ready for you..." />
   )
 
+  /** Guests (anonymous) can shop and chat, but store areas still need a real account. */
+  const sellerOnly = signedIn && !isGuest
+
   return (
     <SellerLiveProvider>
       <NetworkGuard />
       {location.pathname !== '/terms' && <TopNav variant={location.pathname === '/bag' ? 'bag' : 'default'} />}
       <Routes>
       <Route path="/" element={
-        !signedIn ? <SignIn /> :
+        (!signedIn || isGuest) ? <SignIn /> :
         slug ? <Navigate to="/dashboard" /> :
         <Navigate to="/onboarding" />
       } />
       <Route path="/onboarding" element={<Onboarding />} />
       <Route path="/setup" element={<SetupStore />} />
       <Route path="/store/:slug" element={<StorePage />} />
-      <Route path="/dashboard" element={signedIn ? <Dashboard /> : <Navigate to="/" />} />
+      <Route path="/dashboard" element={sellerOnly ? <Dashboard /> : <Navigate to="/" />} />
       <Route path="/browse" element={<BrowsePage />} />
       <Route path="/nearby" element={<NearbyPage />} />
       <Route path="/bag" element={<BagPage />} />
-      <Route path="/bulk-upload" element={signedIn ? <BulkUploadWrapper /> : <Navigate to="/" />} />
-      <Route path="/products" element={signedIn ? <ProductsPage /> : <Navigate to="/" />} />
+      <Route path="/bulk-upload" element={sellerOnly ? <BulkUploadWrapper /> : <Navigate to="/" />} />
+      <Route path="/products" element={sellerOnly ? <ProductsPage /> : <Navigate to="/" />} />
       <Route path="/inbox" element={signedIn ? <Inbox /> : <Navigate to="/" />} />
       <Route path="/my-chats" element={<Navigate to="/inbox" />} />
-      <Route path="/orders" element={signedIn ? <OrderHistory /> : <Navigate to="/" />} />
-      <Route path="/analytics" element={signedIn ? <AnalyticsPage /> : <Navigate to="/" />} />
-      <Route path="/edit-store" element={signedIn ? <EditStore /> : <Navigate to="/" />} />
+      <Route path="/orders" element={sellerOnly ? <OrderHistory /> : <Navigate to="/" />} />
+      <Route path="/analytics" element={sellerOnly ? <AnalyticsPage /> : <Navigate to="/" />} />
+      <Route path="/edit-store" element={sellerOnly ? <EditStore /> : <Navigate to="/" />} />
       <Route path="/feedback" element={<FeedbackPage />} />
       <Route path="/recover" element={<RecoverPage />} />
       <Route path="/help" element={<HelpPage />} />
