@@ -25,30 +25,64 @@ interface SetupFormErrors {
   submit?: string
 }
 
+/** Where we keep a seller's half-finished shop so a reload can never wipe it. */
+const SETUP_DRAFT_KEY = 'rachett_setup_draft'
+
+interface SetupDraft {
+  businessName?: string
+  storeHandle?: string
+  bio?: string
+  nationality?: string
+  location?: string
+  whatsapp?: string
+  dialCode?: string
+  step?: number
+}
+
+function readSetupDraft(): SetupDraft {
+  try {
+    const raw = localStorage.getItem(SETUP_DRAFT_KEY)
+    return raw ? (JSON.parse(raw) as SetupDraft) : {}
+  } catch {
+    return {}
+  }
+}
+
+function clearSetupDraft() {
+  try {
+    localStorage.removeItem(SETUP_DRAFT_KEY)
+  } catch {
+    // ignore storage errors
+  }
+}
+
 function SetupStore() {
-  const [businessName, setBusinessName] = useState('')
-  const [storeHandle, setStoreHandle] = useState('')
+  const [businessName, setBusinessName] = useState(() => readSetupDraft().businessName || '')
+  const [storeHandle, setStoreHandle] = useState(() => readSetupDraft().storeHandle || '')
   const [handleAvailable, setHandleAvailable] = useState<boolean | null>(null)
   const [handleChecking, setHandleChecking] = useState(false)
-  const [bio, setBio] = useState('')
+  const [bio, setBio] = useState(() => readSetupDraft().bio || '')
   const initialPhone = auth.currentUser?.phoneNumber || ''
   const initialCountry = COUNTRY_CODES.find(c => initialPhone.startsWith(c.dialCode))
+    || COUNTRY_CODES.find(c => c.dialCode === (readSetupDraft().dialCode || ''))
     || COUNTRY_CODES.find(c => c.dialCode === '+256')
     || COUNTRY_CODES[0]
   const [selectedCountry, setSelectedCountry] = useState<CountryCode>(initialCountry)
   const [whatsappCountrySearch, setWhatsappCountrySearch] = useState('')
   const [showWhatsappCountryDropdown, setShowWhatsappCountryDropdown] = useState(false)
-  const [whatsapp, setWhatsapp] = useState(
-    // Pre-fill from Firebase Phone Auth if available
-    initialPhone.startsWith(initialCountry.dialCode)
+  const [whatsapp, setWhatsapp] = useState(() => {
+    // A number typed earlier (or proven by Firebase phone auth) comes straight back.
+    const saved = readSetupDraft().whatsapp
+    if (saved) return saved
+    return initialPhone.startsWith(initialCountry.dialCode)
       ? initialPhone.slice(initialCountry.dialCode.length).replace(/^0/, '')
       : ''
-  )
+  })
   const [email, setEmail] = useState(auth.currentUser?.email || '')
-  const [nationality, setNationality] = useState('')
+  const [nationality, setNationality] = useState(() => readSetupDraft().nationality || '')
   const [nationalitySearch, setNationalitySearch] = useState('')
   const [showCountryDropdown, setShowCountryDropdown] = useState(false)
-  const [location, setLocation] = useState('')
+  const [location, setLocation] = useState(() => readSetupDraft().location || '')
   const [geo, setGeo] = useState<GeoPoint | null>(null)
   const [place, setPlace] = useState<Place | null>(null)
   const [geoSource, setGeoSource] = useState<GeoSource | null>(null)
@@ -78,13 +112,17 @@ function SetupStore() {
 
   // Multi-step onboarding — 3 steps, account LAST so sellers see the whole shop
   // before we ask them to sign in.
-  const [step, setStep] = useState(1)
+  const [step, setStep] = useState(() => {
+    const saved = readSetupDraft().step
+    return saved && saved >= 1 && saved <= 3 ? saved : 1
+  })
   const totalSteps = 3
   /** Set once the shop is created — we show a celebration instead of redirecting. */
   const [createdSlug, setCreatedSlug] = useState('')
   /** Tracked separately so the UI reacts the moment sign-in succeeds. */
   const [signedInUid, setSignedInUid] = useState<string | null>(auth.currentUser?.uid || null)
-  // Inline sign-in on the last step — no pop-ups on this page.
+  /** The account sheet — opened when they finish and tap Create (never before). */
+  const [showAccountSheet, setShowAccountSheet] = useState(false)
   const [signingIn, setSigningIn] = useState('')
   const [signInError, setSignInError] = useState('')
   const [smsCode, setSmsCode] = useState('')
@@ -107,6 +145,27 @@ function SetupStore() {
   }
 
   const navigate = useNavigate()
+
+  // Keep a draft on this device: leaving the browser to read an SMS code (or a
+  // reload / dead battery) must never wipe what they already typed.
+  useEffect(() => {
+    if (createdSlug) return
+    const draft: SetupDraft = {
+      businessName,
+      storeHandle,
+      bio,
+      nationality,
+      location,
+      whatsapp,
+      dialCode: selectedCountry.dialCode,
+      step,
+    }
+    try {
+      localStorage.setItem(SETUP_DRAFT_KEY, JSON.stringify(draft))
+    } catch {
+      // ignore storage errors
+    }
+  }, [businessName, storeHandle, bio, nationality, location, whatsapp, selectedCountry, step, createdSlug])
 
   // If a signed-in user already has a store, don't let /setup overwrite it
   useEffect(() => {
@@ -262,8 +321,12 @@ function SetupStore() {
     if (!validateForm()) return
     const user = auth.currentUser
     if (!user) {
-      // Not signed in yet — point them at the sign-in choices on this step.
-      setErrors({ submit: 'Choose how you want to sign in above, then tap Create My Shop.' })
+      // Everything is filled in — NOW ask how to save it. Their effort is already on
+      // the table, which is the moment they're most likely to complete.
+      setShowAccountSheet(true)
+      window.setTimeout(() => {
+        document.getElementById('account-sheet')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 60)
       return
     }
     setLoading(true)
@@ -322,7 +385,8 @@ function SetupStore() {
         geo: resolved.geo,
         place: resolved.place,
         geoSource: resolved.geoSource,
-        phoneVerified,
+        // A Firebase phone sign-in proves the number — don't rely on React state here.
+        phoneVerified: phoneVerified || !!user.phoneNumber,
         showWhatsapp,
         idDocumentPath,
         idStatus: 'pending',
@@ -334,6 +398,7 @@ function SetupStore() {
       })
       // Celebration, not a redirect — the seller sees their live shop link and
       // the one next action (add a product), plus a WhatsApp share for their bio.
+      clearSetupDraft()
       setCreatedSlug(slug)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to create store'
@@ -368,7 +433,10 @@ function SetupStore() {
         // Firebase already proved this number — no need to ask twice.
         setPhoneVerified(true)
       }
+      // They already filled everything and tapped Create — finish the job for them.
+      setShowAccountSheet(false)
       window.scrollTo(0, 0)
+      void handleSubmit()
     }
     if (auth.currentUser) finish()
     else setTimeout(finish, 300)
@@ -467,7 +535,6 @@ function SetupStore() {
   if (!bio.trim()) missing.push({ label: 'What do you sell?', step: 1 })
   if (!nationality) missing.push({ label: 'Country', step: 2 })
   if (!whatsappIsValid) missing.push({ label: 'Phone number', step: 3 })
-  if (!signedInUid) missing.push({ label: 'Sign in to save your shop', step: 3 })
   const isFormReady = missing.length === 0
 
   // ── Celebration: a real payoff instead of a silent redirect ──────────────
@@ -643,8 +710,8 @@ function SetupStore() {
           </div>
         )}
 
-        {/* How do you want to sign in? — inline, no pop-ups */}
-        {signedInUid ? (
+        {/* Already signed in? Say so quietly — nothing else is asked. */}
+        {signedInUid && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '16px', padding: '10px 12px', background: '#e8f5e9', borderRadius: '8px', border: '1px solid #c8e6c9' }}>
             <span style={{ color: '#2e7d32', fontSize: '13px', fontWeight: '700' }}>
               ✓ Signed in{auth.currentUser?.email ? ` as ${auth.currentUser.email}` : auth.currentUser?.phoneNumber ? ` as ${auth.currentUser.phoneNumber}` : ''}
@@ -654,9 +721,17 @@ function SetupStore() {
               Not you?
             </button>
           </div>
-        ) : (
-          <div style={{ marginBottom: '16px', padding: '14px', background: '#f8f8f8', borderRadius: '8px', border: '1px solid #eee' }}>
-            <p style={{ fontSize: '13px', color: '#444', margin: '0 0 10px', fontWeight: '700' }}>How do you want to sign in?</p>
+        )}
+
+        {/* The ask comes HERE — after everything is filled in and they tap Create. */}
+        {showAccountSheet && !signedInUid && (
+          <div id="account-sheet" style={{ marginBottom: '16px', padding: '16px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px' }}>
+            <p style={{ fontSize: '14px', color: '#9a3412', margin: '0 0 4px', fontWeight: '800' }}>
+              One last thing — how should we save your shop?
+            </p>
+            <p style={{ fontSize: '12px', color: '#9a3412', margin: '0 0 12px' }}>
+              Everything you filled in is safe. Pick whichever is easiest for you.
+            </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <button onClick={() => socialSignIn(googleProvider, 'Google')} disabled={!!signingIn}
                 style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '12px', background: '#fff', color: '#000', border: '1px solid #ddd', borderRadius: '8px', fontWeight: '700', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
@@ -671,16 +746,16 @@ function SetupStore() {
                 style={{ width: '100%', padding: '12px', background: '#000', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
                 {signingIn === 'Apple' ? 'Signing in…' : 'Continue with Apple'}
               </button>
-              <button onClick={sendPhoneCode} disabled={!!signingIn}
-                style={{ width: '100%', padding: '12px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
-                {signingIn === 'Phone' ? 'Sending code…' : 'Use my phone number'}
+              <button onClick={sendPhoneCode} disabled={!!signingIn || !whatsappIsValid}
+                style={{ width: '100%', padding: '12px', background: (!whatsappIsValid || signingIn) ? '#e5c9a8' : '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (!whatsappIsValid || signingIn) ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
+                {signingIn === 'Phone' ? 'Sending code…' : `Text me a code to ${getFullWhatsapp()}`}
               </button>
             </div>
 
             {codeSent && (
               <div style={{ marginTop: '12px' }}>
                 <p style={{ fontSize: '13px', color: '#333', margin: '0 0 6px' }}>
-                  We sent a 6-digit code to <strong>{getFullWhatsapp()}</strong>
+                  Enter the 6-digit code we sent to <strong>{getFullWhatsapp()}</strong>
                 </p>
                 <input value={smsCode} onChange={e => setSmsCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   placeholder="123456" inputMode="numeric"
@@ -688,7 +763,7 @@ function SetupStore() {
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button onClick={confirmPhoneCode} disabled={!!signingIn || smsCode.length < 6}
                     style={{ flex: 1, padding: '12px', background: (signingIn || smsCode.length < 6) ? '#ccc' : '#4CAF50', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (signingIn || smsCode.length < 6) ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
-                    {signingIn === 'Phone' ? 'Checking…' : 'Verify & continue'}
+                    {signingIn === 'Phone' ? 'Checking…' : 'Verify & finish'}
                   </button>
                   <button onClick={sendPhoneCode} disabled={!!signingIn}
                     style={{ padding: '12px 16px', background: 'transparent', color: '#666', border: '1px solid #ddd', borderRadius: '8px', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '13px' }}>
