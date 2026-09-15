@@ -8,6 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "otp": "node server/index.js",
+    "export:training": "node functions/export-training-data.js",
     "deploy:rules": "firebase deploy --only firestore:rules"
   },
   "dependencies": {

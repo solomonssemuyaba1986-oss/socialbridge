@@ -13,6 +13,9 @@ dist-ssr
 *.local
 .env
 
+# ML / AI training exports — a machine for user data, never commit it
+training-data
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
