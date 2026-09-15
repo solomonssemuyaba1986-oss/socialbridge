@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { auth, db, storage, googleProvider, facebookProvider, appleProvider, createRecaptchaVerifier } from './firebase'
+import { auth, db, googleProvider, facebookProvider, appleProvider, createRecaptchaVerifier } from './firebase'
 import { signInWithPopup, signInWithPhoneNumber, type ConfirmationResult, type AuthProvider } from 'firebase/auth'
 import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore'
-import { ref, uploadBytes } from 'firebase/storage'
 import { useNavigate } from 'react-router-dom'
 import { COUNTRIES } from './countries'
 import { COUNTRY_CODES, type CountryCode } from './countryCodes'
@@ -21,7 +20,6 @@ interface SetupFormErrors {
   whatsapp?: string
   email?: string
   nationality?: string
-  idDocument?: string
   submit?: string
 }
 
@@ -104,10 +102,6 @@ function SetupStore() {
   // The number is private by default (verification, security, payouts). Sellers can
   // choose to show it on their store later from Edit Store.
   const [showWhatsapp] = useState(false)
-  // National ID upload
-  const [idFile, setIdFile] = useState<File | null>(null)
-  const [idFileName, setIdFileName] = useState('')
-  const [uploadingId, setUploadingId] = useState(false)
 
   // Phone verification — comes free from Firebase phone sign-in (one SMS, when they
   // tap Create My Shop). Social sign-ins can earn the badge later.
@@ -231,29 +225,6 @@ function SetupStore() {
     if (cleaned.length >= 3) {
       handleCheckTimer.current = setTimeout(() => checkHandleAvailability(cleaned), 400)
     }
-  }
-
-  // -- National ID upload --
-  const handleIdFileChange = (file: File | null) => {
-    if (!file) {
-      setIdFile(null)
-      setIdFileName('')
-      setErrors(e => ({ ...e, idDocument: undefined }))
-      return
-    }
-    // Accept images and PDFs
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
-    if (!allowedTypes.includes(file.type)) {
-      setErrors(e => ({ ...e, idDocument: 'Please upload a JPG, PNG, or PDF file' }))
-      return
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      setErrors(e => ({ ...e, idDocument: 'File must be under 10MB' }))
-      return
-    }
-    setIdFile(file)
-    setIdFileName(file.name)
-    setErrors(e => ({ ...e, idDocument: undefined }))
   }
 
   /** Collects every problem — the caller decides where to show it. */
@@ -404,17 +375,6 @@ function SetupStore() {
       // phone-only sellers get their initials until they add one in Edit Store.
       const finalLogoUrl = user.photoURL || ''
 
-      // Upload National ID to Firebase Storage (private)
-      let idDocumentPath = ''
-      if (idFile) {
-        setUploadingId(true)
-        const ext = idFile.name.split('.').pop() || 'jpg'
-        const idStorageRef = ref(storage, `sellers/${user.uid}/private/national-id.${ext}`)
-        const idSnap = await uploadBytes(idStorageRef, idFile)
-        idDocumentPath = idSnap.ref.fullPath
-        setUploadingId(false)
-      }
-
       // Phone-only sign-in (no email): prompt for recovery email later
       const isPhoneSignIn = !!user.phoneNumber && !user.email
       const recoveryEmail = isPhoneSignIn ? '' : (cleanedEmail || user.email || '')
@@ -440,8 +400,6 @@ function SetupStore() {
         // A Firebase phone sign-in proves the number — don't rely on React state here.
         phoneVerified: phoneVerified || !!user.phoneNumber,
         showWhatsapp,
-        idDocumentPath,
-        idStatus: 'pending',
         recoveryEmail,
         recoveryEmailVerified: !isPhoneSignIn,
         recoveryEmailPromptCount: isPhoneSignIn ? 0 : -1,
@@ -886,9 +844,9 @@ function SetupStore() {
             style={{ flex: 1, padding: '14px', background: '#f0f0f0', color: '#333', border: '1px solid #ddd', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}>
             ← Back
           </button>
-          <button onClick={handleSubmit} disabled={loading || uploadingId || !isFormReady}
-            style={{ flex: 2, padding: '14px', background: loading || uploadingId || !isFormReady ? '#ccc' : '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: loading || uploadingId || !isFormReady ? 'not-allowed' : 'pointer' }}>
-            {loading || uploadingId ? 'Creating...' : 'Create My Shop'}
+          <button onClick={handleSubmit} disabled={loading || !isFormReady}
+            style={{ flex: 2, padding: '14px', background: loading || !isFormReady ? '#ccc' : '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: loading || !isFormReady ? 'not-allowed' : 'pointer' }}>
+            {loading ? 'Creating...' : 'Create My Shop'}
           </button>
         </div>
           </>
@@ -949,37 +907,18 @@ function SetupStore() {
           </div>
         )}
 
-        {/* Optional extras sit BELOW Create — they can never delay a shop going live. */}
+        {/* Identity checks aren't live yet. Say so plainly instead of asking for a
+            document nobody can review. */}
         {step === 2 && (
           <>
         <div style={{ borderTop: '1px solid #eee', margin: '24px 0 14px' }} />
-        <p style={{ fontSize: '12px', fontWeight: '800', color: '#aaa', letterSpacing: '0.4px', margin: '0 0 6px' }}>OPTIONAL — SKIP IT IF YOU LIKE</p>
-        <p style={{ fontSize: '12px', color: '#999', margin: '0 0 14px', lineHeight: 1.5 }}>
-          Your shop goes live without it. Adding it now just earns your ✓ verified badge sooner — and it stays <strong>private</strong>: only you can see it.
-        </p>
-        <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>National ID</label>
-        <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>JPG, PNG or PDF — max 10MB.</p>
-        <div style={{ marginBottom: '4px' }}>
-          {!idFileName ? (
-            <label style={{ display: 'block', width: '100%', padding: '28px 20px', border: errors.idDocument ? '2px dashed #c33' : '2px dashed #ddd', borderRadius: '8px', textAlign: 'center', cursor: 'pointer', background: '#fafafa' }}>
-              <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e => handleIdFileChange(e.target.files?.[0] || null)} style={{ display: 'none' }} />
-              <div style={{ fontSize: '28px', marginBottom: '6px', color: '#ccc' }}>📄</div>
-              <p style={{ fontSize: '13px', color: '#999', margin: 0 }}>Click to upload your National ID</p>
-            </label>
-          ) : (
-            <div style={{ padding: '12px', background: '#f0f8f0', borderRadius: '8px', border: '1px solid #c8e6c9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '20px' }}>📎</span>
-                <span style={{ fontSize: '13px', color: '#2e7d32', fontWeight: '600' }}>{idFileName}</span>
-              </div>
-              <button onClick={() => handleIdFileChange(null)}
-                style={{ background: 'transparent', border: 'none', color: '#999', cursor: 'pointer', fontSize: '16px', padding: '0 4px' }}>
-                ✕
-              </button>
-            </div>
-          )}
+        <div style={{ background: '#f5f5f5', border: '1px dashed #ddd', borderRadius: '10px', padding: '14px' }}>
+          <p style={{ fontSize: '12px', fontWeight: '800', color: '#999', letterSpacing: '0.4px', margin: '0 0 6px' }}>COMING SOON</p>
+          <p style={{ fontSize: '13px', color: '#666', margin: 0, lineHeight: 1.55 }}>
+            <strong style={{ color: '#333' }}>🪪 Verified badge</strong> — send us your National ID and get a ✓ on your shop.
+            It isn't open yet, so there's nothing to do here today. Your shop goes live exactly the same.
+          </p>
         </div>
-        {errors.idDocument && <p style={{ color: '#c33', fontSize: '12px', margin: '4px 0 0' }}>{errors.idDocument}</p>}
           </>
         )}
 

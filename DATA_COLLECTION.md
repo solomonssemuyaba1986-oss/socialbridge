@@ -3,20 +3,22 @@
 **Purpose:** the single source of truth for (1) what we hold on sellers and buyers, and (2) what we may use for machine learning / AI training.
 **Verified against the code** — each claim carries a `file:line` so it can be re-checked. If you change a write path, update this file.
 
+**Last updated:** 15 Sep 2026 — three changes since the first draft: conversation rules hardened (§11), National ID capture switched off until there is a review path (§2.2, §2.4, §8, §10), payments deliberately left alone until they've been tested (§7).
+
 ---
 
 ## 0. TL;DR
 
 | Who | What we hold |
 |---|---|
-| **Seller** | 1 Auth account + 1 `sellers/{uid}` doc + 5 subcollections (`products`, `orders`, `messages`, `visits`, `stats`) + 1 private National ID image |
+| **Seller** | 1 Auth account + 1 `sellers/{uid}` doc + 5 subcollections (`products`, `orders`, `messages`, `visits`, `stats`) |
 | **Buyer (signed in)** | 1 Auth account + `users/{uid}` + `users/{uid}/bag/*` + `conversations/*` + orders |
 | **Buyer (anonymous)** | An anonymous Auth uid (guest checkout) — orders and chats carry that uid |
 | **Buyer (guest, no account)** | Phone + name only: on their device, plus their phone inside the seller's `messages` |
 | **Behavioural lake** | `events/` — 7 event types, each with uid-or-`guest`, source platform and payload |
 
-**Most sensitive:** National ID images (Storage), phone numbers (`whatsapp`, `senderPhone`, `buyerPhone`), emails (`email`, `recoveryEmail`, `userEmail`).
-**Deliberately NOT collected:** payment data (the Flutterwave wrapper is dead code), push tokens (no FCM), buyer GPS coordinates (device-only by design).
+**Most sensitive:** phone numbers (`whatsapp`, `senderPhone`, `buyerPhone`) and emails (`email`, `recoveryEmail`, `userEmail`).
+**Deliberately NOT collected:** National IDs and other identity documents (capture is switched off — "coming soon"), payment data (the Flutterwave wrapper is dead code), push tokens (no FCM), buyer GPS coordinates (device-only by design).
 
 ---
 
@@ -26,7 +28,7 @@
 |---|---|
 | **Firebase Auth** | Seller + buyer + anonymous accounts |
 | **Firestore** | `sellers/{uid}` (+ `products`, `orders`, `messages`, `visits`, `stats`) · `users/{uid}` (+ `bag`) · `conversations/{id}` (+ `messages`) · `events` · `bagCounts/{productId}` (+ `baggers`) · `feedback` · `recoveries` |
-| **Firebase Storage** | `sellers/{uid}/private/national-id.{ext}` — private, seller-only |
+| **Firebase Storage** | Nothing new: National ID capture is switched off ("coming soon"), so no new files are written. IDs uploaded before this change are still at `sellers/{uid}/private/national-id.{ext}` — readable **only** by that seller (`storage.rules:11-14`). |
 | **Cloudinary** | Store logos, product photos, chat photos |
 | **OTP server** (`server/index.js`) | Phone numbers + OTP codes — **RAM only**, deleted on expiry (2 min) or restart |
 | **Device (localStorage/sessionStorage)** | Drafts, bag, buyer area, remembered user, guest verification |
@@ -67,8 +69,8 @@ Written by `SetupStore.tsx:426-450` (create), `EditStore.tsx:234-258` (edit), `D
 | `showWhatsapp` | boolean | number public? (always `false` today) |
 | `instagram`, `tiktok` | string | `@` stripped |
 | `logoUrl` | string (Cloudinary) | falls back to the provider photoURL at creation |
-| `idDocumentPath` | string | Storage path of the National ID — **sensitive, exclude from exports** |
-| `idStatus` | `'pending'` | ⚠️ dead end — nothing reads or advances it |
+| `idDocumentPath` | string | **Legacy — no longer written.** National ID capture is off (see §11); older stores may still carry a path. Always stripped from exports. |
+| `idStatus` | `'pending'` | **Legacy — no longer written.** Was always `'pending'` with nothing to advance it. |
 | `createdAt` | Date | store age (drives the "Active Seller" badge) |
 | *read but never written* | `verifiedSeller`, `realSellerBadgeEarnedAt`, `realSellerBadgeGraceUntil`, `activeSellerBadgeEarnedAt`, `activeSellerBadgeGraceUntil` | `useSellerStats.ts:198-208` — badges are recomputed client-side, never persisted |
 
@@ -89,7 +91,7 @@ Written by `SetupStore.tsx:426-450` (create), `EditStore.tsx:234-258` (edit), `D
 
 | File | Where | Who can read |
 |---|---|---|
-| National ID (JPG/PNG/WebP/PDF ≤10MB) | Firebase Storage `sellers/{uid}/private/national-id.{ext}` | **Only the seller** (`storage.rules:11-14`) |
+| National ID | **Not collected any more** — capture is switched off in SetupStore and EditStore until there is a way to review it. Older files may remain in Firebase Storage at `sellers/{uid}/private/national-id.{ext}`, readable only by that seller (`storage.rules:11-14`). | — |
 | Logo, product photos, chat photos | Cloudinary | Public URLs |
 
 ---
@@ -183,7 +185,7 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 | **Resend** | Seller's `recoveryEmail` + 6-digit code | ✅ `functions/index.js` |
 | **Google / Facebook / Apple** | OAuth identity (name, email, photo) | ✅ |
 | **Formspree** | Feedback text, name, contact, page URL, user email | ⚠️ only if `VITE_FORMSPREE_ID` is set |
-| **Flutterwave** | *Nothing* — `paymentService.ts` is **dead code** (no file imports it) | ❌ |
+| **Flutterwave** | *Nothing* — `paymentService.ts` is **dead code** (no file imports it). **Decision (15 Sep 2026): leave it untouched until payments have been tested.** | ❌ |
 | **FCM / push** | *Nothing* — no messaging SDK anywhere; `notifications.ts` is UI copy only | ❌ |
 
 ---
@@ -195,7 +197,7 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 - Buyer GPS coordinates in the database (device-only) — orders carry a free-text `deliveryArea`.
 - Impressions, dwell time, scroll depth, "not interested" signals.
 - Ratings/reviews (see gap 1 below).
-- Any biometric data other than the optional National ID image.
+- **National IDs, passports, selfies or any other identity document.** Capture was removed on 15 Sep 2026 — SetupStore and EditStore now show a "COMING SOON" note where the upload used to be, so nothing is asked for and nothing is stored. It comes back only when there is a way to actually review it.
 
 ---
 
@@ -209,14 +211,14 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 6. **Orders lack buyer identity for signed-in buyers** (no email/phone), and `deliveryArea` is free text, never geocoded.
 7. **Two chat systems** (§3.5) → dedupe before training.
 8. **Mixed timestamps:** `serverTimestamp()` (authoritative) vs `new Date()` (client clock).
-9. **Seller verification dead-ends:** `idStatus` never advances; badges are recomputed rather than stored; badge timestamps are never written.
+9. **Seller verification is paused:** National ID capture is switched off and the ✓ badge the wizard used to promise is now labelled "coming soon"; badges are still recomputed client-side rather than stored, and their timestamps are never written.
 10. **No data-deletion flow:** the only `deleteDoc` calls are bag items (`useBag.ts:210, 241`) — there is no account/data-erasure path.
 
 ---
 
 ## 10. Privacy rules for AI training (non-negotiable)
 
-1. **Never** put National ID images into a training corpus, embedding store, or prompt. They are sensitive identity documents and are excluded from every export by design (the exporter strips `idDocumentPath`, and the image files are never exported).
+1. **Identity documents are off the table.** We no longer collect National IDs at all (see §11/§8). If capture returns with a real review path, ID images must never enter a training corpus, embedding store or prompt. The exporter strips `idDocumentPath` from every row as a second line of defence.
 2. **Phone numbers and emails are PII.** Export with `--pii=drop` (the default) or `--pii=hash`; only use `--pii=keep` for local debugging that never leaves your machine.
 3. **Uids are pseudonymous but linkable** — they stay in exports so a user's history can be grouped; keep exports private (they are git-ignored).
 4. **Consent:** review `/terms` against "we use your data to train AI" before shipping a model trained on live user data. Today the terms describe the service, not training.
@@ -225,7 +227,32 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 
 ---
 
-## 11. ⚠️ Security finding — conversation rules are too loose
+## 11. Conversation privacy — hardened, deploy pending
+
+**Was:** `allow read, create, update: if request.auth != null` — meaning **any signed-in user could read and write any seller↔buyer thread** and its messages. Chat is the most sensitive content we hold.
+
+**Now (written in `firestore.rules`, ready to ship):**
+
+| Operation | Who is allowed |
+|---|---|
+| Read a thread | Only the two people on it — caller's uid must equal its `sellerId` or `buyerId`. A `get` of a *missing* thread is allowed (`resource == null`) so the client can ask "does this exist yet?" before creating it — a missing document returns no data either way. |
+| Create a thread | Only if the caller puts themselves on it |
+| Update a thread | Only if they are on the **stored** thread **and** stay on it — nobody can hand a thread to someone else or edit themselves out |
+| Read messages | Participation is read from the parent thread with `get()`, never trusted from the message being written |
+| Create a message | Only inside your own thread, and only as yourself (`senderId == request.auth.uid`) |
+| Update a message | Only by the **other** person — that is exactly what read receipts do |
+| Delete | Never, for threads and messages |
+
+This covers every read/write path in the client: `useConversation`, `useBuyerConversations`, `useSellerConversations`, `createBuyerOrder.createOrderConversation`, `markConversationRead` and `sellerLive`'s two queries (`where('sellerId'|'buyerId' == uid)` — provable from the rule, so the lists keep working).
+
+**To ship it:**
+
+```bash
+firebase login --reauth      # ← the local CLI token expired
+npm run deploy:rules
+```
+
+**Status 15 Sep 2026: written and reviewed, NOT deployed.** `npm run deploy:rules` failed with `401 — invalid authentication credentials` (local CLI login expired, no service-account key on this machine), and the Firestore emulator can't run here because Java isn't installed. After deploying, smoke-test: open Inbox as a buyer and as a seller (threads, messages, read ticks), send a message both ways, place an order (which creates a thread), and confirm a second account **cannot** read a thread it isn't in.
 
 ```js
 match /conversations/{conversationId} {

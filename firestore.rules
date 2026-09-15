@@ -98,12 +98,50 @@ service cloud.firestore {
       }
     }
 
+    // ── Private buyer↔seller chats ─────────────────────────────────────────
+    // A thread belongs to exactly two people. Nobody else — not other buyers,
+    // not other sellers, not a curious onlooker — can read or touch it.
     match /conversations/{conversationId} {
-      allow read, create, update: if request.auth != null;
+      function signedIn() {
+        return request.auth != null;
+      }
+      // Is the caller one of the two people on the *stored* thread?
+      function isParticipant() {
+        return signedIn()
+          && (request.auth.uid == resource.data.sellerId
+              || request.auth.uid == resource.data.buyerId);
+      }
+      // Does the write leave the caller on the thread? (Stops handing a thread
+      // to someone else, or editing yourself out of it.)
+      function staysParticipant() {
+        return signedIn()
+          && (request.auth.uid == request.resource.data.sellerId
+              || request.auth.uid == request.resource.data.buyerId);
+      }
+
+      // `resource == null` = "does this thread exist yet?" — the client asks
+      // before creating it, and a missing document returns no data either way.
+      allow read: if signedIn() && (resource == null || isParticipant());
+      allow create: if staysParticipant();
+      allow update: if isParticipant() && staysParticipant();
       allow delete: if false;
 
       match /messages/{messageId} {
-        allow read, create, update: if request.auth != null;
+        // Participation is read from the thread itself, never trusted from the
+        // message being written.
+        function inThread() {
+          return signedIn()
+            && (request.auth.uid == get(/databases/$(database)/documents/conversations/$(conversationId)).data.sellerId
+                || request.auth.uid == get(/databases/$(database)/documents/conversations/$(conversationId)).data.buyerId);
+        }
+
+        allow read: if inThread();
+        // You may only post as yourself.
+        allow create: if inThread()
+          && request.resource.data.senderId == request.auth.uid;
+        // Only the *other* person may change a message (read receipts).
+        allow update: if inThread()
+          && resource.data.senderId != request.auth.uid;
         allow delete: if false;
       }
     }

@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { auth, db, storage } from './firebase'
+import { auth, db } from './firebase'
 import { doc, getDoc, updateDoc } from 'firebase/firestore'
-import { ref, uploadBytes } from 'firebase/storage'
 import { COUNTRIES } from './countries'
 import { COUNTRY_CODES, type CountryCode } from './countryCodes'
 import { notify } from './notifications'
@@ -48,11 +47,6 @@ function EditStore() {
   const [nationalitySearch, setNationalitySearch] = useState('')
   const [showCountryDropdown, setShowCountryDropdown] = useState(false)
 
-  // National ID
-  const [idFileName, setIdFileName] = useState('')
-  const [idFile, setIdFile] = useState<File | null>(null)
-  const [uploadingId, setUploadingId] = useState(false)
-
   const navigate = useNavigate()
 
   // Strip '+'/dashes from a dial code (e.g. '+1-684' -> '1684') for storage & matching
@@ -89,11 +83,6 @@ function EditStore() {
           setGeo(data.geo || null)
           setPlace(data.place || null)
           setGeoSource(data.geoSource || (data.geo ? 'gps' : null))
-          if (data.idDocumentPath) {
-            // Extract filename from path
-            const parts = data.idDocumentPath.split('/')
-            setIdFileName(parts[parts.length - 1] || 'national-id')
-          }
         }
       } catch (err) {
         console.error('Load store failed', err)
@@ -106,26 +95,6 @@ function EditStore() {
     if (!f) { setLogoFile(null); setLogoUrl(''); return }
     setLogoFile(f)
     setLogoUrl(URL.createObjectURL(f))
-  }
-
-  // -- National ID upload --
-  const handleIdFileChange = (file: File | null) => {
-    if (!file) {
-      setIdFile(null)
-      setIdFileName('')
-      return
-    }
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
-    if (!allowedTypes.includes(file.type)) {
-      alert(notify.fileTypeInvalid)
-      return
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      alert(notify.fileTooLarge)
-      return
-    }
-    setIdFile(file)
-    setIdFileName(file.name)
   }
 
   // -- Geolocation --
@@ -211,22 +180,6 @@ function EditStore() {
         }
       }
 
-      // Upload National ID to Firebase Storage (private)
-      let idDocumentPath: string | undefined
-      if (idFile) {
-        setUploadingId(true)
-        try {
-          const ext = idFile.name.split('.').pop() || 'jpg'
-          const storageRef = ref(storage, `sellers/${user.uid}/private/national-id.${ext}`)
-          const snapshot = await uploadBytes(storageRef, idFile)
-          idDocumentPath = snapshot.ref.fullPath
-        } catch (err) {
-          console.error('ID upload error', err)
-        } finally {
-          setUploadingId(false)
-        }
-      }
-
       const fullNumber = getStoredFullNumber()
       // Typed an area but never dropped a pin? Geocode it so the store can still
       // show up on Nearby (with an honestly-labelled approximate distance).
@@ -249,9 +202,6 @@ function EditStore() {
       // Remember the old name so buyers searching it still find the store under its new name.
       if (originalNameRef.current && businessName.trim() !== originalNameRef.current && !aliasesRef.current.includes(originalNameRef.current)) {
         updates.aliases = [...aliasesRef.current, originalNameRef.current].slice(-8)
-      }
-      if (idDocumentPath) {
-        updates.idDocumentPath = idDocumentPath
       }
 
       await updateDoc(doc(db, 'sellers', user.uid), updates)
@@ -377,29 +327,14 @@ function EditStore() {
         {!locationLoading && geoSource === 'gps' && <p style={{ fontSize: '12px', color: '#2e7d32', fontWeight: '700', margin: '0 0 8px' }}>✓ Exact pin saved — buyers nearby will see how far you are.</p>}
         {!locationLoading && geoSource !== 'gps' && !!location.trim() && <p style={{ fontSize: '12px', color: '#888', margin: '0 0 8px' }}>📍 We'll place your store using this area (approximate). Tap Detect for an exact pin.</p>}
 
-        {/* National ID Upload */}
-        <label>National ID</label>
-        <p style={{ fontSize: '12px', color: '#666', margin: '4px 0 4px' }}>
-          Photo or scan of your ID. This is <strong>private</strong> — only you can see it. JPG, PNG, or PDF — max 10MB.
-        </p>
-        <div style={{ marginBottom: '8px' }}>
-          {!idFileName ? (
-            <label style={{ display: 'block', padding: '30px 16px', border: '2px dashed #ddd', borderRadius: '6px', textAlign: 'center', cursor: 'pointer', background: '#fafafa' }}>
-              <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e => handleIdFileChange(e.target.files?.[0] || null)} style={{ display: 'none' }} />
-              <span style={{ fontSize: '13px', color: '#999' }}>Click to upload your National ID</span>
-            </label>
-          ) : (
-            <div style={{ padding: '10px 12px', background: '#f0f8f0', borderRadius: '6px', border: '1px solid #c8e6c9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '18px' }}>📎</span>
-                <span style={{ fontSize: '13px', color: '#2e7d32', fontWeight: '600' }}>{idFileName}</span>
-              </div>
-              <button onClick={() => handleIdFileChange(null)}
-                style={{ background: 'transparent', border: 'none', color: '#999', cursor: 'pointer', fontSize: '16px' }}>
-                ✕
-              </button>
-            </div>
-          )}
+        {/* Identity checks aren't live yet — say so instead of asking for a document
+            nobody can review. */}
+        <div style={{ background: '#f5f5f5', border: '1px dashed #ddd', borderRadius: '8px', padding: '12px', marginBottom: '8px' }}>
+          <p style={{ fontSize: '12px', fontWeight: '800', color: '#999', letterSpacing: '0.4px', margin: '0 0 6px' }}>COMING SOON</p>
+          <p style={{ fontSize: '13px', color: '#666', margin: 0, lineHeight: 1.55 }}>
+            <strong style={{ color: '#333' }}>🪪 Verified badge</strong> — send us your National ID and get a ✓ on your shop.
+            It isn't open yet, so there's nothing to do here today.
+          </p>
         </div>
 
         <label>Logo (optional)</label>
@@ -412,8 +347,8 @@ function EditStore() {
           </div>
         )}
 
-        <button onClick={handleSave} disabled={loading || uploadingId} style={{ padding: 10 }}>
-          {loading || uploadingId ? 'Saving...' : 'Save'}
+        <button onClick={handleSave} disabled={loading} style={{ padding: 10 }}>
+          {loading ? 'Saving...' : 'Save'}
         </button>
 
         <button onClick={() => setConfirmSignOut(true)}
