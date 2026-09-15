@@ -10,7 +10,7 @@ import type { NavigateFunction } from 'react-router-dom'
  * The action itself is kept in sessionStorage (survives the sign-in round trip,
  * including a full-page redirect sign-in) and is consumed exactly once.
  */
-export type PendingAction = 'order' | 'message'
+export type PendingAction = 'order' | 'message' | 'inbox'
 
 export interface PendingIntent {
   action: PendingAction
@@ -66,19 +66,25 @@ export function clearPendingIntent(): void {
  */
 export function requireSignIn(navigate: NavigateFunction, intent: PendingIntent): void {
   setPendingIntent(intent)
-  navigate('/', { state: { returnTo: intent.returnTo, pendingAction: intent.action } })
+  navigate('/signin', { state: { returnTo: intent.returnTo, pendingAction: intent.action } })
 }
 
 /**
  * Called by a page once its products/bag are on screen: if the person was blocked
  * mid-action before signing in, reopen exactly that sheet and forget about it.
+ * 'inbox' has no sheet — the return path alone puts them where they wanted to be.
  */
 export function consumePendingAction<T extends { id: string }>(
   products: T[],
   open: { order: (product: T) => void; message: (product: T) => void },
 ): void {
   const pending = peekPendingIntent()
-  if (!pending?.productId) return
+  if (!pending) return
+  if (pending.action === 'inbox') {
+    clearPendingIntent()
+    return
+  }
+  if (!pending.productId) return
   const product = products.find(item => item.id === pending.productId)
   if (!product) return
   if (pending.action === 'order') open.order(product)

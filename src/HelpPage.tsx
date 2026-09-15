@@ -107,6 +107,29 @@ const FAQ_SECTIONS: FaqSection[] = [
     ],
   },
   {
+    icon: '🧭',
+    title: 'Store Links & "This store didn\'t open"',
+    topic: 'store',
+    items: [
+      {
+        q: 'A shop link showed "This store didn\'t open" — what happened?',
+        a: 'Almost always one of three things: the link was typed by hand or cut short when it was copied, the seller changed their shop link or closed the store, or the page opened before your connection was ready. Tap "Try the link again" first — that fixes the last one. Otherwise search the shop name on that screen, or ask the seller to send the link again.',
+      },
+      {
+        q: 'How does a seller send me the right link?',
+        a: 'From their Dashboard, they tap "Copy Store Link" and paste it to you — WhatsApp, Instagram, anywhere. That link is the one that always works.',
+      },
+      {
+        q: 'Their products show up, but their shop won\'t open.',
+        a: 'That shop is missing its link on our side. Search the shop name instead, and message the seller from any of their products — tell us about it too, and we will fix the store.',
+      },
+      {
+        q: 'Do shop links change when a seller renames their shop?',
+        a: 'No. Renaming a shop keeps the same link, so any link you saved keeps working — and searching the old name still finds the store.',
+      },
+    ],
+  },
+  {
     icon: '⚠️',
     title: 'Trust & Safety',
     items: [
@@ -121,8 +144,15 @@ const FAQ_SECTIONS: FaqSection[] = [
 function HelpPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const isBagHelp = searchParams.get('topic') === 'bag'
-  const sections = isBagHelp ? FAQ_SECTIONS.filter(s => s.topic === 'bag') : FAQ_SECTIONS
+  /** A single help topic can be deep-linked, e.g. /help?topic=bag or /help?topic=store */
+  const topic = (searchParams.get('topic') || '').toLowerCase()
+  const isTopicView = FAQ_SECTIONS.some(s => s.topic && s.topic === topic)
+  const sections = isTopicView ? FAQ_SECTIONS.filter(s => s.topic === topic) : FAQ_SECTIONS
+  const heading = topic === 'bag'
+    ? '🛍️ Bag & Orders Help'
+    : topic === 'store'
+      ? '🧭 Store Link Help'
+      : '❓ Help & Support'
   const [openKey, setOpenKey] = useState<string | null>(null)
   const [issue, setIssue] = useState('')
   const [issueName, setIssueName] = useState('')
@@ -193,11 +223,13 @@ function HelpPage() {
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '24px 16px 60px' }}>
       <div style={{ maxWidth: 760, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <h1 style={{ margin: '0 0 6px', fontSize: 26, fontWeight: 800 }}>{isBagHelp ? '🛍️ Bag & Orders Help' : '❓ Help & Support'}</h1>
+          <h1 style={{ margin: '0 0 6px', fontSize: 26, fontWeight: 800 }}>{heading}</h1>
           <p style={{ margin: 0, color: '#888', fontSize: 14 }}>
-            {isBagHelp
+            {topic === 'bag'
               ? 'Everything about your bag, orders and delivery.'
-              : 'Answers to common questions — everything happens right here in rachett.'}
+              : topic === 'store'
+                ? "When a shop link doesn't open, start here."
+                : 'Answers to common questions — everything happens right here in rachett.'}
           </p>
         </div>
 
@@ -235,7 +267,7 @@ function HelpPage() {
           </div>
         ))}
 
-        {isBagHelp && (
+        {isTopicView && (
           <div style={{ textAlign: 'center', marginBottom: 24 }}>
             <button onClick={() => navigate('/help')}
               style={{ background: 'transparent', color: green, border: `1px solid ${green}`, padding: '10px 20px', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
@@ -244,7 +276,7 @@ function HelpPage() {
           </div>
         )}
 
-        {!isBagHelp && (
+        {!isTopicView && (
           <div style={{ background: '#1a1a1a', border: '1px solid #222', borderRadius: 12, padding: '16px', textAlign: 'center', marginBottom: 24 }}>
             <p style={{ margin: '0 0 10px', color: '#ccc', fontSize: 14 }}>Lost access to your account?</p>
             <button

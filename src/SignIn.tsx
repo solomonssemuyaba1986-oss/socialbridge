@@ -46,7 +46,7 @@ function SignIn() {
   }, [location.state])
 
   /** Set when a guest was blocked mid-action — tells them why they're here. */
-  const pendingNotice = (location.state as { pendingAction?: 'order' | 'message' } | null)?.pendingAction
+  const pendingNotice = (location.state as { pendingAction?: 'order' | 'message' | 'inbox' } | null)?.pendingAction
 
   // Phone auth state
   const [selectedCountry, setSelectedCountry] = useState<CountryCode>(
@@ -293,7 +293,11 @@ function SignIn() {
       {/* They tapped Buy or Message as a guest — promise to take them back. */}
       {pendingNotice && (
         <div style={{ background: '#12210d', borderBottom: `1px solid ${green}`, padding: '14px 20px', textAlign: 'center', fontSize: '14px', fontWeight: 700 }}>
-          🛒 Sign in to finish your {pendingNotice === 'order' ? 'order' : 'message'} — we'll take you straight back.
+          {pendingNotice === 'inbox'
+            ? "📩 Sign in to see your inbox — we'll take you straight back."
+            : pendingNotice === 'order'
+              ? "🛒 Sign in to finish your order — we'll take you straight back."
+              : "💬 Sign in to message the seller — we'll take you straight back."}
         </div>
       )}
 
@@ -484,7 +488,7 @@ function SignIn() {
                 border: '1px solid #444', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px',
                 marginTop: '4px',
               }}>
-              🛍️ Continue as guest →
+              🛍️ Browse without signing in →
             </button>
             <p style={{ margin: '10px 0 0', color: '#666', fontSize: '12px', textAlign: 'center' }}>
               Browse, chat and fill your bag without an account — sign in only when you buy.

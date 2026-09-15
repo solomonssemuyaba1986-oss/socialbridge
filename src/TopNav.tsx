@@ -44,7 +44,7 @@ function TopNav({ variant = 'default' }: { variant?: 'default' | 'bag' }) {
   }
 
   const handleSignUpClick = () => {
-    navigate('/', { state: { scrollToProviders: true } })
+    navigate('/signin', { state: { scrollToProviders: true } })
   }
 
   /** After any sign-in: finish what they were doing, else land on their own home. */
@@ -172,7 +172,7 @@ function TopNav({ variant = 'default' }: { variant?: 'default' | 'bag' }) {
 
             <p style={{ margin: '16px 0 0', color: '#555', fontSize: 13 }}>
               Don't have an account?{' '}
-              <span onClick={() => { setShowLoginModal(false); navigate('/', { state: { scrollToProviders: true } }) }}
+              <span onClick={() => { setShowLoginModal(false); navigate('/signin', { state: { scrollToProviders: true } }) }}
                 style={{ color: green, cursor: 'pointer', fontWeight: 600, textDecoration: 'underline' }}>
                 Sign up
               </span>

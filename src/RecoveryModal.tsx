@@ -323,7 +323,7 @@ export default function RecoveryModal({ open, onClose }: Props) {
               </>
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <button onClick={() => { close(); navigate('/', { state: { scrollToProviders: true } }) }}
+              <button onClick={() => { close(); navigate('/signin') }}
                 style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '800', cursor: 'pointer', fontSize: '15px' }}>
                 Go to Sign In
               </button>

@@ -7,6 +7,8 @@
 
 **Buyer experience (new):** buyers now have their own home at `/home` (mirror of the seller Dashboard), the nav carries a **Browse** door, and a guest who taps Buy or Message is returned to that exact action after signing in (`role.ts`, `signInGate.ts`, `BuyerHome.tsx`, plus `users/{uid}.role` in §3.1).
 
+**Market-first + accounts required (16 Sep 2026):** `/` now sends everyone without a shop to `/home` — logged-out visitors included — and sign-in lives on its own `/signin` route. **Messaging and buying require a real account**: anonymous accounts count as logged out, the guest OTP path was removed (`useGuestOTP.ts` deleted, `sendGuestOrderRequest` deleted), and every order/message sheet now shows a sign-in prompt. Browsing, Nearby and the local bag stay open to guests.
+
 ---
 
 ## 0. TL;DR
@@ -83,7 +85,7 @@ Written by `SetupStore.tsx:426-450` (create), `EditStore.tsx:234-258` (edit), `D
 
 **`orders/{id}`** — see §3.4.
 
-**`messages/{id}`** — the legacy/guest channel: `senderName`, `senderUid` (`guest_+256…`), `senderPhone` (**PII**), `productName`, `productPrice`, `productId`, `quantity`, `deliveryArea`, `text`, `sourcePlatform`, `verified`, `read`, `createdAt` (`createBuyerOrder.ts:128-142`).
+**`messages/{id}`** — the **legacy** channel (signed-in buyers now use `conversations/*`; the guest writer was removed on 16 Sep 2026): `senderName`, `senderUid` (legacy `guest_+256…` values may exist), `senderPhone` (**PII**, legacy), `productName`, `productPrice`, `productId`, `quantity`, `deliveryArea`, `text`, `sourcePlatform`, `verified`, `read`, `createdAt` (`createBuyerOrder.ts:128-142`).
 
 **`visits/{id}`** — `{ sourcePlatform, createdAt }` only. **No uid** → anonymous traffic counter (`StorePage.tsx:428-432`).
 
@@ -108,9 +110,14 @@ Written by `SetupStore.tsx:426-450` (create), `EditStore.tsx:234-258` (edit), `D
 Created by guest checkout so the order/chats behave like a signed-in buyer's (`ProductActions.tsx:163`). Their uid is a normal Firebase uid but `isAnonymous` is true, so the app treats them as a guest for UI purposes (`App.tsx:60-63`).
 
 ### 3.3 Guest buyer (no account at all)
-1. **OTP verify** → kept on the device only: `{ phone, name, verifiedAt }` in `localStorage.rachett_verified_guest` (`useGuestOTP.ts:104-113`).
-2. **In the database:** `senderUid = "guest_+256771234567"`, `senderName`, `senderPhone` — so **a guest's phone number is persisted inside the seller's inbox** (`BrowsePage.tsx:266`, `BagPage.tsx:276`, `StorePage.tsx:1175`, `ProductActions.tsx:260`).
-3. **Guest order** → a real order via anonymous sign-in, or the fallback `sendGuestOrderRequest` message carrying product, quantity, delivery area and an optional note (`createBuyerOrder.ts:106-143`).
+
+A guest can browse, search, view stores, use Nearby and keep a **local** bag (`rachett_bag` on their device, merged into their account when they sign in). **They cannot message or buy** — those sheets show a sign-in prompt (`SignInPrompt.tsx`) and return them to the same action afterwards (`signInGate.ts`).
+
+Because of that, these no longer happen:
+
+- ❌ No `senderUid: "guest_+256…"` messages — the guest OTP flow was removed and `useGuestOTP.ts` deleted (16 Sep 2026).
+- ❌ No `sendGuestOrderRequest` fallback, and no anonymous (`signInAnonymously`) buyer accounts.
+- ⚠️ **Legacy data may still contain them** — older `sellers/{uid}/messages` rows written by guests, plus `localStorage.rachett_verified_guest` on old devices. Treat `guest_*` uids as historical; nothing writes them any more.
 
 ### 3.4 Order document (`sellers/{sellerId}/orders/{id}`)
 
@@ -167,7 +174,7 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 | `rachett_setup_draft` | Half-finished store form (name, link, bio, country, location, phone, step) | `SetupStore.tsx:29` |
 | `rachett_bag` | Bag items (full product snapshot) | `useBag.ts:20` |
 | `rachett_buyer_area` | `{ lat, lng, place, label, source }` — **buyer's area, deliberately device-only** | `place.ts:165-175` |
-| `rachett_verified_guest` | `{ phone, name, verifiedAt }` | `useGuestOTP.ts:112` |
+| `rachett_verified_guest` | **Legacy** — written by the removed guest OTP flow; old devices may still hold it, nothing reads or writes it now | — |
 | `rachett_last_user` | Last signed-in identity for "Continue as": displayName, **email**, photoURL, uid, providerId | `userMemory.ts:3-28` |
 | `rachett_quick_replies_guest` | Guest quick replies | `useQuickReplies.ts:6` |
 | `rachett_role` | The buyer/seller choice made on the onboarding screen — stops us asking twice (`role.ts`) | `role.ts` |
@@ -307,6 +314,14 @@ Credentials: point `GOOGLE_APPLICATION_CREDENTIALS` at a service-account JSON, o
 | `--dry-run` | off | Count rows only, write nothing |
 
 Every row carries `_id` (document id) and `_path` (full document path) so it can be traced back and joined — `_path` is also what separates the two chat systems (`sellers/*/messages` vs `conversations/*/messages`). Timestamps are normalised to ISO-8601 strings and `GeoPoint`s to `{ lat, lng }`. Delete the output directory when you are done; exports are git-ignored.
+
+### Maintenance scripts (`functions/`)
+
+| Script | What it does | Run |
+|---|---|---|
+| `export-training-data.js` | Exports the ML datasets above as JSONL | `npm run export:training` |
+| `backfill-locations.js` | Geocodes stores that only typed an area, so Nearby can sort them | `cd functions && node backfill-locations.js --write` |
+| `backfill-slugs.js` | **Finds stores missing a shop link — the cause of `/store/undefined` dead ends** — and fills the gaps; reports duplicate links (renames them only with `--fix-duplicates`) | `cd functions && node backfill-slugs.js --write` |
 
 
 

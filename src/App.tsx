@@ -99,15 +99,18 @@ function App() {
       <NetworkGuard />
       {location.pathname !== '/terms' && <TopNav variant={location.pathname === '/bag' ? 'bag' : 'default'} />}
       <Routes>
+      {/* Market-first: everyone without a shop lands on the buyer home — logged-out
+          visitors included. Sign-in is asked for only when they buy or message. */}
       <Route path="/" element={
-        (!signedIn || isGuest) ? <SignIn /> :
         slug ? <Navigate to="/dashboard" /> :
-        getRole() === 'buyer' ? <Navigate to="/home" /> :
-        <Navigate to="/onboarding" />
+        getRole() === 'seller' ? <Navigate to="/onboarding" /> :
+        <Navigate to="/home" />
       } />
       {/* The buyer's home — mirror of the seller's Dashboard. Open to guests too. */}
       <Route path="/home" element={<BuyerHome />} />
       <Route path="/onboarding" element={<Onboarding />} />
+      {/* Sign-in has its own route now that "/" is the market. */}
+      <Route path="/signin" element={<SignIn />} />
       <Route path="/setup" element={<SetupStore />} />
       <Route path="/store/:slug" element={<StorePage />} />
       <Route path="/dashboard" element={sellerOnly ? <Dashboard /> : <Navigate to="/" />} />

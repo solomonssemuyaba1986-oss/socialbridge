@@ -1,12 +1,11 @@
 import { useEffect, useState, useMemo, useRef, type ChangeEvent } from 'react'
-import { collection, getDocs, query, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore'
+import { collection, getDocs, query, doc, getDoc } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebase'
 import { useNavigate } from 'react-router-dom'
 import { track, detectSource } from './tracking'
 import { useBag, getBagCounts, type BagCountData } from './useBag'
 import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder'
-import { useGuestOTP } from './useGuestOTP'
 import QuickRepliesPanel from './QuickRepliesPanel'
 import { getMainCategories } from './categories'
 import LoadingScreen from './LoadingScreen'
@@ -15,6 +14,8 @@ import { uploadImageToCloudinary } from './uploadImage'
 import { sendConversationMessage } from './useConversation'
 import { notify } from './notifications'
 import { consumePendingAction, requireSignIn } from './signInGate'
+import SignInPrompt from './SignInPrompt'
+import FloatingBag from './FloatingBag'
 import { toMillis } from './productCardUtils'
 import Fuse from 'fuse.js'
 
@@ -44,7 +45,7 @@ function BrowsePage() {
   const [products, setProducts] = useState<Product[]>([])
   const [filtered, setFiltered] = useState<Product[]>([])
   const [activeCategory, setActiveCategory] = useState('All')
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get('q') || '')
   const [loading, setLoading] = useState(true)
   const [sortBy, setSortBy] = useState<'relevance' | 'price-asc' | 'price-desc' | 'newest' | 'popular'>('relevance')
   const [minPrice, setMinPrice] = useState('')
@@ -70,11 +71,6 @@ function BrowsePage() {
   const [orderMessage, setOrderMessage] = useState('')
   const { text: messageText, setText: setMessageText, draft: draftMsg, clearDraft: clearMsgDraft } = useDraft(messageProduct ? `product_${messageProduct.id}` : 'none')
   const [showQuickReplies, setShowQuickReplies] = useState(false)
-  const [guestName, setGuestName] = useState('')
-  const [guestPhone, setGuestPhone] = useState('')
-  const [guestOtpInput, setGuestOtpInput] = useState('')
-  const [guestMessageSent, setGuestMessageSent] = useState(false)
-  const { state: otpState, requestOTP, verifyOTP, reset: resetOTP } = useGuestOTP()
   const clickTimerRef = useRef<number | null>(null)
   const cardSwipeStartRef = useRef<{ id: string; x: number; y: number } | null>(null)
   const swipeSuppressRef = useRef(false)
@@ -271,41 +267,14 @@ function BrowsePage() {
       alert(notify.messageSelfBlock)
       return
     }
-    if (!auth.currentUser) {
-      // Guest flow
-      if (otpState.step === 'verified') {
-        try {
-          const guestId = `guest_${otpState.phone.replace(/\D/g, '')}`
-          await addDoc(collection(db, 'sellers', messageProduct.sellerId, 'messages'), {
-            senderName: guestName,
-            senderUid: guestId,
-            senderPhone: otpState.phone,
-            productName: messageProduct.name,
-            productPrice: messageProduct.price,
-            text: messageText.trim() || '📷 Photo',
-            ...(guestImageUrl ? { imageUrl: guestImageUrl } : {}),
-            read: false,
-            sourcePlatform: detectSource(),
-            verified: true,
-            createdAt: serverTimestamp(),
-          })
-          setGuestMessageSent(true)
-          setTimeout(() => {
-            setMessageProduct(null)
-            clearMsgDraft()
-            setShowQuickReplies(false)
-            setGuestName('')
-            setGuestPhone('')
-            setGuestOtpInput('')
-            setGuestMessageSent(false)
-            setGuestImageUrl('')
-            resetOTP()
-          }, 1500)
-        } catch (err) {
-          console.error('Guest message error:', err)
-          alert('Failed to send message. Try again.')
-        }
-      }
+    if (!auth.currentUser || auth.currentUser.isAnonymous) {
+      // Sign in with a real account — that is how the seller can reply to you.
+      requireSignIn(navigate, {
+        action: 'message',
+        returnTo: '/browse',
+        productId: messageProduct.id,
+        sellerSlug: messageProduct.sellerSlug,
+      })
       return
     }
     // Signed-in flow
@@ -340,12 +309,6 @@ function BrowsePage() {
   const closeMessageModal = () => {
     setMessageProduct(null)
     setShowQuickReplies(false)
-    setGuestName('')
-    setGuestPhone('')
-    setGuestOtpInput('')
-    setGuestMessageSent(false)
-    setGuestImageUrl('')
-    resetOTP()
   }
 
   const handleGuestPhoto = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -460,14 +423,20 @@ function BrowsePage() {
       try {
         const sellersSnap = await getDocs(collection(db, 'sellers'))
         console.log('BrowsePage: seller document count', sellersSnap.size)
-        setStores(sellersSnap.docs.map(d => {
+        // Only stores that actually have a link can be opened — a seller doc with no
+        // slug used to produce /store/undefined and a dead end.
+        const linkable = sellersSnap.docs.filter(d => String(d.data().slug || '').trim())
+        setStores(linkable.map(d => {
           const s = d.data()
           return { slug: s.slug || '', businessName: s.businessName || '', logoUrl: s.logoUrl || '', bio: s.bio || '', aliases: Array.isArray(s.aliases) ? s.aliases.filter((a: unknown) => typeof a === 'string') : [] }
         }))
         const allProducts: Product[] = []
         
-        // Limit to first 50 sellers for MVP performance
-        const limitedSellers = sellersSnap.docs.slice(0, 50)
+        // Limit to first 50 sellers for MVP performance — skipping any without a link,
+        // so no product can ever point at a store that can't open.
+        const limitedSellers = linkable
+          .filter(d => String(d.data().slug || '').trim())
+          .slice(0, 50)
         
         for (const sellerDoc of limitedSellers) {
           try {
@@ -913,6 +882,14 @@ function BrowsePage() {
                 <h3 style={{ color: '#fff', fontWeight: '800', fontSize: '18px', margin: '0 0 8px' }}>Order Sent!</h3>
                 <p style={{ color: '#888', fontSize: '14px', margin: 0 }}>The seller will contact you to confirm delivery.</p>
               </div>
+            ) : !auth.currentUser || auth.currentUser.isAnonymous ? (
+              <SignInPrompt
+                action="order"
+                returnTo="/browse"
+                productId={orderProduct?.id}
+                sellerSlug={orderProduct?.sellerSlug}
+                onLeave={() => setOrderProduct(null)}
+              />
             ) : (
               <>
                 <h3 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: '800', color: '#fff', textAlign: 'left' }}>
@@ -999,87 +976,13 @@ function BrowsePage() {
                 </button>
               </>
             ) : (
-              <>
-                {/* Sign in is the fast path; the phone option below still works with no account. */}
-                <button onClick={() => { requireSignIn(navigate, { action: 'message', returnTo: '/browse', productId: messageProduct?.id, sellerSlug: messageProduct?.sellerSlug }); closeMessageModal() }}
-                  style={{ width: '100%', padding: '13px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '800', cursor: 'pointer', fontSize: '14px', marginBottom: '10px' }}>
-                  Sign in to message the seller →
-                </button>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 12px' }}>
-                  <div style={{ flex: 1, height: '1px', background: '#222' }} />
-                  <span style={{ color: '#555', fontSize: '12px' }}>or no account</span>
-                  <div style={{ flex: 1, height: '1px', background: '#222' }} />
-                </div>
-                {guestMessageSent ? (
-                  <div>
-                    <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: '24px', color: '#000', fontWeight: '800' }}>
-                      ✓
-                    </div>
-                    <p style={{ color: '#fff', fontSize: '15px', fontWeight: '700', margin: '0 0 4px' }}>Message Sent!</p>
-                    <p style={{ color: '#888', fontSize: '13px', margin: 0 }}>The seller will reply soon.</p>
-                  </div>
-                ) : otpState.step === 'idle' || otpState.step === 'error' ? (
-                  <>
-                    <p style={{ color: '#888', fontSize: '13px', marginBottom: '16px', textAlign: 'left' }}>
-                      No account needed. Just verify your phone to message the seller.
-                    </p>
-                    <input placeholder="Your name" value={guestName} onChange={e => setGuestName(e.target.value)}
-                      style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
-                    <input placeholder="Phone number e.g. +256771234567" value={guestPhone} onChange={e => setGuestPhone(e.target.value)}
-                      style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
-                    <textarea placeholder="Write your message..." value={messageText} onChange={e => setMessageText(e.target.value)}
-                      style={{ width: '100%', minHeight: '80px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '8px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '20px' }}>
-                      <button onClick={() => guestFileRef.current?.click()} disabled={guestUploading}
-                        style={{ padding: '8px 12px', background: '#222', color: '#fff', border: '1px solid #333', borderRadius: '8px', cursor: guestUploading ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                        {guestUploading ? '⏳ Uploading…' : '📎 Add photo'}
-                      </button>
-                      <input ref={guestFileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleGuestPhoto} />
-                      {guestImageUrl && (
-                        <div style={{ position: 'relative' }}>
-                          <img src={guestImageUrl} alt="photo" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }} />
-                          <button onClick={() => setGuestImageUrl('')} style={{ position: 'absolute', top: -6, right: -6, background: '#ff4444', border: 'none', color: '#fff', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', fontSize: 11, lineHeight: 1 }}>✕</button>
-                        </div>
-                      )}
-                    </div>
-                    {otpState.error && <p style={{ color: '#ff4444', fontSize: '12px', marginBottom: '12px' }}>{otpState.error}</p>}
-                    <button onClick={() => requestOTP(guestPhone)} disabled={otpState.loading || !guestName.trim() || !guestPhone.trim()}
-                      style={{ width: '100%', padding: '14px', background: (otpState.loading || !guestName.trim() || !guestPhone.trim()) ? '#333' : green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (otpState.loading || !guestName.trim() || !guestPhone.trim()) ? 'not-allowed' : 'pointer', fontSize: '15px', marginBottom: '12px' }}>
-                      {otpState.loading ? 'Sending code...' : 'Send Verification Code'}
-                    </button>
-                  </>
-                ) : otpState.step === 'otp' ? (
-                  <>
-                    <p style={{ color: '#888', fontSize: '13px', marginBottom: '16px', textAlign: 'left' }}>
-                      A 6-digit code was sent to <strong style={{ color: '#fff' }}>{otpState.phone}</strong>. Enter it below.
-                    </p>
-                    <input placeholder="Enter 6-digit code" value={guestOtpInput} onChange={e => setGuestOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '20px', background: '#111', color: '#fff', textAlign: 'center', letterSpacing: '8px' }} />
-                    {otpState.error && <p style={{ color: '#ff4444', fontSize: '12px', marginBottom: '12px' }}>{otpState.error}</p>}
-                    <button onClick={async () => {
-                      const verified = await verifyOTP(guestOtpInput, guestName)
-                      if (verified) await handleSendMessage()
-                    }} disabled={otpState.loading || guestOtpInput.length !== 6}
-                      style={{ width: '100%', padding: '14px', background: (otpState.loading || guestOtpInput.length !== 6) ? '#333' : green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (otpState.loading || guestOtpInput.length !== 6) ? 'not-allowed' : 'pointer', fontSize: '15px', marginBottom: '12px' }}>
-                      {otpState.loading ? 'Verifying...' : 'Verify & Send'}
-                    </button>
-                    <button onClick={resetOTP}
-                      style={{ width: '100%', padding: '8px', background: 'transparent', color: '#888', border: 'none', cursor: 'pointer', fontSize: '13px', marginBottom: '12px' }}>
-                      ← Use a different number
-                    </button>
-                  </>
-                ) : null}
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '16px 0' }}>
-                  <div style={{ flex: 1, height: '1px', background: '#222' }} />
-                  <span style={{ color: '#555', fontSize: '12px' }}>OR</span>
-                  <div style={{ flex: 1, height: '1px', background: '#222' }} />
-                </div>
-                <button onClick={() => { requireSignIn(navigate, { action: 'message', returnTo: '/browse', productId: messageProduct?.id, sellerSlug: messageProduct?.sellerSlug }); closeMessageModal() }}
-                  style={{ width: '100%', padding: '12px', background: 'transparent', color: '#aaa', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', marginBottom: '12px' }}>
-                  Sign in with Google
-                </button>
-              </>
+              <SignInPrompt
+                action="message"
+                returnTo="/browse"
+                productId={messageProduct?.id}
+                sellerSlug={messageProduct?.sellerSlug}
+                onLeave={closeMessageModal}
+              />
             )}
 
             <button onClick={closeMessageModal}
@@ -1092,15 +995,7 @@ function BrowsePage() {
         </div>
       )}
 
-      <button onClick={() => navigate('/bag')}
-        style={{ position: 'fixed', bottom: '24px', right: '24px', width: '56px', height: '56px', borderRadius: '50%', background: green, color: '#000', border: 'none', cursor: 'pointer', fontSize: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, boxShadow: '0 4px 16px rgba(173,255,47,0.4)' }}>
-        🛍️
-        {bagCount > 0 && (
-          <span style={{ position: 'absolute', top: '-4px', right: '-4px', background: '#ff4444', color: '#fff', borderRadius: '50%', width: '22px', height: '22px', fontSize: '11px', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #0f0f0f' }}>
-            {bagCount}
-          </span>
-        )}
-      </button>
+      <FloatingBag count={bagCount} />
     </div>
   )
 }

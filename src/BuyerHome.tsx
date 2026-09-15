@@ -4,6 +4,8 @@ import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
 import { useBag } from './useBag'
 import { useSellerLive } from './sellerLive'
+import FloatingBag from './FloatingBag'
+import { requireSignIn } from './signInGate'
 
 const green = '#adff2f'
 
@@ -38,6 +40,17 @@ function BuyerHome() {
   const firstName = (user?.displayName || '').trim().split(/\s+/)[0] || ''
   const searches = recentSearches(user?.uid || null)
   const unread = unreadMessages + unreadBuyerConvo
+  /** Anonymous accounts count as logged out — the inbox needs a real account. */
+  const isGuest = !user || user.isAnonymous
+
+  /** The inbox is the one thing a guest can't have yet, so it asks nicely. */
+  const openInbox = () => {
+    if (isGuest) {
+      requireSignIn(navigate, { action: 'inbox', returnTo: '/inbox' })
+      return
+    }
+    navigate('/inbox')
+  }
 
   // Sellers who wander in here get pointed at their own panel instead.
   useEffect(() => {
@@ -68,7 +81,7 @@ function BuyerHome() {
       <div style={{ maxWidth: '640px', margin: '0 auto', padding: '20px 16px 40px' }}>
 
         <h1 style={{ margin: '0 0 4px', fontSize: '22px', fontWeight: '800' }}>
-          Hi{firstName ? ` ${firstName}` : ''} 👋
+          {firstName ? `Hi ${firstName} 👋` : 'Welcome to rachett'}
         </h1>
         <p style={{ margin: '0 0 20px', color: '#888', fontSize: '14px' }}>What are you shopping for today?</p>
 
@@ -84,7 +97,7 @@ function BuyerHome() {
         <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
           {tile('📍', 'Nearby', 0, () => navigate('/nearby'))}
           {tile('🛍️', 'My Bag', bagCount, () => navigate('/bag'))}
-          {tile('📩', 'Inbox', unread, () => navigate('/inbox'))}
+          {tile('📩', 'Inbox', unread, openInbox)}
         </div>
         {searches.length > 0 && (
           <>
@@ -100,7 +113,7 @@ function BuyerHome() {
           </>
         )}
 
-        <button onClick={() => navigate('/inbox')}
+        <button onClick={openInbox}
           style={{ width: '100%', padding: '14px 16px', background: '#1a1a1a', border: '1px solid #262626', borderRadius: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px', textAlign: 'left' }}>
           <span style={{ fontSize: '20px' }}>📦</span>
           <span style={{ flex: 1 }}>
@@ -125,6 +138,8 @@ function BuyerHome() {
         </button>
 
       </div>
+
+      <FloatingBag count={bagCount} />
     </div>
   )
 }

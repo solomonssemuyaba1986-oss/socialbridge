@@ -7,10 +7,12 @@ import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, FacebookAuthPr
 import { CATEGORIES, getSubcategories } from './categories'
 import { notify } from './notifications'
 import { useConversation } from './useConversation.ts'
-import { useGuestOTP } from './useGuestOTP.ts'
 import { useBag, getBagCounts, type BagCountData } from './useBag'
 import { useSellerStats, getSalesLabel, formatRating, renderStars, getBadgeStatusLabel } from './useSellerStats.ts'
 import QuickRepliesPanel from './QuickRepliesPanel'
+import FloatingBag from './FloatingBag'
+import StoreProblem from './StoreProblem'
+import SignInPrompt from './SignInPrompt'
 import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder.ts'
 import { consumePendingAction } from './signInGate'
 import { haversineKm } from './geo'
@@ -337,6 +339,9 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onRefresh, onPr
 }
 function StorePage() {
   const { slug } = useParams()
+  /** '/store/', '/store/undefined' — links that can't point at a real store. */
+  const slugParam = (slug || '').trim()
+  const unusableSlug = !slugParam || ['undefined', 'null'].includes(slugParam.toLowerCase())
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { count: bagCount, addToBag, removeFromBag, isInBag } = useBag()
@@ -379,16 +384,6 @@ const messageDeepLinkId = searchParams.get('messageId')
   const [preview, setPreview] = useState<{ images: string[]; startIndex: number } | null>(null)
 
   // Guest OTP messaging
-  const {
-    state: otpState,
-    requestOTP,
-    verifyOTP,
-    reset: resetOTP,
-  } = useGuestOTP()
-  const [guestName, setGuestName] = useState('')
-  const [guestPhone, setGuestPhone] = useState('')
-  const [guestOtpInput, setGuestOtpInput] = useState('')
-  const [guestMessageSent, setGuestMessageSent] = useState(false)
   const guestFileRef = useRef<HTMLInputElement | null>(null)
   const [guestImageUrl, setGuestImageUrl] = useState('')
   const [guestUploading, setGuestUploading] = useState(false)
@@ -415,6 +410,12 @@ const messageDeepLinkId = searchParams.get('messageId')
   useEffect(() => {
     const fetchSeller = async () => {
       try {
+        // A link like /store/undefined can never match a real store — don't ask.
+        const cleanedSlug = (slug || '').trim()
+        if (!cleanedSlug || ['undefined', 'null'].includes(cleanedSlug.toLowerCase())) {
+          setLoading(false)
+          return
+        }
         const q = query(collection(db, 'sellers'), where('slug', '==', slug))
         const snapshot = await getDocs(q)
         console.log('StorePage: seller query count', snapshot.size, 'slug', slug)
@@ -733,11 +734,9 @@ const handleSignupForAction = async (provider: any) => {
     </div>
   )
 
-  if (!seller) return (
-    <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <p style={{ color: '#555', fontFamily: 'sans-serif' }}>Store not found.</p>
-    </div>
-  )
+  if (unusableSlug) return <StoreProblem slug={slugParam} reason="missing" />
+
+  if (!seller) return <StoreProblem slug={slugParam} />
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
@@ -1004,15 +1003,7 @@ const handleSignupForAction = async (provider: any) => {
       </div>
 
       {/* Floating Bag */}
-      <button onClick={() => navigate('/bag')}
-        style={{ position: 'fixed', bottom: '24px', right: '24px', width: '56px', height: '56px', borderRadius: '50%', background: green, color: '#000', border: 'none', cursor: 'pointer', fontSize: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, boxShadow: '0 4px 16px rgba(173,255,47,0.4)' }}>
-        🛍️
-        {bagCount > 0 && (
-          <span style={{ position: 'absolute', top: '-4px', right: '-4px', background: '#ff4444', color: '#fff', borderRadius: '50%', width: '22px', height: '22px', fontSize: '11px', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #0f0f0f' }}>
-            {bagCount}
-          </span>
-        )}
-      </button>
+      <FloatingBag count={bagCount} />
 
       {/* Order Modal */}
       {orderProduct && (
@@ -1031,6 +1022,14 @@ const handleSignupForAction = async (provider: any) => {
                   Done
                 </button>
               </div>
+            ) : !auth.currentUser || auth.currentUser.isAnonymous ? (
+              <SignInPrompt
+                action="order"
+                returnTo={`/store/${slugParam}`}
+                productId={orderProduct?.id}
+                sellerSlug={slugParam}
+                onLeave={() => setOrderProduct(null)}
+              />
             ) : (
               <>
                 <h3 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: '800', color: '#fff', textAlign: 'left' }}>
@@ -1124,129 +1123,17 @@ const handleSignupForAction = async (provider: any) => {
                 </button>
               </>
             ) : (
-              <>
-                {/* Guest OTP Flow */}
-                {otpState.step === 'idle' || otpState.step === 'error' ? (
-                  <>
-                    <p style={{ color: '#888', fontSize: '13px', marginBottom: '16px', textAlign: 'left' }}>
-                      No account needed. Just verify your phone to message the seller.
-                    </p>
-                    <input placeholder="Your name" value={guestName} onChange={e => setGuestName(e.target.value)}
-                      style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
-                    <input placeholder="Phone number e.g. +256771234567" value={guestPhone} onChange={e => setGuestPhone(e.target.value)}
-                      style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
-                    <textarea placeholder="Write your message..." value={messageText} onChange={e => setMessageText(e.target.value)}
-                      style={{ width: '100%', minHeight: '80px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '8px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '20px' }}>
-                      <button onClick={() => guestFileRef.current?.click()} disabled={guestUploading}
-                        style={{ padding: '8px 12px', background: '#222', color: '#fff', border: '1px solid #333', borderRadius: '8px', cursor: guestUploading ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                        {guestUploading ? '⏳ Uploading…' : '📎 Add photo'}
-                      </button>
-                      <input ref={guestFileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleGuestPhoto} />
-                      {guestImageUrl && (
-                        <div style={{ position: 'relative' }}>
-                          <img src={guestImageUrl} alt="photo" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }} />
-                          <button onClick={() => setGuestImageUrl('')} style={{ position: 'absolute', top: -6, right: -6, background: '#ff4444', border: 'none', color: '#fff', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', fontSize: 11, lineHeight: 1 }}>✕</button>
-                        </div>
-                      )}
-                    </div>
-
-                    {otpState.error && (
-                      <p style={{ color: '#ff4444', fontSize: '12px', marginBottom: '12px' }}>{otpState.error}</p>
-                    )}
-
-                    <button onClick={() => requestOTP(guestPhone)} disabled={otpState.loading || !guestName.trim() || !guestPhone.trim()}
-                      style={{ width: '100%', padding: '14px', background: (otpState.loading || !guestName.trim() || !guestPhone.trim()) ? '#333' : green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (otpState.loading || !guestName.trim() || !guestPhone.trim()) ? 'not-allowed' : 'pointer', fontSize: '15px', marginBottom: '12px' }}>
-                      {otpState.loading ? 'Sending code...' : 'Send Verification Code'}
-                    </button>
-                  </>
-                ) : otpState.step === 'otp' ? (
-                  <>
-                    <p style={{ color: '#888', fontSize: '13px', marginBottom: '16px', textAlign: 'left' }}>
-                      A 6-digit code was sent to <strong style={{ color: '#fff' }}>{otpState.phone}</strong>. Enter it below.
-                    </p>
-                    <input placeholder="Enter 6-digit code" value={guestOtpInput} onChange={e => setGuestOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '20px', background: '#111', color: '#fff', textAlign: 'center', letterSpacing: '8px' }} />
-
-                    {otpState.error && (
-                      <p style={{ color: '#ff4444', fontSize: '12px', marginBottom: '12px' }}>{otpState.error}</p>
-                    )}
-
-                    <button onClick={async () => {
-                      const verified = await verifyOTP(guestOtpInput, guestName)
-                      if (verified) {
-                        // Send the message as a guest
-                        try {
-                          const guestId = `guest_${otpState.phone.replace(/\D/g, '')}`
-                          const { addDoc, collection, serverTimestamp } = await import('firebase/firestore')
-                          await addDoc(collection(db, 'sellers', sellerId, 'messages'), {
-                            senderName: guestName,
-                            senderUid: guestId,
-                            senderPhone: otpState.phone,
-                            productName: messageProduct.name,
-                            productPrice: messageProduct.price,
-                            text: messageText.trim() || '📷 Photo',
-                            ...(guestImageUrl ? { imageUrl: guestImageUrl } : {}),
-                            read: false,
-                            sourcePlatform: detectPlatform(searchParams),
-                            verified: true,
-                            createdAt: serverTimestamp(),
-                          })
-                          setGuestMessageSent(true)
-                          showFeedback('Message sent! The seller will reply soon.', 'success')
-                          setTimeout(() => {
-                            setMessageProduct(null)
-                            clearMsgDraft()
-                            setShowQuickReplies(false)
-                            setGuestName('')
-                            setGuestPhone('')
-                            setGuestOtpInput('')
-                            setGuestMessageSent(false)
-                            setGuestImageUrl('')
-                            resetOTP()
-                          }, 1500)
-                        } catch (err) {
-                          console.error('Guest message error:', err)
-                          showFeedback('Failed to send message. Try again.', 'error')
-                        }
-                      }
-                    }} disabled={otpState.loading || guestOtpInput.length !== 6}
-                      style={{ width: '100%', padding: '14px', background: (otpState.loading || guestOtpInput.length !== 6) ? '#333' : green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (otpState.loading || guestOtpInput.length !== 6) ? 'not-allowed' : 'pointer', fontSize: '15px', marginBottom: '12px' }}>
-                      {otpState.loading ? 'Verifying...' : 'Verify & Send'}
-                    </button>
-
-                    <button onClick={() => resetOTP()}
-                      style={{ width: '100%', padding: '8px', background: 'transparent', color: '#888', border: 'none', cursor: 'pointer', fontSize: '13px', marginBottom: '12px' }}>
-                      ← Use a different number
-                    </button>
-                  </>
-                ) : otpState.step === 'verified' && guestMessageSent ? (
-                  <div>
-                    <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: '24px', color: '#000', fontWeight: '800' }}>
-                      ✓
-                    </div>
-                    <p style={{ color: '#fff', fontSize: '15px', fontWeight: '700', margin: '0 0 4px' }}>Message Sent!</p>
-                    <p style={{ color: '#888', fontSize: '13px', margin: 0 }}>The seller will reply soon.</p>
-                  </div>
-                ) : null}
-
-                {/* Divider */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '16px 0' }}>
-                  <div style={{ flex: 1, height: '1px', background: '#222' }} />
-                  <span style={{ color: '#555', fontSize: '12px' }}>OR</span>
-                  <div style={{ flex: 1, height: '1px', background: '#222' }} />
-                </div>
-
-                {/* Sign in option */}
-                <button onClick={() => { setShowSignupSheet(true); setShowQuickReplies(false); setMessageProduct(null) }}
-                  style={{ width: '100%', padding: '12px', background: 'transparent', color: '#aaa', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', marginBottom: '12px' }}>
-                  Sign in with Google
-                </button>
-              </>
+              <SignInPrompt
+                action="message"
+                returnTo={`/store/${slugParam}`}
+                productId={messageProduct?.id}
+                sellerSlug={slugParam}
+                onLeave={() => { setMessageProduct(null); setShowQuickReplies(false) }}
+              />
             )}
 
             {/* Cancel Button */}
-            <button onClick={() => { setMessageProduct(null); setShowQuickReplies(false); resetOTP(); setGuestName(''); setGuestPhone(''); setGuestOtpInput(''); setGuestImageUrl('') }}
+            <button onClick={() => { setMessageProduct(null); setShowQuickReplies(false) }}
               style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
               Cancel
             </button>

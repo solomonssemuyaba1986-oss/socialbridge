@@ -12,6 +12,7 @@ import ProductCard from './ProductCard'
 import ProductCardSkeleton from './ProductCardSkeleton'
 import ProductActions from './ProductActions'
 import ProductPreview from './ProductPreview'
+import FloatingBag from './FloatingBag'
 import { getMainCategories } from './categories'
 import { green, productImages, seededShuffle, toMillis, type CardProduct } from './productCardUtils'
 import { detectSource, track } from './tracking'
@@ -108,7 +109,7 @@ function NearbyPage() {
   const [userId, setUserId] = useState<string | null>(auth.currentUser?.uid || null)
   const [shuffleSeed, setShuffleSeed] = useState(() => Date.now())
   const rangeWrapRef = useRef<HTMLDivElement | null>(null)
-  const { addToBag, removeFromBag, isInBag } = useBag()
+  const { addToBag, removeFromBag, isInBag, count: bagCount } = useBag()
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, u => setUserId(u?.uid || null))
@@ -121,7 +122,12 @@ function NearbyPage() {
     getDocs(collection(db, 'sellers'))
       .then(snap => {
         if (cancelled) return
-        setAllSellers(snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<NearbySeller, 'id'>) })))
+        // Sellers with no shop link are skipped — they can't be opened or linked to.
+        setAllSellers(
+          snap.docs
+            .map(d => ({ id: d.id, ...(d.data() as Omit<NearbySeller, 'id'>) }))
+            .filter(s => String(s.slug || '').trim()),
+        )
       })
       .catch(err => {
         if (!cancelled) {
@@ -742,6 +748,8 @@ function NearbyPage() {
       {preview && (
         <ProductPreview images={preview.images} startIndex={preview.index} onClose={() => setPreview(null)} />
       )}
+
+      <FloatingBag count={bagCount} />
     </div>
   )
 }
