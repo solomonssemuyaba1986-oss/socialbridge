@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { setRole } from './role'
 
 function Onboarding() {
   const navigate = useNavigate()
@@ -12,7 +13,7 @@ function Onboarding() {
       <div className="rt-onboarding-cards" style={{ display: 'flex', gap: '16px', width: '100%', maxWidth: '560px', marginBottom: '32px' }}>
         
         {/* Seller */}
-        <div onClick={() => navigate('/setup')}
+        <div onClick={() => { setRole('seller'); navigate('/setup') }}
           style={{ flex: 1, background: '#1a1a1a', border: '2px solid #333', borderRadius: '16px', padding: '24px', cursor: 'pointer' }}>
           <div style={{ background: '#adff2f', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', fontSize: '22px' }}>🏪</div>
           <p style={{ color: '#fff', fontWeight: '700', fontSize: '16px', margin: '0 0 8px' }}>I'm a Seller</p>
@@ -21,7 +22,7 @@ function Onboarding() {
         </div>
 
         {/* Buyer */}
-        <div onClick={() => navigate('/browse')}
+        <div onClick={() => { setRole('buyer'); navigate('/home') }}
           style={{ flex: 1, background: '#1a1a1a', border: '2px solid #333', borderRadius: '16px', padding: '24px', cursor: 'pointer' }}>
           <div style={{ background: '#3b82f6', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', fontSize: '22px' }}>🛍️</div>
           <p style={{ color: '#fff', fontWeight: '700', fontSize: '16px', margin: '0 0 8px' }}>I'm a Buyer</p>

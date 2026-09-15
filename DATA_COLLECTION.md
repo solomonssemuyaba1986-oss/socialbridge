@@ -5,6 +5,8 @@
 
 **Last updated:** 15 Sep 2026 — three changes since the first draft: conversation rules hardened (§11), National ID capture switched off until there is a review path (§2.2, §2.4, §8, §10), payments deliberately left alone until they've been tested (§7).
 
+**Buyer experience (new):** buyers now have their own home at `/home` (mirror of the seller Dashboard), the nav carries a **Browse** door, and a guest who taps Buy or Message is returned to that exact action after signing in (`role.ts`, `signInGate.ts`, `BuyerHome.tsx`, plus `users/{uid}.role` in §3.1).
+
 ---
 
 ## 0. TL;DR
@@ -99,7 +101,7 @@ Written by `SetupStore.tsx:426-450` (create), `EditStore.tsx:234-258` (edit), `D
 ## 3. BUYER data
 
 ### 3.1 Signed-in buyer
-- **`users/{uid}`** — `displayName`, `email`, `lastSeen`, `signupAt` (`StorePage.tsx:708-713`) and `quickReplies[]` (≤20 replies, ≤200 chars each — the buyer's own canned messages; `useQuickReplies.ts:6-8, 62`).
+- **`users/{uid}`** — `displayName`, `email`, `lastSeen`, `signupAt` (`StorePage.tsx:708-713`), `role` (`'buyer' | 'seller'` — the onboarding choice, mirrored from the device so a buyer is never asked who they are again; `role.ts`) and `quickReplies[]` (≤20 replies, ≤200 chars each — the buyer's own canned messages; `useQuickReplies.ts:6-8, 62`).
 - **`users/{uid}/bag/{productId}`** — a frozen snapshot of purchase intent: `productId`, `productName`, `productPrice`, `imageUrl`, `images[]`, `sellerSlug`, `sellerId`, `businessName`, `addedAt` (ms), `quantity` (`useBag.ts:7-18, 195`).
 
 ### 3.2 Anonymous buyer
@@ -168,6 +170,8 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 | `rachett_verified_guest` | `{ phone, name, verifiedAt }` | `useGuestOTP.ts:112` |
 | `rachett_last_user` | Last signed-in identity for "Continue as": displayName, **email**, photoURL, uid, providerId | `userMemory.ts:3-28` |
 | `rachett_quick_replies_guest` | Guest quick replies | `useQuickReplies.ts:6` |
+| `rachett_role` | The buyer/seller choice made on the onboarding screen — stops us asking twice (`role.ts`) | `role.ts` |
+| `rachett_pending_action` (session) | The Buy/Message a guest was blocked on, so signing in returns them to it; expires after 15 min (`signInGate.ts`) | `signInGate.ts` |
 | `rachett_draft_*` | Unsent message drafts per thread/product | `useDraft.ts:3` |
 | `rachett_recent_searches_{uid}` | Last N searches | `BrowsePage.tsx:362-390` |
 | `rachett_welcomed` (session) | Greeting shown flag | `Dashboard.tsx:64` |

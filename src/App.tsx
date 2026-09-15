@@ -25,6 +25,9 @@ import RecoverPage from './RecoverPage.tsx'
 import HelpPage from './HelpPage.tsx'
 import TermsPage from './TermsPage.tsx'
 import NearbyPage from './NearbyPage.tsx'
+import BuyerHome from './BuyerHome.tsx'
+import NotFound from './NotFound.tsx'
+import { getRole } from './role.ts'
 import { SellerLiveProvider } from './sellerLive.tsx'
 import NetworkGuard from './NetworkGuard.tsx'
 
@@ -99,8 +102,11 @@ function App() {
       <Route path="/" element={
         (!signedIn || isGuest) ? <SignIn /> :
         slug ? <Navigate to="/dashboard" /> :
+        getRole() === 'buyer' ? <Navigate to="/home" /> :
         <Navigate to="/onboarding" />
       } />
+      {/* The buyer's home — mirror of the seller's Dashboard. Open to guests too. */}
+      <Route path="/home" element={<BuyerHome />} />
       <Route path="/onboarding" element={<Onboarding />} />
       <Route path="/setup" element={<SetupStore />} />
       <Route path="/store/:slug" element={<StorePage />} />
@@ -119,6 +125,8 @@ function App() {
       <Route path="/recover" element={<RecoverPage />} />
       <Route path="/help" element={<HelpPage />} />
       <Route path="/terms" element={<TermsPage />} />
+      {/* Any unmatched URL — previously rendered nothing but the top nav. */}
+      <Route path="*" element={<NotFound />} />
       </Routes>
     </SellerLiveProvider>
   )

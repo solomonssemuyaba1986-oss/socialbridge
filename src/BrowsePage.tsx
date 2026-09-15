@@ -14,6 +14,7 @@ import { useDraft } from './useDraft'
 import { uploadImageToCloudinary } from './uploadImage'
 import { sendConversationMessage } from './useConversation'
 import { notify } from './notifications'
+import { consumePendingAction, requireSignIn } from './signInGate'
 import { toMillis } from './productCardUtils'
 import Fuse from 'fuse.js'
 
@@ -200,9 +201,21 @@ function BrowsePage() {
     }
   }
 
+  // Coming back from sign-in? Reopen the sheet they were blocked on.
+  useEffect(() => {
+    if (products.length === 0) return
+    consumePendingAction(products, { order: setOrderProduct, message: setMessageProduct })
+  }, [products])
+
   const handleOrder = async () => {
     if (!auth.currentUser) {
-      navigate('/', { state: { scrollToProviders: true } })
+      // Sign in first — then come straight back to this product.
+      requireSignIn(navigate, {
+        action: 'order',
+        returnTo: '/browse',
+        productId: orderProduct?.id,
+        sellerSlug: orderProduct?.sellerSlug,
+      })
       return
     }
     if (orderProduct && orderProduct.sellerId === auth.currentUser.uid) {
@@ -987,6 +1000,16 @@ function BrowsePage() {
               </>
             ) : (
               <>
+                {/* Sign in is the fast path; the phone option below still works with no account. */}
+                <button onClick={() => { requireSignIn(navigate, { action: 'message', returnTo: '/browse', productId: messageProduct?.id, sellerSlug: messageProduct?.sellerSlug }); closeMessageModal() }}
+                  style={{ width: '100%', padding: '13px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '800', cursor: 'pointer', fontSize: '14px', marginBottom: '10px' }}>
+                  Sign in to message the seller →
+                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 12px' }}>
+                  <div style={{ flex: 1, height: '1px', background: '#222' }} />
+                  <span style={{ color: '#555', fontSize: '12px' }}>or no account</span>
+                  <div style={{ flex: 1, height: '1px', background: '#222' }} />
+                </div>
                 {guestMessageSent ? (
                   <div>
                     <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: '24px', color: '#000', fontWeight: '800' }}>
@@ -1052,7 +1075,7 @@ function BrowsePage() {
                   <span style={{ color: '#555', fontSize: '12px' }}>OR</span>
                   <div style={{ flex: 1, height: '1px', background: '#222' }} />
                 </div>
-                <button onClick={() => { navigate('/', { state: { scrollToProviders: true } }); closeMessageModal() }}
+                <button onClick={() => { requireSignIn(navigate, { action: 'message', returnTo: '/browse', productId: messageProduct?.id, sellerSlug: messageProduct?.sellerSlug }); closeMessageModal() }}
                   style={{ width: '100%', padding: '12px', background: 'transparent', color: '#aaa', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', marginBottom: '12px' }}>
                   Sign in with Google
                 </button>

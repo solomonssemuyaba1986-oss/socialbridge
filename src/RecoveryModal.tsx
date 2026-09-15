@@ -5,6 +5,7 @@ import { signInWithPopup } from 'firebase/auth'
 import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore'
 import { functions, auth, db, googleProvider } from './firebase'
 import { COUNTRY_CODES, type CountryCode } from './countryCodes'
+import { resolveLanding } from './role'
 
 const green = '#adff2f'
 const OTP_SERVER_URL = import.meta.env.VITE_OTP_SERVER_URL || 'http://localhost:3001'
@@ -145,7 +146,7 @@ export default function RecoveryModal({ open, onClose }: Props) {
     try {
       await signInWithPopup(auth, provider)
       close()
-      navigate('/onboarding')
+      navigate(await resolveLanding(auth.currentUser?.uid || null))
     } catch (err: any) {
       console.error('Social sign-in error:', err)
       setError(err.code === 'auth/popup-blocked'

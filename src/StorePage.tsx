@@ -12,6 +12,7 @@ import { useBag, getBagCounts, type BagCountData } from './useBag'
 import { useSellerStats, getSalesLabel, formatRating, renderStars, getBadgeStatusLabel } from './useSellerStats.ts'
 import QuickRepliesPanel from './QuickRepliesPanel'
 import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder.ts'
+import { consumePendingAction } from './signInGate'
 import { haversineKm } from './geo'
 import { formatDistance, isApproximatePin, type GeoSource, type Place } from './place'
 import { useBuyerLocation } from './useBuyerLocation'
@@ -574,6 +575,12 @@ const handleImageUpload = async (file: File) => {
     setShowForm(false)
     fetchProducts(sellerId)
   }
+
+  // Coming back from sign-in? Reopen the sheet they were blocked on.
+  useEffect(() => {
+    if (products.length === 0) return
+    consumePendingAction(products, { order: setOrderProduct, message: setMessageProduct })
+  }, [products])
 
 const handleOrder = async () => {
   if (!auth.currentUser) {

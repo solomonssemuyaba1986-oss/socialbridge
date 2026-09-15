@@ -15,6 +15,7 @@ import ProductPreview from './ProductPreview'
 import { getMainCategories } from './categories'
 import { green, productImages, seededShuffle, toMillis, type CardProduct } from './productCardUtils'
 import { detectSource, track } from './tracking'
+import { consumePendingAction } from './signInGate'
 
 interface NearbySeller {
   id: string
@@ -361,6 +362,12 @@ function NearbyPage() {
     setShowRange(false)
     setCustomRange('')
   }
+
+  // Coming back from sign-in? Reopen the sheet they were blocked on.
+  useEffect(() => {
+    if (pool.items.length === 0) return
+    consumePendingAction(pool.items, { order: setOrderProduct, message: setMessageProduct })
+  }, [pool])
 
   const openProduct = (p: DiscoveryProduct) => {
     track('product_viewed', userId, detectSource(), {

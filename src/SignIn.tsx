@@ -3,12 +3,13 @@ import { signInWithPopup, signInWithRedirect, signInWithPhoneNumber } from 'fire
 import type { AuthProvider, ConfirmationResult } from 'firebase/auth'
 import { auth, db, googleProvider, facebookProvider, appleProvider, createRecaptchaVerifier } from './firebase'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { doc, getDoc, collection, getDocs, query, limit } from 'firebase/firestore'
+import { collection, getDocs, query, limit } from 'firebase/firestore'
 import { notify } from './notifications'
 import { rememberUser } from './userMemory'
 import { COUNTRY_CODES, type CountryCode } from './countryCodes'
 import RecoveryModal from './RecoveryModal'
 import ContinueAs from './ContinueAs'
+import { resolveLanding, setRole } from './role'
 
 interface SavedUser {
   displayName: string | null
@@ -43,6 +44,9 @@ function SignIn() {
       window.history.replaceState({}, document.title)
     }
   }, [location.state])
+
+  /** Set when a guest was blocked mid-action — tells them why they're here. */
+  const pendingNotice = (location.state as { pendingAction?: 'order' | 'message' } | null)?.pendingAction
 
   // Phone auth state
   const [selectedCountry, setSelectedCountry] = useState<CountryCode>(
@@ -134,20 +138,19 @@ function SignIn() {
     setSavedUser(null)
   }
 
-  // Returning users with a store go straight to their dashboard.
+  /**
+   * After signing in: finish whatever they were blocked on (they tapped Buy or
+   * Message as a guest, so we remembered it), otherwise send them to their own
+   * home — sellers to the dashboard, buyers to theirs.
+   */
   const routeAfterSignIn = async () => {
     const u = auth.currentUser
-    if (!u) {
-      navigate('/onboarding')
+    const returnTo = (location.state as { returnTo?: string } | null)?.returnTo
+    if (returnTo) {
+      navigate(returnTo)
       return
     }
-    try {
-      const snap = await getDoc(doc(db, 'sellers', u.uid))
-      if (snap.exists()) navigate('/dashboard')
-      else navigate('/onboarding')
-    } catch {
-      navigate('/onboarding')
-    }
+    navigate(await resolveLanding(u?.uid || null))
   }
 
   const ensureTerms = (): boolean => {
@@ -284,6 +287,13 @@ function SignIn() {
               ❌ No, use different account
             </button>
           </div>
+        </div>
+      )}
+
+      {/* They tapped Buy or Message as a guest — promise to take them back. */}
+      {pendingNotice && (
+        <div style={{ background: '#12210d', borderBottom: `1px solid ${green}`, padding: '14px 20px', textAlign: 'center', fontSize: '14px', fontWeight: 700 }}>
+          🛒 Sign in to finish your {pendingNotice === 'order' ? 'order' : 'message'} — we'll take you straight back.
         </div>
       )}
 
@@ -467,15 +477,18 @@ function SignIn() {
               <div id="phone-recaptcha-container" />
             </div>
 
-            {/* Guest Button */}
-            <button onClick={() => { if (ensureTerms()) navigate('/onboarding') }}
+            {/* Guest Button — the market is open without an account */}
+            <button onClick={() => { if (ensureTerms()) { setRole('buyer'); navigate('/home') } }}
               style={{
                 width: '100%', padding: '16px 32px', background: 'transparent', color: '#aaa',
                 border: '1px solid #444', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px',
                 marginTop: '4px',
               }}>
-              Continue as guest →
+              🛍️ Continue as guest →
             </button>
+            <p style={{ margin: '10px 0 0', color: '#666', fontSize: '12px', textAlign: 'center' }}>
+              Browse, chat and fill your bag without an account — sign in only when you buy.
+            </p>
 
             {/* Need help link */}
             <p style={{ margin: '8px 0 0', color: '#555', fontSize: '13px' }}>
