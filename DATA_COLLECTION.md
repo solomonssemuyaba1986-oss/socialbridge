@@ -9,6 +9,8 @@
 
 **Market-first + accounts required (16 Sep 2026):** `/` now sends everyone without a shop to `/home` — logged-out visitors included — and sign-in lives on its own `/signin` route. **Messaging and buying require a real account**: anonymous accounts count as logged out, the guest OTP path was removed (`useGuestOTP.ts` deleted, `sendGuestOrderRequest` deleted), and every order/message sheet now shows a sign-in prompt. Browsing, Nearby and the local bag stay open to guests.
 
+**Catalog & discovery (16 Sep 2026):** Browse no longer walks every store's products (that silently capped it at the **first 50 stores**, in document-ID order, and cost 51 reads a visit). Products now come from one paged `collectionGroup('products')` feed ordered by `createdAt` (`useProductFeed.ts`) with a **Load more** button, store details are joined client-side, a **stores directory** lists every shop, and searching a store that doesn't exist says so. The feed needs a collection-group index — see §12.
+
 ---
 
 ## 0. TL;DR
@@ -322,6 +324,16 @@ Every row carries `_id` (document id) and `_path` (full document path) so it can
 | `export-training-data.js` | Exports the ML datasets above as JSONL | `npm run export:training` |
 | `backfill-locations.js` | Geocodes stores that only typed an area, so Nearby can sort them | `cd functions && node backfill-locations.js --write` |
 | `backfill-slugs.js` | **Finds stores missing a shop link — the cause of `/store/undefined` dead ends** — and fills the gaps; reports duplicate links (renames them only with `--fix-duplicates`) | `cd functions && node backfill-slugs.js --write` |
+
+### Indexes (needed by the Browse catalog feed)
+
+`firestore.indexes.json` holds one **collection-group index on `products.createdAt` (DESC)** — the feed in `useProductFeed.ts` uses it to page the whole catalog in one query. Deploy it once:
+
+```bash
+npm run deploy:indexes      # firebase deploy --only firestore:indexes
+```
+
+Until it's deployed, Browse catches the query error and falls back to the old per-store reads (a batch of 10 stores a page), so the page still works — the console prints the reminder. Build takes a few minutes after the first deploy.
 
 
 

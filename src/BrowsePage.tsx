@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef, type ChangeEvent } from 'react'
-import { collection, getDocs, query, doc, getDoc } from 'firebase/firestore'
+import { collection, getDocs, doc, getDoc } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebase'
 import { useNavigate } from 'react-router-dom'
@@ -17,6 +17,8 @@ import { consumePendingAction, requireSignIn } from './signInGate'
 import SignInPrompt from './SignInPrompt'
 import FloatingBag from './FloatingBag'
 import { toMillis } from './productCardUtils'
+import { useProductFeed } from './useProductFeed'
+import StoreCard from './StoreCard'
 import Fuse from 'fuse.js'
 
 interface Product {
@@ -40,18 +42,50 @@ interface Product {
 
 const categories = ['All', ...getMainCategories()]
 const green = '#adff2f'
+/** How many stores the directory shows before "Show all". */
+const STORE_DIRECTORY_LIMIT = 12
 
 function BrowsePage() {
-  const [products, setProducts] = useState<Product[]>([])
+  // The catalog feed: one paged query instead of reading every store's products.
+  // (The old per-store walk silently capped Browse at the first 50 stores, in
+  // document-ID order, and cost 51 reads per visit.)
+  const {
+    products: feedRows,
+    loading: feedLoading,
+    loadingMore,
+    hasMore,
+    error: feedError,
+    loadMore,
+  } = useProductFeed({ pageSize: 24 })
+
+  /** Store details, joined onto each product by its sellerId. */
+  const [sellerMap, setSellerMap] = useState<Map<string, { slug: string; businessName: string; logoUrl: string }>>(new Map())
+
+  /** Everything we've loaded so far, with its store attached. */
+  const products: Product[] = useMemo(
+    () => feedRows
+      .map(row => {
+        const info = sellerMap.get(row.sellerId)
+        return {
+          ...(row as unknown as Product),
+          id: row.id,
+          sellerId: row.sellerId,
+          sellerSlug: info?.slug || '',
+          businessName: info?.businessName || '',
+        }
+      })
+      .filter(p => p.sellerSlug),
+    [feedRows, sellerMap],
+  )
+
   const [filtered, setFiltered] = useState<Product[]>([])
   const [activeCategory, setActiveCategory] = useState('All')
   const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get('q') || '')
-  const [loading, setLoading] = useState(true)
+  const loading = feedLoading
   const [sortBy, setSortBy] = useState<'relevance' | 'price-asc' | 'price-desc' | 'newest' | 'popular'>('relevance')
   const [minPrice, setMinPrice] = useState('')
   const [maxPrice, setMaxPrice] = useState('')
   const [hideOutOfStock, setHideOutOfStock] = useState(true)
-  const [errorMsg, setErrorMsg] = useState<string>('')
   const [recentSearches, setRecentSearches] = useState<string[]>([])
   const [userId, setUserId] = useState<string | null>(null)
   const [mySlug, setMySlug] = useState<string | null>(null)
@@ -59,7 +93,9 @@ function BrowsePage() {
   const { addToBag, removeFromBag, isInBag, count: bagCount } = useBag()
   const navigate = useNavigate()
   const [bagCounts, setBagCounts] = useState<Record<string, BagCountData>>({})
-  const [stores, setStores] = useState<{ slug: string; businessName: string; logoUrl: string; bio: string; aliases: string[] }[]>([])
+  const [stores, setStores] = useState<{ slug: string; businessName: string; logoUrl: string; bio: string; aliases: string[]; createdAtMs: number }[]>([])
+  const [storeSort, setStoreSort] = useState<'newest' | 'az'>('newest')
+  const [showAllStores, setShowAllStores] = useState(false)
   const [surveyProduct, setSurveyProduct] = useState<Product | null>(null)
   const [surveyImageIndex, setSurveyImageIndex] = useState(0)
   const [orderProduct, setOrderProduct] = useState<Product | null>(null)
@@ -418,66 +454,57 @@ function BrowsePage() {
       .slice(0, 10)
   }, [products])
 
+  /** The stores directory — every linkable shop, sortable, no searching required. */
+  const sortedStores = useMemo(() => {
+    const list = [...stores]
+    if (storeSort === 'az') {
+      return list.sort((a, b) => (a.businessName || a.slug).localeCompare(b.businessName || b.slug))
+    }
+    return list.sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0))
+  }, [stores, storeSort])
+  const visibleStores = showAllStores ? sortedStores : sortedStores.slice(0, STORE_DIRECTORY_LIMIT)
+
   useEffect(() => {
-    const fetchAll = async () => {
+    // Stores only — products come from the paged feed (useProductFeed), so Browse no
+    // longer reads every store's products one by one.
+    const fetchStores = async () => {
       try {
         const sellersSnap = await getDocs(collection(db, 'sellers'))
-        console.log('BrowsePage: seller document count', sellersSnap.size)
         // Only stores that actually have a link can be opened — a seller doc with no
         // slug used to produce /store/undefined and a dead end.
         const linkable = sellersSnap.docs.filter(d => String(d.data().slug || '').trim())
         setStores(linkable.map(d => {
           const s = d.data()
-          return { slug: s.slug || '', businessName: s.businessName || '', logoUrl: s.logoUrl || '', bio: s.bio || '', aliases: Array.isArray(s.aliases) ? s.aliases.filter((a: unknown) => typeof a === 'string') : [] }
-        }))
-        const allProducts: Product[] = []
-        
-        // Limit to first 50 sellers for MVP performance — skipping any without a link,
-        // so no product can ever point at a store that can't open.
-        const limitedSellers = linkable
-          .filter(d => String(d.data().slug || '').trim())
-          .slice(0, 50)
-        
-        for (const sellerDoc of limitedSellers) {
-          try {
-            const sellerData = sellerDoc.data()
-            console.log('BrowsePage: fetching products for seller', sellerDoc.id)
-            const productsSnap = await getDocs(query(collection(db, 'sellers', sellerDoc.id, 'products')))
-            console.log('BrowsePage: seller', sellerDoc.id, 'product count', productsSnap.size)
-            productsSnap.docs.forEach(p => {
-              const productData = p.data() as Product
-              allProducts.push({
-                ...productData,
-                id: p.id,
-                sellerSlug: sellerData.slug,
-                sellerId: sellerDoc.id,
-                businessName: sellerData.businessName,
-                outOfStock: productData.outOfStock || false,
-                orderCount: productData.orderCount || 0,
-                salesCount: productData.salesCount || 0
-              })
-            })
-          } catch (err) {
-            console.error(`Error fetching products for seller ${sellerDoc.id}:`, err)
+          return {
+            slug: s.slug || '',
+            businessName: s.businessName || '',
+            logoUrl: s.logoUrl || '',
+            bio: s.bio || '',
+            aliases: Array.isArray(s.aliases) ? s.aliases.filter((a: unknown) => typeof a === 'string') : [],
+            createdAtMs: toMillis(s.createdAt) ?? 0,
           }
-        }
-        
-        setProducts(allProducts)
-        setFiltered(allProducts)
-      } catch (err: any) {
-        const errorText = err instanceof Error ? err.message : 'Failed to load products'
-        console.error('Browse page error:', errorText, err)
-        if (err?.code === 'permission-denied') {
-          setErrorMsg('Permission denied when loading products. Check Firestore rules and authentication.')
-        } else {
-          setErrorMsg('Failed to load products. Check network or Firestore permissions.')
-        }
-      } finally {
-        setLoading(false)
+        }))
+        setSellerMap(new Map(linkable.map(d => {
+          const s = d.data()
+          return [d.id, { slug: s.slug || '', businessName: s.businessName || '', logoUrl: s.logoUrl || '' }]
+        })))
+      } catch (err) {
+        console.error('Browse page: could not load stores:', err)
       }
     }
-    fetchAll()
+    void fetchStores()
   }, [])
+
+  /** Auto-load more pages while a search is running, so search isn't limited to whatever happened to load. */
+  const autoPagesRef = useRef(0)
+  useEffect(() => {
+    if (!search.trim()) { autoPagesRef.current = 0; return }
+    if (feedLoading || loadingMore || !hasMore) return
+    if (filtered.length >= 8) return
+    if (autoPagesRef.current >= 5) return
+    autoPagesRef.current += 1
+    loadMore()
+  }, [search, filtered.length, feedLoading, loadingMore, hasMore, loadMore])
 
   // Fuzzy search with Fuse.js + category + price + out-of-stock filters + sorting
   useEffect(() => {
@@ -581,10 +608,10 @@ function BrowsePage() {
         )}
       </div>
 
-      {errorMsg && (
+      {feedError && (
         <div style={{ padding: '12px 24px' }}>
           <div style={{ background: '#fee', border: '1px solid #fcc', color: '#c33', padding: '12px', borderRadius: '8px', maxWidth: '900px', margin: '0 auto' }}>
-            {errorMsg}
+            {feedError}
           </div>
         </div>
       )}
@@ -694,12 +721,33 @@ function BrowsePage() {
           <div style={{ padding: '24px 0' }}>
             {/* One small line — the trending grid does the talking */}
             <p style={{ margin: '0 0 24px', color: '#777', fontSize: 13, textAlign: 'center' }}>
-              {(minPrice || maxPrice)
-                ? '😕 No products in that price range yet — here are some you may like 👇'
-                : search
-                  ? '😕 Nothing matched that — here are some you may like 👇'
-                  : '😕 Nothing here yet — here are some you may like 👇'}
+              {search.trim() && storeMatches.length === 0
+                ? `😕 No store called “${search.trim()}” here — and no products matched either.`
+                : (minPrice || maxPrice)
+                  ? '😕 No products in that price range yet — here are some you may like 👇'
+                  : search
+                    ? '😕 Nothing matched that — here are some you may like 👇'
+                    : '😕 Nothing here yet — here are some you may like 👇'}
             </p>
+
+            {(search.trim() || minPrice || maxPrice) && (
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 20 }}>
+                <button onClick={() => { setSearch(''); setMinPrice(''); setMaxPrice(''); setActiveCategory('All') }}
+                  style={{ padding: '10px 18px', background: green, color: '#000', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 13 }}>
+                  🔍 Clear the search & see everything
+                </button>
+                <button onClick={() => navigate('/nearby')}
+                  style={{ padding: '10px 18px', background: '#111', color: '#ddd', border: '1px solid #333', borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
+                  📍 Sellers near me
+                </button>
+              </div>
+            )}
+
+            {search.trim() && (
+              <p style={{ margin: '0 0 24px', color: '#555', fontSize: 12, textAlign: 'center', lineHeight: 1.6 }}>
+                Tip: shops are matched by the name on their profile (old names work too). If someone sent you a link, opening it directly is the surest way in — and the stores directory below lists every shop here.
+              </p>
+            )}
 
             {popularProducts.length > 0 && (
               <div>
@@ -730,7 +778,10 @@ function BrowsePage() {
           </div>
         ) : (
           <>
-            <p style={{ color: '#555', fontSize: '13px', marginBottom: '20px' }}>{filtered.length} products available</p>
+            <p style={{ color: '#555', fontSize: '13px', marginBottom: '20px' }}>
+              Showing {filtered.length} product{filtered.length === 1 ? '' : 's'}
+              {search.trim() ? ' matching your search' : ''} · newest first
+            </p>
             <div className="rt-products" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
                             {filtered.map(p => (
                 <div key={p.id}
@@ -783,7 +834,63 @@ function BrowsePage() {
               ))}
 
             </div>
+
+            {/* Paging — the old code silently stopped after 50 stores */}
+            <div style={{ textAlign: 'center', marginTop: '26px' }}>
+              {loadingMore ? (
+                <p style={{ color: '#666', fontSize: 13 }}>Loading more products…</p>
+              ) : hasMore ? (
+                <>
+                  <button onClick={loadMore}
+                    style={{ padding: '13px 26px', background: '#1a1a1a', color: '#fff', border: `1px solid ${green}`, borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>
+                    Load more products ↓
+                  </button>
+                  {search.trim() && (
+                    <p style={{ color: '#555', fontSize: 12, margin: '10px 0 0' }}>
+                      A search looks through what's already loaded — tap Load more to search deeper.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p style={{ color: '#555', fontSize: 13 }}>That's every product on rachett right now 🎉</p>
+              )}
+            </div>
           </>
+        )}
+
+        {/* Stores directory — every shop, no search needed (this didn't exist before) */}
+        {stores.length > 0 && (
+          <section style={{ marginTop: '44px', borderTop: '1px solid #1a1a1a', paddingTop: '26px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#fff' }}>🏪 Stores on rachett ({stores.length})</h2>
+                <p style={{ margin: '4px 0 0', color: '#666', fontSize: 13 }}>Every shop with a working link — tap one to look around.</p>
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {(['newest', 'az'] as const).map(mode => (
+                  <button key={mode} onClick={() => setStoreSort(mode)}
+                    style={{ padding: '7px 14px', borderRadius: 20, border: `1px solid ${storeSort === mode ? green : '#333'}`, background: storeSort === mode ? '#1a2a1a' : 'transparent', color: storeSort === mode ? green : '#aaa', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                    {mode === 'newest' ? 'Newest' : 'A–Z'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="rt-products" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 14 }}>
+              {visibleStores.map(store => (
+                <StoreCard key={store.slug} store={store} onClick={() => navigate(`/store/${store.slug}`)} />
+              ))}
+            </div>
+
+            {stores.length > STORE_DIRECTORY_LIMIT && (
+              <div style={{ textAlign: 'center', marginTop: 18 }}>
+                <button onClick={() => setShowAllStores(v => !v)}
+                  style={{ padding: '11px 22px', background: 'transparent', color: green, border: `1px solid ${green}`, borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
+                  {showAllStores ? 'Show fewer stores ↑' : `Show all ${stores.length} stores ↓`}
+                </button>
+              </div>
+            )}
+          </section>
         )}
       </div>
 

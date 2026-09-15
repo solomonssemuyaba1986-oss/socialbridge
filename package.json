@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "otp": "node server/index.js",
     "export:training": "node functions/export-training-data.js",
-    "deploy:rules": "firebase deploy --only firestore:rules"
+    "deploy:rules": "firebase deploy --only firestore:rules",
+    "deploy:indexes": "firebase deploy --only firestore:indexes"
   },
   "dependencies": {
     "firebase": "^12.13.0",
