@@ -109,8 +109,8 @@ function SetupStore() {
   const [idFileName, setIdFileName] = useState('')
   const [uploadingId, setUploadingId] = useState(false)
 
-  // Phone verification — comes free from Firebase phone sign-in (one SMS, at the
-  // "save your shop" step). Social sign-ins can earn the badge later.
+  // Phone verification — comes free from Firebase phone sign-in (one SMS, when they
+  // tap Create My Shop). Social sign-ins can earn the badge later.
   const [phoneVerified, setPhoneVerified] = useState(!!auth.currentUser?.phoneNumber)
 
   // Country-aware phone helpers.
@@ -122,13 +122,14 @@ function SetupStore() {
   const getFullWhatsapp = () => `+${dialDigits}${localDigits}`
   const whatsappIsValid = /^\+[1-9]\d{7,14}$/.test(getFullWhatsapp())
 
-  // Multi-step onboarding — 3 steps, account LAST so sellers see the whole shop
-  // before we ask them to sign in.
+  // Two steps, account LAST so sellers see the whole shop before we ask them to
+  // sign in. Step 2 owns everything that's left (country, location, phone) and the
+  // Create button itself — nothing is hidden behind another screen.
   const [step, setStep] = useState(() => {
     const saved = readSetupDraft().step
-    return saved && saved >= 1 && saved <= 3 ? saved : 1
+    return saved && saved >= 1 && saved <= 2 ? saved : 1
   })
-  const totalSteps = 3
+  const totalSteps = 2
   /** Set once the shop is created — we show a celebration instead of redirecting. */
   const [createdSlug, setCreatedSlug] = useState('')
   /** Tracked separately so the UI reacts the moment sign-in succeeds. */
@@ -141,15 +142,12 @@ function SetupStore() {
   const [codeSent, setCodeSent] = useState(false)
   const confirmationRef = useRef<ConfirmationResult | null>(null)
 
+  /** Step 2 is the last step — it holds the Create button, so this only ever moves 1 → 2. */
   const goNext = (to: number) => {
     if (to === 2) {
       if (!businessName.trim()) { setErrors(e => ({ ...e, businessName: 'Shop name is required' })); return }
       if (storeHandle.length < 3) { setErrors(e => ({ ...e, submit: 'Choose your shop link (at least 3 characters) to continue.' })); return }
       if (!bio.trim()) { setErrors(e => ({ ...e, bio: 'Tell buyers what you sell to continue.' })); return }
-    }
-    if (to === 3) {
-      // The phone number lives on step 3 — only the country is checked here.
-      if (!nationality) { setErrors(e => ({ ...e, nationality: 'Select your country to continue.' })); return }
     }
     setErrors({})
     setStep(to)
@@ -352,7 +350,7 @@ function SetupStore() {
     const problems = validateForm()
     if (Object.keys(problems).length > 0) {
       setErrors(problems)
-      const targetStep = problems.businessName || problems.bio ? 1 : problems.nationality ? 2 : 3
+      const targetStep = problems.businessName || problems.bio ? 1 : 2
       if (targetStep !== step) setStep(targetStep)
       showSubmitError(
         problems.whatsapp
@@ -456,7 +454,8 @@ function SetupStore() {
       setCreatedSlug(slug)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to create store'
-      if ((error as any)?.code === 'permission-denied') {
+      const code = (error as { code?: string } | null)?.code
+      if (code === 'permission-denied') {
         showSubmitError('Permission denied: cannot create store. Check authentication or Firestore rules.')
       } else {
         showSubmitError(errorMessage)
@@ -582,13 +581,13 @@ function SetupStore() {
 
   /**
    * What's still missing, so the Create button is never a silent dead end.
-   * Each item knows which step fixes it.
+   * `anchor` is the field's DOM id — tapping an item jumps the page to that field.
    */
-  const missing: { label: string; step: number }[] = []
-  if (!businessName.trim() || storeHandle.length < 3) missing.push({ label: 'Shop name & link', step: 1 })
-  if (!bio.trim()) missing.push({ label: 'What do you sell?', step: 1 })
-  if (!nationality) missing.push({ label: 'Country', step: 2 })
-  if (!whatsappIsValid) missing.push({ label: 'Phone number', step: 3 })
+  const missing: { label: string; step: number; anchor: string }[] = []
+  if (!businessName.trim() || storeHandle.length < 3) missing.push({ label: 'Shop name & link', step: 1, anchor: 'setup-field-name' })
+  if (!bio.trim()) missing.push({ label: 'What do you sell?', step: 1, anchor: 'setup-field-bio' })
+  if (!nationality) missing.push({ label: 'Country', step: 2, anchor: 'setup-field-country' })
+  if (!whatsappIsValid) missing.push({ label: 'Phone number', step: 2, anchor: 'setup-field-phone' })
   const isFormReady = missing.length === 0
 
   // ── Celebration: a real payoff instead of a silent redirect ──────────────
@@ -638,21 +637,20 @@ function SetupStore() {
           </div>
         )}
 
-        {/* Step Progress */}
-        {/* Step Progress — 3 steps, account last */}
+        {/* Step Progress — 2 steps, account last */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px' }}>
-          {[1, 2, 3].map(n => (
+          {[1, 2].map(n => (
             <div key={n} style={{ flex: 1, height: '6px', borderRadius: '3px', background: step >= n ? '#1a1a1a' : '#e5e5e5' }} />
           ))}
         </div>
         <p style={{ fontSize: '13px', color: '#888', margin: '0 0 20px', fontWeight: '600' }}>
-          Step {step} of {totalSteps} — {step === 1 ? 'Your shop' : step === 2 ? 'About you' : 'Save your shop'}
+          {step} of {totalSteps} — {step === 1 ? 'Your shop' : 'Finish'}
         </p>
 
         {step === 1 && (
           <>
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Shop name <span style={{ color: '#888', fontWeight: '400', fontSize: '12px' }}>— needed</span></label>
-        <input value={businessName} onChange={e => setBusinessName(e.target.value)}
+        <input id="setup-field-name" value={businessName} onChange={e => setBusinessName(e.target.value)}
           placeholder="e.g. Aisha Fabrics"
           style={{ width: '100%', padding: '12px', borderRadius: '8px', border: errors.businessName ? '2px solid #c33' : '1px solid #ddd', marginTop: '8px', marginBottom: '4px', fontSize: '15px', boxSizing: 'border-box' }} />
         {errors.businessName && <p style={{ color: '#c33', fontSize: '12px', margin: '4px 0 16px' }}>{errors.businessName}</p>}
@@ -685,7 +683,7 @@ function SetupStore() {
         {storeHandle.length === 0 && <div style={{ marginBottom: '16px' }} />}
 
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>What do you sell? <span style={{ color: '#888', fontWeight: '400', fontSize: '12px' }}>— needed</span></label>
-        <textarea value={bio} onChange={e => setBio(e.target.value)}
+        <textarea id="setup-field-bio" value={bio} onChange={e => setBio(e.target.value)}
           placeholder="e.g. Brand-new sneakers, we deliver around Kampala"
           rows={3}
           style={{ width: '100%', padding: '12px', borderRadius: '8px', border: errors.bio ? '2px solid #c33' : '1px solid #ddd', marginTop: '8px', marginBottom: '4px', fontSize: '15px', boxSizing: 'border-box', resize: 'none' }} />
@@ -703,157 +701,10 @@ function SetupStore() {
 
         {step === 2 && (
           <>
-        <h2 style={{ fontSize: '19px', fontWeight: '800', margin: '0 0 6px', color: '#1a1a1a' }}>Save your shop</h2>
-        <p style={{ fontSize: '14px', color: '#666', margin: '0 0 16px', lineHeight: 1.5 }}>
-          Sign in so this shop is yours — choose whatever is easiest.
-        </p>
-
-        {/* Phone number — ONE field. If they sign in with phone, the code sent here
-            verifies it; otherwise it's the payout/contact number. */}
-        {(!phoneVerified || !whatsappIsValid) && (
-          <>
-        <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Phone number <span style={{ color: '#888', fontWeight: '400', fontSize: '12px' }}>— needed</span></label>
-        <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>
-          Pick your country code, then type your number — e.g. <strong>771234567</strong> or <strong>0771234567</strong>.
-        </p>
-        <p style={{ fontSize: '12px', color: '#666', margin: '0 0 8px', lineHeight: 1.5 }}>
-          We use it to keep your shop safe, to identify you, and to send you money when you sell.
-          It stays private — buyers never see it.
-        </p>
-
-        <div style={{ display: 'flex', alignItems: 'center', border: errors.whatsapp ? '2px solid #c33' : '1px solid #ddd', borderRadius: '8px', overflow: 'visible', marginBottom: '4px', position: 'relative' }}>
-          <div onClick={() => setShowWhatsappCountryDropdown(!showWhatsappCountryDropdown)}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#f5f5f5', padding: '12px 12px', fontSize: '15px', borderRight: errors.whatsapp ? '2px solid #c33' : '1px solid #ddd', color: '#333', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer' }}>
-            <span>{selectedCountry.flag} {selectedCountry.dialCode}</span>
-            <span style={{ color: '#999', fontSize: '11px' }}>{showWhatsappCountryDropdown ? '▲' : '▼'}</span>
-          </div>
-          {showWhatsappCountryDropdown && (
-            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #ddd', borderRadius: '8px', maxHeight: '240px', overflow: 'hidden', zIndex: 20, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', marginTop: '2px' }}>
-              <input value={whatsappCountrySearch} onChange={e => setWhatsappCountrySearch(e.target.value)} placeholder="Search country..." autoFocus
-                style={{ width: '100%', padding: '10px 12px', border: 'none', borderBottom: '1px solid #eee', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
-              <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                {COUNTRY_CODES.filter(c => !whatsappCountrySearch || c.name.toLowerCase().includes(whatsappCountrySearch.toLowerCase()) || c.dialCode.includes(whatsappCountrySearch)).map(c => (
-                  <div key={c.dialCode} onClick={() => handleWhatsappCountryChange(c)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', cursor: 'pointer', fontSize: '14px', color: selectedCountry.dialCode === c.dialCode ? '#4a4' : '#333', background: selectedCountry.dialCode === c.dialCode ? '#f0faf0' : 'transparent' }}>
-                    <span style={{ fontSize: '16px' }}>{c.flag}</span>
-                    <span style={{ flex: 1 }}>{c.name}</span>
-                    <span style={{ color: '#999' }}>{c.dialCode}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          <input
-            value={whatsapp}
-            onChange={e => handleWhatsappChange(e.target.value)}
-            placeholder="your number"
-            maxLength={14}
-            style={{ flex: 1, padding: '12px', border: 'none', outline: 'none', fontSize: '15px', background: '#fff' }}
-          />
-        </div>
-
-        {errors.whatsapp && <p style={{ color: '#c33', fontSize: '12px', margin: '4px 0 8px' }}>{errors.whatsapp}</p>}
-
-          </>
-        )}
-
-        {phoneVerified && (
-          <div style={{ marginBottom: '16px', padding: '10px 12px', background: '#e8f5e9', borderRadius: '8px', border: '1px solid #c8e6c9', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ color: '#2e7d32', fontSize: '16px' }}>✓</span>
-            <span style={{ color: '#2e7d32', fontSize: '13px', fontWeight: '600' }}>Phone verified — {getFullWhatsapp()}</span>
-          </div>
-        )}
-
-        {/* Already signed in? Say so quietly — nothing else is asked. */}
-        {signedInUid && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '16px', padding: '10px 12px', background: '#e8f5e9', borderRadius: '8px', border: '1px solid #c8e6c9' }}>
-            <span style={{ color: '#2e7d32', fontSize: '13px', fontWeight: '700' }}>
-              ✓ Signed in{auth.currentUser?.email ? ` as ${auth.currentUser.email}` : auth.currentUser?.phoneNumber ? ` as ${auth.currentUser.phoneNumber}` : ''}
-            </span>
-            <button onClick={switchAccount}
-              style={{ background: 'transparent', border: 'none', color: '#2e7d32', cursor: 'pointer', fontSize: '12px', textDecoration: 'underline' }}>
-              Not you?
-            </button>
-          </div>
-        )}
-
-        {/* The ask comes HERE — after everything is filled in and they tap Create. */}
-        {showAccountSheet && !signedInUid && (
-          <div id="account-sheet" style={{ marginBottom: '16px', padding: '16px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px' }}>
-            <p style={{ fontSize: '14px', color: '#9a3412', margin: '0 0 4px', fontWeight: '800' }}>
-              One last thing — how should we save your shop?
-            </p>
-            <p style={{ fontSize: '12px', color: '#9a3412', margin: '0 0 12px' }}>
-              Everything you filled in is safe. Pick whichever is easiest for you.
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <button onClick={() => socialSignIn(googleProvider, 'Google')} disabled={!!signingIn}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '12px', background: '#fff', color: '#000', border: '1px solid #ddd', borderRadius: '8px', fontWeight: '700', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
-                <img src="https://www.google.com/favicon.ico" width="18" alt="" />
-                {signingIn === 'Google' ? 'Signing in…' : 'Continue with Google'}
-              </button>
-              <button onClick={() => socialSignIn(facebookProvider, 'Facebook')} disabled={!!signingIn}
-                style={{ width: '100%', padding: '12px', background: '#1877F2', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
-                {signingIn === 'Facebook' ? 'Signing in…' : 'Continue with Facebook'}
-              </button>
-              <button onClick={() => socialSignIn(appleProvider, 'Apple')} disabled={!!signingIn}
-                style={{ width: '100%', padding: '12px', background: '#000', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
-                {signingIn === 'Apple' ? 'Signing in…' : 'Continue with Apple'}
-              </button>
-              <button onClick={sendPhoneCode} disabled={!!signingIn || !whatsappIsValid}
-                style={{ width: '100%', padding: '12px', background: (!whatsappIsValid || signingIn) ? '#e5c9a8' : '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (!whatsappIsValid || signingIn) ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
-                {signingIn === 'Phone' ? 'Sending code…' : `Text me a code to ${getFullWhatsapp()}`}
-              </button>
-            </div>
-
-            {codeSent && (
-              <div style={{ marginTop: '12px' }}>
-                <p style={{ fontSize: '13px', color: '#333', margin: '0 0 6px' }}>
-                  Enter the 6-digit code we sent to <strong>{getFullWhatsapp()}</strong>
-                </p>
-                <input value={smsCode} onChange={e => setSmsCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="123456" inputMode="numeric"
-                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', marginBottom: '8px', fontSize: '20px', textAlign: 'center', letterSpacing: '8px', boxSizing: 'border-box' }} />
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button onClick={confirmPhoneCode} disabled={!!signingIn || smsCode.length < 6}
-                    style={{ flex: 1, padding: '12px', background: (signingIn || smsCode.length < 6) ? '#ccc' : '#4CAF50', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (signingIn || smsCode.length < 6) ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
-                    {signingIn === 'Phone' ? 'Checking…' : 'Verify & finish'}
-                  </button>
-                  <button onClick={sendPhoneCode} disabled={!!signingIn}
-                    style={{ padding: '12px 16px', background: 'transparent', color: '#666', border: '1px solid #ddd', borderRadius: '8px', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '13px' }}>
-                    Resend
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {signInError && <p style={{ color: '#c33', fontSize: '12px', margin: '10px 0 0' }}>{signInError}</p>}
-            {/* Firebase needs this invisible reCAPTCHA slot for phone sign-in */}
-            <div id="setup-recaptcha" />
-          </div>
-        )}
-
-        <p style={{ fontSize: '11px', color: '#888', margin: '0 0 16px' }}>
-          Your number is private — we use it for verification, security and paying you. It is never shown to buyers, and buyers can always reach you through your Inbox.
-        </p>
-
-          </>
-        )}
-        {step === 3 && (
-          <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-            <button onClick={() => setStep(2)}
-              style={{ flex: 1, padding: '14px', background: '#f0f0f0', color: '#333', border: '1px solid #ddd', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}>
-              ← Back
-            </button>
-          </div>
-        )}
-
-        {step === 2 && (
-          <>
         {/* Country — no assumptions; the seller picks it */}
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Country</label>
         <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>Where are you selling from?</p>
-        <div style={{ position: 'relative', marginBottom: '4px' }}>
+        <div id="setup-field-country" style={{ position: 'relative', marginBottom: '4px' }}>
           <div
             onClick={() => setShowCountryDropdown(!showCountryDropdown)}
             style={{ width: '100%', padding: '12px', borderRadius: '8px', border: errors.nationality ? '2px solid #c33' : '1px solid #ddd', fontSize: '15px', boxSizing: 'border-box', background: '#fff', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -924,18 +775,196 @@ function SetupStore() {
         )}
         {!locationLoading && geoSource !== 'gps' && !location.trim() && <div style={{ marginBottom: '16px' }} />}
 
-        {/* National ID Upload */}
-        <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>National ID <span style={{ color: '#888', fontWeight: '400', fontSize: '12px' }}>(optional for now)</span></label>
-        <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>
-          Optional — it's what earns the ✓ verified badge later, and it's <strong>private</strong>: only you can see it.
+          </>
+        )}
+
+
+        {step === 2 && (
+          <>
+        <h2 style={{ fontSize: '19px', fontWeight: '800', margin: '0 0 6px', color: '#1a1a1a' }}>Your phone number</h2>
+        <p style={{ fontSize: '14px', color: '#666', margin: '0 0 16px', lineHeight: 1.5 }}>
+          One number — so buyers can reach you and we know where to send your money.
         </p>
+
+        {/* Phone number — ONE field. If they sign in with phone, the code sent here
+            verifies it; otherwise it's the payout/contact number. */}
+        {(!phoneVerified || !whatsappIsValid) && (
+          <>
+        <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Phone number <span style={{ color: '#888', fontWeight: '400', fontSize: '12px' }}>— needed</span></label>
+        <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>
+          Pick your country code, then type your number — e.g. <strong>771234567</strong> or <strong>0771234567</strong>.
+        </p>
+        <p style={{ fontSize: '12px', color: '#666', margin: '0 0 8px', lineHeight: 1.5 }}>
+          We use it to keep your shop safe, to identify you, and to send you money when you sell.
+          It stays private — buyers never see it.
+        </p>
+
+        <div id="setup-field-phone" style={{ display: 'flex', alignItems: 'center', border: errors.whatsapp ? '2px solid #c33' : '1px solid #ddd', borderRadius: '8px', overflow: 'visible', marginBottom: '4px', position: 'relative' }}>
+          <div onClick={() => setShowWhatsappCountryDropdown(!showWhatsappCountryDropdown)}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#f5f5f5', padding: '12px 12px', fontSize: '15px', borderRight: errors.whatsapp ? '2px solid #c33' : '1px solid #ddd', color: '#333', fontWeight: '600', whiteSpace: 'nowrap', cursor: 'pointer' }}>
+            <span>{selectedCountry.flag} {selectedCountry.dialCode}</span>
+            <span style={{ color: '#999', fontSize: '11px' }}>{showWhatsappCountryDropdown ? '▲' : '▼'}</span>
+          </div>
+          {showWhatsappCountryDropdown && (
+            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #ddd', borderRadius: '8px', maxHeight: '240px', overflow: 'hidden', zIndex: 20, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', marginTop: '2px' }}>
+              <input value={whatsappCountrySearch} onChange={e => setWhatsappCountrySearch(e.target.value)} placeholder="Search country..." autoFocus
+                style={{ width: '100%', padding: '10px 12px', border: 'none', borderBottom: '1px solid #eee', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }} />
+              <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                {COUNTRY_CODES.filter(c => !whatsappCountrySearch || c.name.toLowerCase().includes(whatsappCountrySearch.toLowerCase()) || c.dialCode.includes(whatsappCountrySearch)).map(c => (
+                  <div key={c.dialCode} onClick={() => handleWhatsappCountryChange(c)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', cursor: 'pointer', fontSize: '14px', color: selectedCountry.dialCode === c.dialCode ? '#4a4' : '#333', background: selectedCountry.dialCode === c.dialCode ? '#f0faf0' : 'transparent' }}>
+                    <span style={{ fontSize: '16px' }}>{c.flag}</span>
+                    <span style={{ flex: 1 }}>{c.name}</span>
+                    <span style={{ color: '#999' }}>{c.dialCode}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <input
+            value={whatsapp}
+            onChange={e => handleWhatsappChange(e.target.value)}
+            placeholder="your number"
+            maxLength={14}
+            style={{ flex: 1, padding: '12px', border: 'none', outline: 'none', fontSize: '15px', background: '#fff' }}
+          />
+        </div>
+
+        {errors.whatsapp && <p style={{ color: '#c33', fontSize: '12px', margin: '4px 0 8px' }}>{errors.whatsapp}</p>}
+
+          </>
+        )}
+
+        {phoneVerified && (
+          <div style={{ marginBottom: '16px', padding: '10px 12px', background: '#e8f5e9', borderRadius: '8px', border: '1px solid #c8e6c9', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ color: '#2e7d32', fontSize: '16px' }}>✓</span>
+            <span style={{ color: '#2e7d32', fontSize: '13px', fontWeight: '600' }}>Phone verified — {getFullWhatsapp()}</span>
+          </div>
+        )}
+
+        {/* Already signed in? Say so quietly — nothing else is asked. */}
+        {signedInUid && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '16px', padding: '10px 12px', background: '#e8f5e9', borderRadius: '8px', border: '1px solid #c8e6c9' }}>
+            <span style={{ color: '#2e7d32', fontSize: '13px', fontWeight: '700' }}>
+              ✓ Signed in{auth.currentUser?.email ? ` as ${auth.currentUser.email}` : auth.currentUser?.phoneNumber ? ` as ${auth.currentUser.phoneNumber}` : ''}
+            </span>
+            <button onClick={switchAccount}
+              style={{ background: 'transparent', border: 'none', color: '#2e7d32', cursor: 'pointer', fontSize: '12px', textDecoration: 'underline' }}>
+              Not you?
+            </button>
+          </div>
+        )}
+
+        <p style={{ fontSize: '11px', color: '#888', margin: '0 0 16px' }}>
+          Your number is private — we use it for verification, security and paying you. It is never shown to buyers, and buyers can always reach you through your Inbox.
+        </p>
+
+          </>
+        )}
+        {step === 2 && (
+          <>
+        {errors.submit && (
+          <div id="setup-submit-error" style={{ background: '#fee', border: '1px solid #fcc', borderRadius: '8px', padding: '12px', marginBottom: '12px', color: '#b71c1c', fontSize: '13px', fontWeight: '600' }}>
+            {errors.submit}
+          </div>
+        )}
+
+        {missing.length > 0 && (
+          <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
+            <p style={{ margin: '0 0 6px', fontSize: '13px', fontWeight: '700', color: '#9a3412' }}>Almost there — still needed:</p>
+            {missing.map(m => (
+              <button key={`${m.label}-${m.step}`} onClick={() => { setStep(m.step); window.setTimeout(() => document.getElementById(m.anchor)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60) }}
+                style={{ display: 'block', background: 'transparent', border: 'none', color: '#9a3412', cursor: 'pointer', fontSize: '13px', textDecoration: 'underline', padding: '2px 0', textAlign: 'left' }}>
+                • {m.label} — tap to fix
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+          <button onClick={() => setStep(1)}
+            style={{ flex: 1, padding: '14px', background: '#f0f0f0', color: '#333', border: '1px solid #ddd', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}>
+            ← Back
+          </button>
+          <button onClick={handleSubmit} disabled={loading || uploadingId || !isFormReady}
+            style={{ flex: 2, padding: '14px', background: loading || uploadingId || !isFormReady ? '#ccc' : '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: loading || uploadingId || !isFormReady ? 'not-allowed' : 'pointer' }}>
+            {loading || uploadingId ? 'Creating...' : 'Create My Shop'}
+          </button>
+        </div>
+          </>
+        )}
+        {/* The ask comes HERE — the moment they tapped Create, right under the button. */}
+        {step === 2 && showAccountSheet && !signedInUid && (
+          <div id="account-sheet" style={{ marginTop: '16px', padding: '16px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px' }}>
+            <p style={{ fontSize: '14px', color: '#9a3412', margin: '0 0 4px', fontWeight: '800' }}>
+              One last thing — how should we save your shop?
+            </p>
+            <p style={{ fontSize: '12px', color: '#9a3412', margin: '0 0 12px' }}>
+              Everything you filled in is safe. Pick whichever is easiest for you.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button onClick={() => socialSignIn(googleProvider, 'Google')} disabled={!!signingIn}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '12px', background: '#fff', color: '#000', border: '1px solid #ddd', borderRadius: '8px', fontWeight: '700', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
+                <img src="https://www.google.com/favicon.ico" width="18" alt="" />
+                {signingIn === 'Google' ? 'Signing in…' : 'Continue with Google'}
+              </button>
+              <button onClick={() => socialSignIn(facebookProvider, 'Facebook')} disabled={!!signingIn}
+                style={{ width: '100%', padding: '12px', background: '#1877F2', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
+                {signingIn === 'Facebook' ? 'Signing in…' : 'Continue with Facebook'}
+              </button>
+              <button onClick={() => socialSignIn(appleProvider, 'Apple')} disabled={!!signingIn}
+                style={{ width: '100%', padding: '12px', background: '#000', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
+                {signingIn === 'Apple' ? 'Signing in…' : 'Continue with Apple'}
+              </button>
+              <button onClick={sendPhoneCode} disabled={!!signingIn || !whatsappIsValid}
+                style={{ width: '100%', padding: '12px', background: (!whatsappIsValid || signingIn) ? '#e5c9a8' : '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (!whatsappIsValid || signingIn) ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
+                {signingIn === 'Phone' ? 'Sending code…' : `Text me a code to ${getFullWhatsapp()}`}
+              </button>
+            </div>
+
+            {codeSent && (
+              <div style={{ marginTop: '12px' }}>
+                <p style={{ fontSize: '13px', color: '#333', margin: '0 0 6px' }}>
+                  Enter the 6-digit code we sent to <strong>{getFullWhatsapp()}</strong>
+                </p>
+                <input value={smsCode} onChange={e => setSmsCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="123456" inputMode="numeric"
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', marginBottom: '8px', fontSize: '20px', textAlign: 'center', letterSpacing: '8px', boxSizing: 'border-box' }} />
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button onClick={confirmPhoneCode} disabled={!!signingIn || smsCode.length < 6}
+                    style={{ flex: 1, padding: '12px', background: (signingIn || smsCode.length < 6) ? '#ccc' : '#4CAF50', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (signingIn || smsCode.length < 6) ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
+                    {signingIn === 'Phone' ? 'Checking…' : 'Verify & finish'}
+                  </button>
+                  <button onClick={sendPhoneCode} disabled={!!signingIn}
+                    style={{ padding: '12px 16px', background: 'transparent', color: '#666', border: '1px solid #ddd', borderRadius: '8px', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '13px' }}>
+                    Resend
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {signInError && <p style={{ color: '#c33', fontSize: '12px', margin: '10px 0 0' }}>{signInError}</p>}
+            {/* Firebase needs this invisible reCAPTCHA slot for phone sign-in */}
+            <div id="setup-recaptcha" />
+          </div>
+        )}
+
+        {/* Optional extras sit BELOW Create — they can never delay a shop going live. */}
+        {step === 2 && (
+          <>
+        <div style={{ borderTop: '1px solid #eee', margin: '24px 0 14px' }} />
+        <p style={{ fontSize: '12px', fontWeight: '800', color: '#aaa', letterSpacing: '0.4px', margin: '0 0 6px' }}>OPTIONAL — SKIP IT IF YOU LIKE</p>
+        <p style={{ fontSize: '12px', color: '#999', margin: '0 0 14px', lineHeight: 1.5 }}>
+          Your shop goes live without it. Adding it now just earns your ✓ verified badge sooner — and it stays <strong>private</strong>: only you can see it.
+        </p>
+        <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>National ID</label>
+        <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>JPG, PNG or PDF — max 10MB.</p>
         <div style={{ marginBottom: '4px' }}>
           {!idFileName ? (
-            <label style={{ display: 'block', width: '100%', padding: '40px 20px', border: errors.idDocument ? '2px dashed #c33' : '2px dashed #ddd', borderRadius: '8px', textAlign: 'center', cursor: 'pointer', background: '#fafafa' }}>
+            <label style={{ display: 'block', width: '100%', padding: '28px 20px', border: errors.idDocument ? '2px dashed #c33' : '2px dashed #ddd', borderRadius: '8px', textAlign: 'center', cursor: 'pointer', background: '#fafafa' }}>
               <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e => handleIdFileChange(e.target.files?.[0] || null)} style={{ display: 'none' }} />
-              <div style={{ fontSize: '32px', marginBottom: '8px', color: '#ccc' }}>📄</div>
+              <div style={{ fontSize: '28px', marginBottom: '6px', color: '#ccc' }}>📄</div>
               <p style={{ fontSize: '13px', color: '#999', margin: 0 }}>Click to upload your National ID</p>
-              <p style={{ fontSize: '11px', color: '#bbb', margin: '4px 0 0' }}>JPG, PNG, or PDF — max 10MB</p>
             </label>
           ) : (
             <div style={{ padding: '12px', background: '#f0f8f0', borderRadius: '8px', border: '1px solid #c8e6c9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -950,56 +979,12 @@ function SetupStore() {
             </div>
           )}
         </div>
-        {errors.idDocument && <p style={{ color: '#c33', fontSize: '12px', margin: '4px 0 16px' }}>{errors.idDocument}</p>}
-        {!errors.idDocument && <div style={{ marginBottom: '16px' }} />}
-
+        {errors.idDocument && <p style={{ color: '#c33', fontSize: '12px', margin: '4px 0 0' }}>{errors.idDocument}</p>}
           </>
         )}
-        {step === 2 && (
-          <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-            <button onClick={() => setStep(1)}
-              style={{ flex: 1, padding: '14px', background: '#f0f0f0', color: '#333', border: '1px solid #ddd', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}>
-              ← Back
-            </button>
-            <button onClick={() => goNext(3)}
-              style={{ flex: 2, padding: '14px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}>
-              Continue →
-            </button>
-          </div>
-        )}
 
-        {step === 3 && (
-          <>
-        {errors.submit && (
-          <div id="setup-submit-error" style={{ background: '#fee', border: '1px solid #fcc', borderRadius: '8px', padding: '12px', marginBottom: '12px', color: '#b71c1c', fontSize: '13px', fontWeight: '600' }}>
-            {errors.submit}
-          </div>
-        )}
 
-        {missing.length > 0 && (
-          <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
-            <p style={{ margin: '0 0 6px', fontSize: '13px', fontWeight: '700', color: '#9a3412' }}>Almost there — still needed:</p>
-            {missing.map(m => (
-              <button key={`${m.label}-${m.step}`} onClick={() => window.setTimeout(() => setStep(m.step), 0)}
-                style={{ display: 'block', background: 'transparent', border: 'none', color: '#9a3412', cursor: 'pointer', fontSize: '13px', textDecoration: 'underline', padding: '2px 0', textAlign: 'left' }}>
-                • {m.label} — tap to fix
-              </button>
-            ))}
-          </div>
-        )}
 
-        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-          <button onClick={() => setStep(2)}
-            style={{ flex: 1, padding: '14px', background: '#f0f0f0', color: '#333', border: '1px solid #ddd', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}>
-            ← Back
-          </button>
-          <button onClick={handleSubmit} disabled={loading || uploadingId || !isFormReady}
-            style={{ flex: 2, padding: '14px', background: loading || uploadingId || !isFormReady ? '#ccc' : '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: loading || uploadingId || !isFormReady ? 'not-allowed' : 'pointer' }}>
-            {loading || uploadingId ? 'Creating...' : 'Create My Shop'}
-          </button>
-        </div>
-          </>
-        )}
       </div>
     </div>
   )
