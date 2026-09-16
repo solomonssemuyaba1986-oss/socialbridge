@@ -180,6 +180,7 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 | `rachett_last_user` | Last signed-in identity for "Continue as": displayName, **email**, photoURL, uid, providerId | `userMemory.ts:3-28` |
 | `rachett_quick_replies_guest` | Guest quick replies | `useQuickReplies.ts:6` |
 | `rachett_role` | The buyer/seller choice made on the onboarding screen — stops us asking twice (`role.ts`) | `role.ts` |
+| `rachett_nearby_sort` | The Nearby quick control the buyer prefers (`closest` / `newest` / `popular`) — remembered so the page opens the way they like it (`NearbyPage.tsx`) | `NearbyPage.tsx` |
 | `rachett_pending_action` (session) | The Buy/Message a guest was blocked on, so signing in returns them to it; expires after 15 min (`signInGate.ts`) | `signInGate.ts` |
 | `rachett_draft_*` | Unsent message drafts per thread/product | `useDraft.ts:3` |
 | `rachett_recent_searches_{uid}` | Last N searches | `BrowsePage.tsx:362-390` |

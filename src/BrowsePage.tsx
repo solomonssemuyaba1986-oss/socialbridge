@@ -779,8 +779,18 @@ function BrowsePage() {
         ) : (
           <>
             <p style={{ color: '#555', fontSize: '13px', marginBottom: '20px' }}>
-              Showing {filtered.length} product{filtered.length === 1 ? '' : 's'}
-              {search.trim() ? ' matching your search' : ''} · newest first
+              {search.trim() ? (
+                <>
+                  🔍 <strong style={{ color: filtered.length > 0 ? green : '#fff', fontSize: '15px' }}>
+                    {filtered.length} result{filtered.length === 1 ? '' : 's'}
+                  </strong>
+                  {' for '}<strong style={{ color: '#fff' }}>“{search.trim()}”</strong>
+                </>
+              ) : (
+                <>
+                  Showing {filtered.length} product{filtered.length === 1 ? '' : 's'} · newest first
+                </>
+              )}
             </p>
             <div className="rt-products" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
                             {filtered.map(p => (

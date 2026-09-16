@@ -99,6 +99,12 @@
     flex-shrink: 0;
   }
 
+  /* The Nearby quick controls sit inside a padded container already —
+     keep the touch-target sizing without the extra gutter. */
+  .rt-quickbar .rt-filters {
+    padding: 0 !important;
+  }
+
   .rt-title-lg {
     font-size: clamp(28px, 8vw, 56px) !important;
     letter-spacing: -1px !important;

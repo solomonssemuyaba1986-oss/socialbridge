@@ -315,6 +315,17 @@ function Inbox() {
           )}
         </div>
 
+        {/* How many matched — a number keeps people searching instead of giving up */}
+        {search.trim() && (
+          <p style={{ margin: '-6px 0 16px', color: '#888', fontSize: 13 }}>
+            🔍 <strong style={{ color: searched.length > 0 ? green : '#fff', fontSize: 15 }}>
+              {searched.length} conversation{searched.length === 1 ? '' : 's'}
+            </strong>
+            {' for '}<strong style={{ color: '#fff' }}>“{search.trim()}”</strong>
+            {filter === 'unread' && visible.length !== searched.length ? ` · ${visible.length} unread` : ''}
+          </p>
+        )}
+
         {visible.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 20px' }}>
             <div style={{ fontSize: '48px', marginBottom: '16px' }}>{search ? '🔍' : (filter === 'unread' ? '🎉' : '📭')}</div>

@@ -48,6 +48,43 @@ const RAIL_LIMIT = 10
 const CLOSEST_GRID_LIMIT = 30
 const STORE_RAIL_LIMIT = 8
 const SKELETON_COUNT = 6
+/** Sort mode shows a bigger list than the discovery grid. */
+const SORT_GRID_LIMIT = 60
+
+/** The three quick controls, left-aligned under the search bar. */
+type SortKey = 'closest' | 'newest' | 'popular'
+const SORTS: { key: SortKey; icon: string; label: string }[] = [
+  { key: 'closest', icon: '📍', label: 'Closest' },
+  { key: 'newest', icon: '🆕', label: 'Newest' },
+  { key: 'popular', icon: '🔥', label: 'Popular' },
+]
+const SORT_HEADINGS: Record<SortKey, { title: string; hint: string }> = {
+  closest: { title: '📍 Closest to you', hint: 'nearest first' },
+  newest: { title: '🆕 Newest near you', hint: 'newest listing first' },
+  popular: { title: '🔥 Most popular near you', hint: 'by orders & sales' },
+}
+/** Sort mode is remembered per device, so a buyer who prefers Popular gets it again. */
+const SORT_PREF_KEY = 'rachett_nearby_sort'
+
+/** What's actually moving: orders count double, a completed sale counts too. */
+const popularScore = (p: DiscoveryProduct) => (p.orderCount || 0) * 2 + (p.salesCount || 0)
+
+function sortProducts(list: DiscoveryProduct[], key: SortKey): DiscoveryProduct[] {
+  const copy = [...list]
+  if (key === 'newest') return copy.sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0))
+  if (key === 'popular') return copy.sort((a, b) => popularScore(b) - popularScore(a))
+  // Distance where we know it; stores without coordinates go last.
+  return copy.sort((a, b) => (a.distanceKm ?? Number.POSITIVE_INFINITY) - (b.distanceKm ?? Number.POSITIVE_INFINITY))
+}
+
+function readSortPref(): SortKey | null {
+  try {
+    const saved = localStorage.getItem(SORT_PREF_KEY)
+    return saved === 'closest' || saved === 'newest' || saved === 'popular' ? saved : null
+  } catch {
+    return null
+  }
+}
 
 /** Small local building blocks for the discovery feed. */
 function SectionHeader({ title, action }: { title: string; action?: ReactNode }) {
@@ -94,6 +131,8 @@ function NearbyPage() {
 
   const [manualText, setManualText] = useState('')
   const [search, setSearch] = useState('')
+  /** null = the discovery feed; a key = one sorted list (tap the active chip to go back). */
+  const [sort, setSort] = useState<SortKey | null>(readSortPref)
   const [activeCategory, setActiveCategory] = useState('All')
   const [range, setRange] = useState(10)
   const [showRange, setShowRange] = useState(false)
@@ -259,11 +298,16 @@ function NearbyPage() {
 
   /** Ranked by what's actually moving — both the hero and the rail draw from this. */
   const popularRanked = useMemo(() => {
-    const score = (p: DiscoveryProduct) => (p.orderCount || 0) * 2 + (p.salesCount || 0)
-    const hot = matching.filter(p => score(p) > 0).sort((a, b) => score(b) - score(a))
-    const rest = matching.filter(p => score(p) === 0)
+    const hot = matching.filter(p => popularScore(p) > 0).sort((a, b) => popularScore(b) - popularScore(a))
+    const rest = matching.filter(p => popularScore(p) === 0)
     return [...hot, ...rest]
   }, [matching])
+
+  /** The buyer's quick control, applied to whatever list is in scope. */
+  const sortedViews = useMemo(
+    () => (sort ? sortProducts(area && nearby.length > 0 ? nearby : matching, sort) : null),
+    [sort, area, nearby, matching],
+  )
 
   const hero = nearby[0] || popularRanked[0] || matching[0] || null
   /** Rails only make sense once there's enough to fill them without repeating. */
@@ -367,6 +411,21 @@ function NearbyPage() {
     setRange(Math.min(200, n))
     setShowRange(false)
     setCustomRange('')
+  }
+
+  /**
+   * Quick controls: tap a chip to sort the whole list by it; tap the active chip
+   * again to go back to the discovery feed. The choice is remembered per device.
+   */
+  const toggleSort = (key: SortKey) => {
+    const next = sort === key ? null : key
+    setSort(next)
+    try {
+      if (next) localStorage.setItem(SORT_PREF_KEY, next)
+      else localStorage.removeItem(SORT_PREF_KEY)
+    } catch {
+      // ignore storage errors
+    }
   }
 
   // Coming back from sign-in? Reopen the sheet they were blocked on.
@@ -485,8 +544,23 @@ function NearbyPage() {
           )}
         </div>
 
-        {/* Range dropdown — right end, under the search bar */}
-        <div ref={rangeWrapRef} style={{ position: 'relative', display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
+        {/* Quick controls — left under the search bar; range stays on the right */}
+        <div className="rt-quickbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', marginBottom: '10px' }}>
+          <div className="rt-filters" style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '2px' }}>
+            {SORTS.map(option => {
+              const active = sort === option.key
+              return (
+                <button key={option.key} onClick={() => toggleSort(option.key)}
+                  title={active ? 'Tap again to go back to the discovery feed' : `Sort everything by ${option.label.toLowerCase()}`}
+                  style={{ padding: '8px 14px', borderRadius: '999px', border: `1px solid ${active ? green : '#333'}`, background: active ? green : '#1a1a1a', color: active ? '#000' : '#aaa', fontWeight: active ? '800' : '600', fontSize: '13px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  {option.icon} {option.label}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Range dropdown — right end of the same line */}
+          <div ref={rangeWrapRef} style={{ position: 'relative' }}>
           <button onClick={() => setShowRange(v => !v)}
             style={{ padding: '9px 14px', borderRadius: '999px', border: `1px solid ${showRange ? green : '#333'}`, background: showRange ? '#1a2a1a' : '#1a1a1a', color: showRange ? green : '#ddd', fontWeight: '700', fontSize: '13px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
             Within {range} km ▾
@@ -520,6 +594,7 @@ function NearbyPage() {
               </div>
             </div>
           )}
+          </div>
         </div>
 
         {/* Category chips — discover by tapping */}
@@ -534,20 +609,37 @@ function NearbyPage() {
           </div>
         )}
 
-        {/* The reassurance line */}
+        {/* The count — the nudge to keep looking */}
         <p style={{ margin: '0 0 16px', color: '#888', fontSize: '13px' }}>
           {searching ? (
-            <>Showing results for <strong style={{ color: '#fff' }}>“{search.trim()}”</strong></>
-          ) : (
-            <>Showing products near <strong style={{ color: '#fff' }}>{areaLabel || 'you'}</strong></>
-          )}
-          {area && <> · within <strong style={{ color: green }}>{range} km</strong></>}
-          {!loadingPool && (
             <>
-              {' — '}
-              {searching ? searchResults.length : area ? nearby.length : matching.length} product
-              {(searching ? searchResults.length : area ? nearby.length : matching.length) === 1 ? '' : 's'}
-              {searching || area ? '' : ' available'}
+              🔍 <strong style={{ color: searchResults.length > 0 ? green : '#fff', fontSize: '15px' }}>
+                {searchResults.length} result{searchResults.length === 1 ? '' : 's'}
+              </strong>
+              {' for '}<strong style={{ color: '#fff' }}>“{search.trim()}”</strong>
+              {area && <> · within <strong style={{ color: green }}>{range} km</strong></>}
+            </>
+          ) : sortedViews ? (
+            <>
+              <strong style={{ color: green, fontSize: '15px' }}>{sortedViews.length} product{sortedViews.length === 1 ? '' : 's'}</strong>
+              {' · '}
+              {sort === 'closest' && !area
+                ? 'set your area to sort by distance'
+                : sort ? SORT_HEADINGS[sort].hint : ''}
+              {area && <> · within <strong style={{ color: green }}>{range} km</strong></>}
+            </>
+          ) : (
+            <>
+              Showing products near <strong style={{ color: '#fff' }}>{areaLabel || 'you'}</strong>
+              {area && <> · within <strong style={{ color: green }}>{range} km</strong></>}
+              {!loadingPool && (
+                <>
+                  {' — '}
+                  {area ? nearby.length : matching.length} product
+                  {(area ? nearby.length : matching.length) === 1 ? '' : 's'}
+                  {area ? '' : ' available'}
+                </>
+              )}
             </>
           )}
         </p>
@@ -574,7 +666,7 @@ function NearbyPage() {
               </button>
             </div>
           ) : (
-            <Grid>{searchResults.map(p => cardFor(p))}</Grid>
+            <Grid>{(sort ? sortProducts(searchResults, sort) : searchResults).map(p => cardFor(p))}</Grid>
           )
         ) : products.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '48px 20px', border: '1px dashed #222', borderRadius: '12px' }}>
@@ -599,6 +691,32 @@ function NearbyPage() {
               </button>
             )}
           </div>
+        ) : sortedViews && sort ? (
+          <section style={{ marginBottom: '26px' }}>
+            <SectionHeader
+              title={`${SORT_HEADINGS[sort].title}${area && sort === 'closest' ? ` · within ${range} km` : ''}`}
+              action={
+                <button onClick={() => toggleSort(sort)}
+                  style={{ padding: '7px 13px', background: '#1a1a1a', border: '1px solid #333', color: '#ddd', borderRadius: '999px', fontWeight: '700', fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  ← Discovery feed
+                </button>
+              }
+            />
+            {sortedViews.length === 0 ? (
+              <p style={{ color: '#888', fontSize: '13px', border: '1px dashed #262626', borderRadius: '12px', padding: '14px', margin: 0 }}>
+                Nothing to sort yet — check back soon, or widen your range.
+              </p>
+            ) : (
+              <>
+                <Grid>{sortedViews.slice(0, SORT_GRID_LIMIT).map(p => cardFor(p))}</Grid>
+                {sortedViews.length > SORT_GRID_LIMIT && (
+                  <p style={{ margin: '14px 0 0', color: '#666', fontSize: 12, textAlign: 'center' }}>
+                    Showing the first {SORT_GRID_LIMIT} of {sortedViews.length} — narrow your range to see the rest.
+                  </p>
+                )}
+              </>
+            )}
+          </section>
         ) : (
           <>
             {/* Hero — the lead item, so the page never opens flat */}
