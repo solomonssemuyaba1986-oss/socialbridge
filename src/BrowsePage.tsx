@@ -44,6 +44,8 @@ const categories = ['All', ...getMainCategories()]
 const green = '#adff2f'
 /** How many stores the directory shows before "Show all". */
 const STORE_DIRECTORY_LIMIT = 12
+/** How many matching-store cards the search panel shows (the count is always the full total). */
+const STORE_MATCH_LIMIT = 6
 
 function BrowsePage() {
   // The catalog feed: one paged query instead of reading every store's products.
@@ -444,7 +446,7 @@ function BrowsePage() {
         outOfStockCount: outCounts.get(st.slug) || 0,
         renamed: aliasMatched && !nameMatches,
       }
-    }).slice(0, 6)
+    })
   }, [stores, products, search])
 
   // Trending & recommended — what's actually moving (orders + sales)
@@ -592,6 +594,27 @@ function BrowsePage() {
             style={{ width: '100%', padding: '14px 16px 14px 44px', borderRadius: '10px', border: '1px solid #333', background: '#1a1a1a', color: '#fff', fontSize: '15px', boxSizing: 'border-box', outline: 'none' }}
           />
         </div>
+        {/* Result count — always on screen while searching, even at zero */}
+        {search.trim() && (
+          <p style={{ margin: '14px 0 0', color: '#888', fontSize: 13 }}>
+            {loading ? (
+              <>🔍 Searching for <strong style={{ color: '#fff' }}>“{search.trim()}”</strong>…</>
+            ) : (
+              <>
+                🔍 <strong style={{ color: filtered.length > 0 ? green : '#fff', fontSize: 15 }}>
+                  {filtered.length} result{filtered.length === 1 ? '' : 's'}
+                </strong>
+                {' for '}<strong style={{ color: '#fff' }}>“{search.trim()}”</strong>
+                {storeMatches.length > 0 && (
+                  <>
+                    {' · '}<strong style={{ color: '#fff', fontSize: 15 }}>{storeMatches.length}</strong>
+                    {' '}store{storeMatches.length === 1 ? '' : 's'}
+                  </>
+                )}
+              </>
+            )}
+          </p>
+        )}
         {recentSearches.length > 0 && (
           <div style={{ maxWidth: '500px', margin: '12px auto 0', display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
             {recentSearches.map(term => (
@@ -626,7 +649,7 @@ function BrowsePage() {
             <p style={{ margin: 0, color: '#777', fontSize: '13px' }}>Tap a store to open its storefront</p>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px' }}>
-            {storeMatches.map(store => (
+            {storeMatches.slice(0, STORE_MATCH_LIMIT).map(store => (
               <div key={store.slug} onClick={() => navigate(`/store/${store.slug}`)}
                 style={{ background: '#151515', borderRadius: '14px', cursor: 'pointer', overflow: 'hidden', border: '1px solid #222', minHeight: '170px', display: 'flex', flexDirection: 'column' }}>
                 {store.renamed && (
@@ -643,6 +666,11 @@ function BrowsePage() {
               </div>
             ))}
           </div>
+          {storeMatches.length > STORE_MATCH_LIMIT && (
+            <p style={{ margin: '14px 0 0', color: '#777', fontSize: 12 }}>
+              Showing the first {STORE_MATCH_LIMIT} of {storeMatches.length} — the stores directory below lists every shop.
+            </p>
+          )}
         </div>
       )}
 
@@ -779,18 +807,7 @@ function BrowsePage() {
         ) : (
           <>
             <p style={{ color: '#555', fontSize: '13px', marginBottom: '20px' }}>
-              {search.trim() ? (
-                <>
-                  🔍 <strong style={{ color: filtered.length > 0 ? green : '#fff', fontSize: '15px' }}>
-                    {filtered.length} result{filtered.length === 1 ? '' : 's'}
-                  </strong>
-                  {' for '}<strong style={{ color: '#fff' }}>“{search.trim()}”</strong>
-                </>
-              ) : (
-                <>
-                  Showing {filtered.length} product{filtered.length === 1 ? '' : 's'} · newest first
-                </>
-              )}
+              Showing {filtered.length} product{filtered.length === 1 ? '' : 's'} · newest first
             </p>
             <div className="rt-products" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
                             {filtered.map(p => (

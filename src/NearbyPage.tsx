@@ -612,13 +612,17 @@ function NearbyPage() {
         {/* The count — the nudge to keep looking */}
         <p style={{ margin: '0 0 16px', color: '#888', fontSize: '13px' }}>
           {searching ? (
-            <>
-              🔍 <strong style={{ color: searchResults.length > 0 ? green : '#fff', fontSize: '15px' }}>
-                {searchResults.length} result{searchResults.length === 1 ? '' : 's'}
-              </strong>
-              {' for '}<strong style={{ color: '#fff' }}>“{search.trim()}”</strong>
-              {area && <> · within <strong style={{ color: green }}>{range} km</strong></>}
-            </>
+            loadingPool ? (
+              <>🔍 Searching for <strong style={{ color: '#fff' }}>“{search.trim()}”</strong>…</>
+            ) : (
+              <>
+                🔍 <strong style={{ color: searchResults.length > 0 ? green : '#fff', fontSize: '15px' }}>
+                  {searchResults.length} result{searchResults.length === 1 ? '' : 's'}
+                </strong>
+                {' for '}<strong style={{ color: '#fff' }}>“{search.trim()}”</strong>
+                {area && <> · within <strong style={{ color: green }}>{range} km</strong></>}
+              </>
+            )
           ) : sortedViews ? (
             <>
               <strong style={{ color: green, fontSize: '15px' }}>{sortedViews.length} product{sortedViews.length === 1 ? '' : 's'}</strong>
