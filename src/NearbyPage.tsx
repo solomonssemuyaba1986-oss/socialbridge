@@ -15,7 +15,7 @@ import ProductPreview from './ProductPreview'
 import FloatingBag from './FloatingBag'
 import { getMainCategories } from './categories'
 import { green, productImages, seededShuffle, toMillis, type CardProduct } from './productCardUtils'
-import { detectSource, track } from './tracking'
+import { trackEvent } from './analytics'
 import { consumePendingAction } from './signInGate'
 
 interface NearbySeller {
@@ -383,6 +383,7 @@ function NearbyPage() {
   const handleToggleBag = (p: DiscoveryProduct) => {
     if (isInBag(p.id)) {
       removeFromBag(p.id)
+      trackEvent('bag_removed', { productId: p.id, sellerId: p.sellerId, price: p.price, surface: 'nearby', bagSize: Math.max(0, bagCount - 1) })
       setBagCounts(prev => ({
         ...prev,
         [p.id]: { count: Math.max(0, (prev[p.id]?.count || 0) - 1), baggedCount: prev[p.id]?.baggedCount || 0 },
@@ -398,6 +399,7 @@ function NearbyPage() {
         sellerId: p.sellerId,
         businessName: p.businessName,
       })
+      trackEvent('bag_added', { productId: p.id, sellerId: p.sellerId, price: p.price, surface: 'nearby', bagSize: bagCount + 1 })
       setBagCounts(prev => ({
         ...prev,
         [p.id]: { count: (prev[p.id]?.count || 0) + 1, baggedCount: (prev[p.id]?.baggedCount || 0) + 1 },
@@ -408,10 +410,59 @@ function NearbyPage() {
   const applyCustomRange = () => {
     const n = Math.round(Number(customRange))
     if (!isFinite(n) || n <= 0) return
-    setRange(Math.min(200, n))
+    const clamped = Math.min(200, n)
+    trackEvent('nearby_range_changed', { rangeKm: clamped, previousRangeKm: range, preset: 'custom', resultCount: nearby.length })
+    setRange(clamped)
     setShowRange(false)
     setCustomRange('')
   }
+
+  /**
+   * Nearby is tracked as its own surface, never folded into Browse: what the
+   * buyer saw, how wide their range was, and which sort they preferred.
+   */
+  const nearbySeen = useRef(false)
+  const nearbyResultKey = useRef('')
+  useEffect(() => {
+    if (loadingPool || products.length === 0) return
+    const shown = searching ? searchResults.length : sortedViews ? sortedViews.length : nearby.length
+    const resultKey = `${shown}:${nearby.length}:${activeCategory}:${range}:${sort ?? 'discovery'}`
+    if (nearbyResultKey.current === resultKey) return
+    nearbyResultKey.current = resultKey
+    if (!nearbySeen.current) {
+      nearbySeen.current = true
+      trackEvent('nearby_viewed', {
+        areaSet: Boolean(area),
+        rangeKm: range,
+        sortMode: sort ?? 'discovery',
+        sellerCount: matching.length,
+      })
+    }
+    trackEvent('nearby_results', {
+      count: shown,
+      sellerCount: nearby.length,
+      areaSet: Boolean(area),
+      rangeKm: range,
+      sortMode: sort ?? 'discovery',
+      category: activeCategory,
+    })
+  }, [loadingPool, products.length, searching, searchResults.length, sortedViews, nearby.length, matching.length, activeCategory, range, sort, area])
+
+  /** A typed search here is live — report the settled query, not every keystroke. */
+  useEffect(() => {
+    const term = search.trim()
+    if (!term) return
+    const timer = window.setTimeout(() => {
+      trackEvent('search_performed', {
+        query: term,
+        surface: 'nearby',
+        resultCount: searchResults.length,
+        zeroResult: searchResults.length === 0,
+        category: activeCategory,
+      })
+    }, 1200)
+    return () => window.clearTimeout(timer)
+  }, [search, searchResults.length, activeCategory])
 
   /**
    * Quick controls: tap a chip to sort the whole list by it; tap the active chip
@@ -420,6 +471,11 @@ function NearbyPage() {
   const toggleSort = (key: SortKey) => {
     const next = sort === key ? null : key
     setSort(next)
+    trackEvent('nearby_sort_changed', {
+      sortMode: next ?? 'discovery',
+      previousSortMode: sort ?? 'discovery',
+      resultCount: sortedViews ? sortedViews.length : matching.length,
+    })
     try {
       if (next) localStorage.setItem(SORT_PREF_KEY, next)
       else localStorage.removeItem(SORT_PREF_KEY)
@@ -435,11 +491,12 @@ function NearbyPage() {
   }, [pool])
 
   const openProduct = (p: DiscoveryProduct) => {
-    track('product_viewed', userId, detectSource(), {
+    trackEvent('product_viewed', {
       productId: p.id,
-      productName: p.name,
+      sellerId: p.sellerId,
       sellerSlug: p.sellerSlug,
-      distanceKm: p.distanceKm,
+      surface: 'nearby',
+      category: p.category,
     })
     navigate(`/store/${p.sellerSlug}`)
   }
@@ -490,7 +547,7 @@ function NearbyPage() {
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#12210d', border: `1px solid ${green}`, color: green, borderRadius: '999px', padding: '6px 12px', fontSize: '13px', fontWeight: '700' }}>
                 📍 {areaLabel || 'Your area'}
               </span>
-              <button onClick={() => { clear(); setManualText('') }}
+              <button onClick={() => { trackEvent('nearby_area_set', { method: 'cleared', hadArea: true }); clear(); setManualText('') }}
                 style={{ display: 'block', marginLeft: 'auto', marginTop: '6px', padding: '4px 8px', background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '12px', textDecoration: 'underline' }}>
                 Change
               </button>
@@ -505,7 +562,7 @@ function NearbyPage() {
               📍 Set your area to sort by distance — meanwhile, here's what's selling.
             </p>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <button onClick={detect} disabled={locating}
+              <button onClick={() => { trackEvent('nearby_area_set', { method: 'gps', hadArea: Boolean(area) }); detect() }} disabled={locating}
                 style={{ padding: '10px 14px', background: locating ? '#333' : green, color: locating ? '#888' : '#000', border: 'none', borderRadius: '10px', fontWeight: '800', cursor: locating ? 'not-allowed' : 'pointer', fontSize: '13px', whiteSpace: 'nowrap' }}>
                 {locating ? '⏳ Locating…' : 'Use my location'}
               </button>
@@ -513,7 +570,7 @@ function NearbyPage() {
                 onKeyDown={e => { if (e.key === 'Enter') setManualArea(manualText) }}
                 placeholder="Or type your area e.g. Kampala"
                 style={{ flex: 1, minWidth: '160px', padding: '10px 12px', borderRadius: '10px', border: '1px solid #333', background: '#111', color: '#fff', fontSize: '14px', boxSizing: 'border-box' }} />
-              <button onClick={() => setManualArea(manualText)} disabled={locating}
+              <button onClick={() => { trackEvent('nearby_area_set', { method: 'manual', hadArea: Boolean(area) }); setManualArea(manualText) }} disabled={locating}
                 style={{ padding: '10px 14px', background: '#222', color: '#fff', border: '1px solid #333', borderRadius: '10px', cursor: locating ? 'not-allowed' : 'pointer', fontWeight: '700', fontSize: '13px' }}>
                 Find
               </button>
@@ -568,7 +625,11 @@ function NearbyPage() {
           {showRange && (
             <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: '#1a1a1a', border: '1px solid #333', borderRadius: '12px', padding: '8px', minWidth: '230px', zIndex: 40, boxShadow: '0 12px 32px rgba(0,0,0,0.6)' }}>
               {RANGE_PRESETS.map(r => (
-                <button key={r} onClick={() => { setRange(r); setShowRange(false) }}
+                <button key={r} onClick={() => {
+                  trackEvent('nearby_range_changed', { rangeKm: r, previousRangeKm: range, preset: 'preset', resultCount: nearby.length })
+                  setRange(r)
+                  setShowRange(false)
+                }}
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '10px 12px', background: range === r ? '#12210d' : 'transparent', color: range === r ? green : '#ddd', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: range === r ? 800 : 500 }}>
                   <span>Within {r} km</span>
                   {range === r && <span>✓</span>}

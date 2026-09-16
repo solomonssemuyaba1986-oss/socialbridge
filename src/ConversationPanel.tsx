@@ -6,6 +6,8 @@ import { auth } from './firebase'
 import { notify } from './notifications'
 import { useDraft } from './useDraft'
 import { uploadImageToCloudinary } from './uploadImage'
+import { trackEvent } from './analytics'
+import { toMillis } from './productCardUtils'
 import ProductPreview from './ProductPreview'
 
 const green = '#adff2f'
@@ -117,6 +119,18 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
   // Role-based quick replies: sellers see seller replies, buyers see buyer questions
   const isSellerViewing = auth.currentUser?.uid === sellerId
 
+  /** One `conversation_opened` per thread per mount — the top of the chat funnel. */
+  const openedRef = useRef(false)
+  useEffect(() => {
+    if (openedRef.current || !conversationId) return
+    openedRef.current = true
+    trackEvent('conversation_opened', {
+      conversationId,
+      counterpartRole: isSellerViewing ? 'buyer' : 'seller',
+      threadType: 'conversation',
+    })
+  }, [conversationId, isSellerViewing])
+
   useEffect(() => {
     const el = listRef.current
     if (!el || loading) return
@@ -169,6 +183,32 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
       clearDraft()
       setPendingImages([])
       setShowQuickReplies(false)
+
+      const senderRole = senderId === sellerId ? 'seller' : 'buyer'
+      trackEvent('message_sent', {
+        conversationId,
+        senderRole,
+        productId,
+        sellerId,
+        hasPhoto: pendingImages.length > 0,
+        isQuickReply: newText !== undefined,
+        length: messageText.length,
+        surface: 'inbox',
+      })
+
+      /**
+       * How fast a seller answers is the trust metric nothing else can fake:
+       * measured from the buyer's first message to this first reply.
+       */
+      if (senderRole === 'seller' && !messages.some(m => m.senderId === sellerId)) {
+        const firstBuyerMessage = messages.find(m => m.senderId === buyerId)
+        const sentAt = toMillis(firstBuyerMessage?.createdAt)
+        trackEvent('seller_first_response', {
+          conversationId,
+          productId,
+          latencyMinutes: sentAt ? Math.max(0, Math.round((Date.now() - sentAt) / 60000)) : undefined,
+        })
+      }
     } catch (err) {
       console.error('Failed to send conversation message:', err)
       showFeedback(notify.messageFailed, 'error')
@@ -188,8 +228,10 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
     try {
       const url = await uploadImageToCloudinary(file)
       setPendingImages(prev => [...prev, url]) // stage it — nothing is sent until you hit Send
+      trackEvent('image_uploaded', { kind: 'chat', surface: 'inbox', failed: false })
     } catch (err) {
       console.error('Photo upload failed:', err)
+      trackEvent('image_uploaded', { kind: 'chat', surface: 'inbox', failed: true })
       showFeedback(notify.messageFailed, 'error')
     } finally {
       setUploadingImage(false)

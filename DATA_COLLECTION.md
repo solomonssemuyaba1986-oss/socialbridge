@@ -33,7 +33,7 @@
 | Store | Contents |
 |---|---|
 | **Firebase Auth** | Seller + buyer + anonymous accounts |
-| **Firestore** | `sellers/{uid}` (+ `products`, `orders`, `messages`, `visits`, `stats`) · `users/{uid}` (+ `bag`) · `conversations/{id}` (+ `messages`) · `events` · `bagCounts/{productId}` (+ `baggers`) · `feedback` · `recoveries` |
+| **Firestore** | `sellers/{uid}` (+ `products`, `orders`, `messages`, `visits`, `stats`) · `users/{uid}` (+ `bag`) · `conversations/{id}` (+ `messages`) · `events` (**two shapes** — legacy single events, and `schemaVersion: 2` batches; see §13) · `bagCounts/{productId}` (+ `baggers`) · `feedback` · `recoveries` |
 | **Firebase Storage** | Nothing new: National ID capture is switched off ("coming soon"), so no new files are written. IDs uploaded before this change are still at `sellers/{uid}/private/national-id.{ext}` — readable **only** by that seller (`storage.rules:11-14`). |
 | **Cloudinary** | Store logos, product photos, chat photos |
 | **OTP server** (`server/index.js`) | Phone numbers + OTP codes — **RAM only**, deleted on expiry (2 min) or restart |
@@ -184,6 +184,11 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 | `rachett_pending_action` (session) | The Buy/Message a guest was blocked on, so signing in returns them to it; expires after 15 min (`signInGate.ts`) | `signInGate.ts` |
 | `rachett_draft_*` | Unsent message drafts per thread/product | `useDraft.ts:3` |
 | `rachett_recent_searches_{uid}` | Last N searches | `BrowsePage.tsx:362-390` |
+| `rachett_analytics_anon_id` | **Device id for analytics** — an opaque `anon_…` string, so a signed-out visitor can still be followed through a funnel. No personal data. | `analytics/identity.ts` |
+| `rachett_analytics_session` (session) | Session id + timestamps; rotates after 30 minutes of silence | `analytics/identity.ts` |
+| `rachett_analytics_first_touch` | The channel + landing URL of the very first visit on this device, written once | `analytics/identity.ts` |
+| `rachett_analytics_queue` | Unsent events (≤200) waiting for the network; cleared as soon as they're sent | `analytics/client.ts` |
+| `rachett_analytics_off` | `'1'` = this visitor opted out of analytics; every writer checks it | `analytics/client.ts` |
 | `rachett_welcomed` (session) | Greeting shown flag | `Dashboard.tsx:64` |
 | `rachett_skip_next_order_alert` (session) | Seller self-order test flag | `orderAlerts.ts:1` |
 
@@ -209,7 +214,11 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 - Payment instruments, card/mobile-money details, payment statuses (no provider is wired).
 - Push notification tokens.
 - Buyer GPS coordinates in the database (device-only) — orders carry a free-text `deliveryArea`.
-- Impressions, dwell time, scroll depth, "not interested" signals.
+- Dwell time, scroll depth, "not interested" signals, session recording, heatmaps.
+  (Product **impressions** *are* recorded now — see §13 — against a device-level
+  anonymous id, never against a name.)
+- Anything about a person we don't need: no ad-network identifiers, no IP logged
+  by us, no third-party analytics or pixels anywhere in `index.html`.
 - Ratings/reviews (see gap 1 below).
 - **National IDs, passports, selfies or any other identity document.** Capture was removed on 15 Sep 2026 — SetupStore and EditStore now show a "COMING SOON" note where the upload used to be, so nothing is asked for and nothing is stored. It comes back only when there is a way to actually review it.
 
@@ -219,7 +228,7 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 
 1. **No reviews/ratings exist.** `avgRating` / `reviewCount` are read in `useSellerStats` but nothing ever writes a review → no preference signal, no trust signal.
 2. **`price` and `quantity` are strings** everywhere; there is no `currency` field (UGX appears only in UI copy). Must be normalised before any pricing model.
-3. **`userId: 'guest'`** collapses every unauthenticated visitor into one entity, and events carry **no sessionId, device, locale or app version** → no cross-session funnels for guests.
+3. **`userId: 'guest'`** collapsed every unauthenticated visitor into one entity in the **legacy** event documents. Events written from 16 Sep 2026 onward (`schemaVersion: 2`) carry a `sessionId`, a device `anonymousId`, the app version, language, timezone, screen size and the landing channel — so guests are now followable through a funnel. Old documents still can't be separated, and the report shows that split under DATA HEALTH.
 4. **Click-level only.** `product_viewed` fires on tap (not on render); the only richer interaction signal is the double-tap survey.
 5. **Search is captured only on Enter, only in Browse** — no zero-result or misspelling tracking, nothing from Nearby or Store.
 6. **Orders lack buyer identity for signed-in buyers** (no email/phone), and `deliveryArea` is free text, never geocoded.
@@ -335,6 +344,46 @@ npm run deploy:indexes      # firebase deploy --only firestore:indexes
 ```
 
 Until it's deployed, Browse catches the query error and falls back to the old per-store reads (a batch of 10 stores a page), so the page still works — the console prints the reminder. Build takes a few minutes after the first deploy.
+
+---
+
+## 13. Event tracking (journey analytics)
+
+The `events` collection is rachett's event lake. It is **write-only to clients**
+(`firestore.rules:68-71` — anyone may create, nobody may read), so it can only be
+read through the report script or the console.
+
+**Two shapes live in it side by side:**
+
+| Shape | Written | Carries |
+|---|---|---|
+| Legacy single event | before 16 Sep 2026 | `event`, `userId` (`'guest'` or a uid), `sourcePlatform`, `data{}`, `createdAt` |
+| Batch (`schemaVersion: 2`) | from 16 Sep 2026 | up to 25 events, plus `sessionId`, `anonymousId`, `userId`, `role`, `appVersion`, `firstTouch{source,referrer,landing,at}`, `platform{ua,lang,tz,screen,standalone}`, `clientAt`, `sentAt`, `expireAt` |
+
+**What changed for privacy, in both directions:**
+
+- **Better:** no message text, names, phone numbers, emails or addresses are ever
+  put in an event — only ids, counts, categories, money strings and flags. The
+  taxonomy (`src/analytics/taxonomy.ts`) *drops* any property an event isn't
+  allowed to carry, so the schema can't drift.
+- **More:** guests are no longer an indistinguishable `'guest'` blob — they have a
+  device-level `anonymousId`, a 30-minute `sessionId`, a browser user-agent,
+  language, timezone and screen size. That is what makes funnels possible, and it
+  is deliberately **device-scoped, not personal**.
+- **Off by choice:** `localStorage.rachett_analytics_off = '1'` (`setAnalyticsOptOut`)
+  stops every writer; nothing is queued or sent. There is no UI toggle yet.
+- **Bounded:** the offline queue holds at most 200 events; batches are ≤25 events
+  or 900 KB. `expireAt` is written 400 days out, and nothing is deleted until you
+  set a TTL policy on that field (see ANALYTICS.md → Retention).
+
+**Where the detail lives:** `ANALYTICS.md` — the full 63-event taxonomy, what each
+property means, which events are wired today, and how to run
+`npm run analytics:report`.
+
+**Not collected, ever (unchanged):** identity documents, payment instruments,
+message text in events, buyer GPS in the database, push tokens, and any
+third-party analytics or tracking pixel.
+
 
 
 

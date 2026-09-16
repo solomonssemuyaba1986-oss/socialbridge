@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { onAuthStateChanged, getRedirectResult } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
+import { normalizeRoute, pageView } from './analytics'
 import { rememberUser } from './userMemory'
 import StorePage from './StorePage.tsx'
 import SignIn from './SignIn.tsx'
@@ -82,6 +83,15 @@ function App() {
     })
     return () => unsubscribe()
   }, [])
+
+  /**
+   * Journey analytics: each route change becomes a `page_viewed` event
+   * (`/store/aisha-fabrics` → `/store/:slug`, so routes stay groupable), and the
+   * route stamp stays fresh for every event that follows on that page.
+   */
+  useEffect(() => {
+    pageView(normalizeRoute(location.pathname))
+  }, [location.pathname])
 
   if (showSplash) {
     return <Splash onDone={() => setShowSplash(false)} />

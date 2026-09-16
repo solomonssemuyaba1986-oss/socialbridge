@@ -2,7 +2,8 @@ import { useState, useRef, useEffect, type ChangeEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { collection, getDocs, query, where, doc, onSnapshot } from 'firebase/firestore'
 import { db, auth } from './firebase'
-import { track, detectSource } from './tracking'
+import { detectSource } from './tracking'
+import { trackEvent } from './analytics'
 import { useBag } from './useBag'
 import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder'
 import { useDraft } from './useDraft'
@@ -164,9 +165,38 @@ function BagPage() {
     return ''
   }
 
+  /**
+   * The bag is our only "save": one `bag_opened` per visit, and `bag_abandoned`
+   * if they leave with items still in it — the clearest lost-intent signal we have.
+   */
+  const bagOpenedRef = useRef(false)
+  const bagSizeRef = useRef(0)
+  /** Set inside the mount effect — `Date.now()` must not run during render. */
+  const bagOpenedAtRef = useRef(0)
+  useEffect(() => {
+    bagSizeRef.current = items.length
+  }, [items.length])
+  useEffect(() => {
+    if (bagOpenedRef.current) return
+    bagOpenedRef.current = true
+    bagOpenedAtRef.current = Date.now()
+    trackEvent('bag_opened', { size: items.length })
+  }, [items.length])
+  useEffect(() => {
+    return () => {
+      if (bagSizeRef.current === 0) return
+      const openedAt = bagOpenedAtRef.current || Date.now()
+      trackEvent('bag_abandoned', {
+        size: bagSizeRef.current,
+        idleMinutes: Math.max(0, Math.round((Date.now() - openedAt) / 60000)),
+      })
+    }
+  }, [])
+
   const openOrder = async (item: typeof items[number]) => {
     const sid = await resolveSellerId(item.sellerSlug, item.sellerId)
     if (!sid) { alert('Could not find this seller. They may have closed their store.'); return }
+    trackEvent('checkout_started', { size: items.length })
     setOrderTarget(toTarget(item))
     setBuyerName('')
     setOrderQty('1')
@@ -234,7 +264,15 @@ function BagPage() {
         quantity: orderQty,
       })
       await incrementProductOrderCount(orderTarget.sellerId, orderTarget.id, orderTarget.orderCount || 0)
-      track('order_placed', auth.currentUser.uid, sourcePlatform, { productId: orderTarget.id, productName: orderTarget.name, sellerId: orderTarget.sellerId })
+      trackEvent('order_placed', {
+        productId: orderTarget.id,
+        sellerId: orderTarget.sellerId,
+        price: orderTarget.price,
+        quantity: orderQty,
+        bagSize: items.length,
+        channel: sourcePlatform,
+        surface: 'bag',
+      })
       setOrderSuccess(true)
       setTimeout(() => {
         setOrderTarget(null)
@@ -300,7 +338,14 @@ function BagPage() {
           productImage: messageTarget.imageUrl
         }
       )
-      track('message_sent', auth.currentUser.uid, detectSource(), { productId: messageTarget.id, productName: messageTarget.name, sellerId: messageTarget.sellerId })
+      trackEvent('message_sent', {
+        productId: messageTarget.id,
+        sellerId: messageTarget.sellerId,
+        hasPhoto: Boolean(guestImageUrl),
+        length: messageText.trim().length,
+        surface: 'bag',
+        channel: detectSource(),
+      })
       clearMsgDraft()
       closeMessageModal()
       alert('Message sent! The seller will reply soon.')
@@ -329,7 +374,7 @@ function BagPage() {
       <div style={{ maxWidth: '640px', margin: '0 auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <h1 style={{ margin: 0, fontSize: '22px', fontWeight: '800' }}>🛍️ Your Bag ({count})</h1>
-          <button onClick={clearBag}
+          <button onClick={() => { trackEvent('bag_cleared', { size: items.length }); clearBag() }}
             style={{ padding: '8px 16px', background: 'transparent', color: '#888', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
             Clear All
           </button>
@@ -371,10 +416,10 @@ function BagPage() {
                   {!isMissing && (
                     <>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#0f0f0f', borderRadius: '8px', padding: '2px' }}>
-                        <button onClick={() => setQuantity(item.productId, item.quantity - 1)}
+                        <button onClick={() => { trackEvent('bag_quantity_changed', { productId: item.productId, from: item.quantity, to: Math.max(1, item.quantity - 1) }); setQuantity(item.productId, item.quantity - 1) }}
                           style={{ width: '28px', height: '28px', background: '#222', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
                         <span style={{ width: '28px', textAlign: 'center', fontSize: '13px', fontWeight: '700', color: '#fff' }}>{item.quantity}</span>
-                        <button onClick={() => setQuantity(item.productId, item.quantity + 1)}
+                        <button onClick={() => { trackEvent('bag_quantity_changed', { productId: item.productId, from: item.quantity, to: item.quantity + 1 }); setQuantity(item.productId, item.quantity + 1) }}
                           style={{ width: '28px', height: '28px', background: '#222', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
                       </div>
                       <button onClick={() => openMessage(item)}
@@ -387,7 +432,7 @@ function BagPage() {
                       </button>
                     </>
                   )}
-                  <button onClick={() => removeFromBag(item.productId)}
+                  <button onClick={() => { trackEvent('bag_removed', { productId: item.productId, sellerId: item.sellerId, price: item.productPrice, surface: 'bag', bagSize: Math.max(0, items.length - 1) }); removeFromBag(item.productId) }}
                     style={{ padding: '6px 12px', background: isMissing ? '#2a1515' : 'transparent', color: isMissing ? '#ff6b6b' : '#888', border: isMissing ? '1px solid #ff6b6b' : '1px solid #333', borderRadius: '8px', cursor: 'pointer', fontSize: '11px', whiteSpace: 'nowrap', fontWeight: isMissing ? 700 : 400 }}>
                     Remove{isMissing ? ' item' : ''}
                   </button>

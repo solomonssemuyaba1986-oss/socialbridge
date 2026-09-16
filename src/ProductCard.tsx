@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { formatBagCount, green, productImages, type CardProduct } from './productCardUtils'
+import { useImpression } from './analytics/useImpression'
 
 type Props = {
   p: CardProduct
@@ -8,6 +9,8 @@ type Props = {
   inBag: boolean
   bagged: number
   isMine?: boolean
+  /** Which page this card is on — stamped on impressions and taps. */
+  surface?: string
   onOpen: () => void
   onPreview: () => void
   onToggleBag: () => void
@@ -26,12 +29,16 @@ function ProductCard({
   inBag,
   bagged,
   isMine,
+  surface = 'nearby',
   onOpen,
   onPreview,
   onToggleBag,
   onMessage,
   onOrder,
 }: Props) {
+  // Counts one `product_impression` the moment this card is half on screen.
+  const cardRef = useRef<HTMLDivElement | null>(null)
+  useImpression(cardRef, { productId: p.id, sellerId: p.sellerId }, { surface })
   const [imgIndex, setImgIndex] = useState(0)
   const swipeStart = useRef<{ x: number; y: number } | null>(null)
   const suppressClick = useRef(false)
@@ -55,6 +62,7 @@ function ProductCard({
 
   return (
     <div
+      ref={cardRef}
       style={{
         background: '#1a1a1a',
         borderRadius: '12px',

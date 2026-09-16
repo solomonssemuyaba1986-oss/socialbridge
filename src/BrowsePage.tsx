@@ -3,7 +3,9 @@ import { collection, getDocs, doc, getDoc } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebase'
 import { useNavigate } from 'react-router-dom'
-import { track, detectSource } from './tracking'
+import { detectSource } from './tracking'
+import { trackEvent } from './analytics'
+import { IMPRESSION_ATTR, IMPRESSION_SELLER_ATTR, observeImpressions } from './analytics/impressions'
 import { useBag, getBagCounts, type BagCountData } from './useBag'
 import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder'
 import QuickRepliesPanel from './QuickRepliesPanel'
@@ -137,15 +139,47 @@ function BrowsePage() {
     getBagCounts(ids).then(setBagCounts)
   }, [filtered])
 
+  /** The grid Browse renders itself — impressions are read from the DOM (no refactor). */
+  const productsGridRef = useRef<HTMLDivElement | null>(null)
+
+  /** One `browse_viewed` per visit, fired once the first page of the feed is in. */
+  const browseSeen = useRef(false)
+  useEffect(() => {
+    if (browseSeen.current || products.length === 0) return
+    browseSeen.current = true
+    trackEvent('browse_viewed', { category: activeCategory, storeCount: stores.length })
+  }, [products.length, activeCategory, stores.length])
+
+  /** Every page of the feed (24 items) is its own step in the journey. */
+  const feedPageRef = useRef({ page: 0, count: 0 })
+  useEffect(() => {
+    if (products.length <= feedPageRef.current.count) return
+    feedPageRef.current = { page: feedPageRef.current.page + 1, count: products.length }
+    trackEvent('feed_page_loaded', { page: feedPageRef.current.page, count: products.length })
+  }, [products.length])
+
+  /** Impressions for the cards currently rendered in the products grid. */
+  useEffect(() => observeImpressions(productsGridRef.current, 'browse'), [filtered])
+
+  /** Typing a search away is the end of that attempt — worth knowing. */
+  const hadQueryRef = useRef(false)
+  useEffect(() => {
+    const has = search.trim().length > 0
+    if (hadQueryRef.current && !has) trackEvent('search_cleared', { surface: 'browse', hadQuery: true })
+    hadQueryRef.current = has
+  }, [search])
+
   const handleToggleBag = (p: Product) => {
     if (isInBag(p.id)) {
       removeFromBag(p.id)
+      trackEvent('bag_removed', { productId: p.id, sellerId: p.sellerId, price: p.price, surface: 'browse', bagSize: Math.max(0, bagCount - 1) })
       setBagCounts(prev => ({
         ...prev,
         [p.id]: { count: Math.max(0, (prev[p.id]?.count || 0) - 1), baggedCount: prev[p.id]?.baggedCount || 0 },
       }))
     } else {
       addToBag({ productId: p.id, productName: p.name, productPrice: p.price, imageUrl: p.imageUrl, images: p.images?.length ? p.images : (p.imageUrl ? [p.imageUrl] : []), sellerSlug: p.sellerSlug, sellerId: p.sellerId, businessName: p.businessName })
+      trackEvent('bag_added', { productId: p.id, sellerId: p.sellerId, price: p.price, surface: 'browse', bagSize: bagCount + 1 })
       setBagCounts(prev => ({
         ...prev,
         [p.id]: { count: (prev[p.id]?.count || 0) + 1, baggedCount: (prev[p.id]?.baggedCount || 0) + 1 },
@@ -167,13 +201,13 @@ function BrowsePage() {
       clickTimerRef.current = null
       setSurveyImageIndex(0)
       setSurveyProduct(p)
-      track('product_surveyed', userId, detectSource(), { productId: p.id, productName: p.name, sellerSlug: p.sellerSlug })
+      trackEvent('product_surveyed', { productId: p.id, sellerId: p.sellerId, sellerSlug: p.sellerSlug, surface: 'browse' })
       return
     }
     // First tap → wait for possible second tap
     clickTimerRef.current = window.setTimeout(() => {
       clickTimerRef.current = null
-      track('product_viewed', userId, detectSource(), { productId: p.id, productName: p.name, sellerSlug: p.sellerSlug })
+      trackEvent('product_viewed', { productId: p.id, sellerId: p.sellerId, sellerSlug: p.sellerSlug, surface: 'browse', category: p.category })
       navigate(`/store/${p.sellerSlug}`)
     }, 250)
   }
@@ -283,7 +317,15 @@ function BrowsePage() {
         quantity,
       })
       await incrementProductOrderCount(orderProduct.sellerId, orderProduct.id, orderProduct.orderCount || 0)
-      track('order_placed', auth.currentUser.uid, sourcePlatform, { productId: orderProduct.id, productName: orderProduct.name, sellerId: orderProduct.sellerId })
+      trackEvent('order_placed', {
+        productId: orderProduct.id,
+        sellerId: orderProduct.sellerId,
+        price: orderProduct.price,
+        quantity,
+        bagSize: bagCount,
+        channel: sourcePlatform,
+        surface: 'browse',
+      })
       setOrderSuccess(true)
       setTimeout(() => {
         setBuyerName('')
@@ -333,7 +375,14 @@ function BrowsePage() {
           productImage: messageProduct.imageUrl
         }
       )
-      track('message_sent', auth.currentUser.uid, detectSource(), { productId: messageProduct.id, productName: messageProduct.name, sellerId: messageProduct.sellerId })
+      trackEvent('message_sent', {
+        productId: messageProduct.id,
+        sellerId: messageProduct.sellerId,
+        hasPhoto: Boolean(guestImageUrl),
+        length: messageText.trim().length,
+        surface: 'browse',
+        channel: detectSource(),
+      })
       clearMsgDraft()
       setShowQuickReplies(false)
       setMessageProduct(null)
@@ -413,7 +462,14 @@ function BrowsePage() {
   const handleSearchKeyDown = (e: { key: string }) => {
     if (e.key === 'Enter') {
       saveRecentSearch(search)
-      track('search_performed', userId || null, detectSource(), { query: search.trim() })
+      trackEvent('search_performed', {
+        query: search.trim(),
+        surface: 'browse',
+        resultCount: filtered.length,
+        zeroResult: filtered.length === 0,
+        category: activeCategory,
+        sortBy,
+      })
     }
   }
 
@@ -678,7 +734,11 @@ function BrowsePage() {
       <div style={{ padding: '16px 24px', borderBottom: '1px solid #1a1a1a', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', fontSize: '13px' }}>
         <select
           value={sortBy}
-          onChange={e => setSortBy(e.target.value as typeof sortBy)}
+          onChange={e => {
+            const next = e.target.value as typeof sortBy
+            setSortBy(next)
+            trackEvent('sort_changed', { sortBy: next, surface: 'browse' })
+          }}
           style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #333', background: '#1a1a1a', color: '#fff', cursor: 'pointer', fontSize: '13px' }}>
           <option value="relevance">Sort: Relevance</option>
           <option value="price-asc">Sort: Price (Low → High)</option>
@@ -734,7 +794,7 @@ function BrowsePage() {
       </select>
         <div className="rt-filters" style={{ padding: '20px 24px', borderBottom: '1px solid #1a1a1a', display: 'flex', gap: '8px', overflowX: 'auto' }}>
         {categories.map(cat => (
-          <button key={cat} onClick={() => { track('category_browsed', userId || null, detectSource(), { category: cat }); setActiveCategory(cat) }}
+          <button key={cat} onClick={() => { trackEvent('category_browsed', { category: cat }); setActiveCategory(cat) }}
             style={{ padding: '8px 18px', borderRadius: '20px', border: `1px solid ${activeCategory === cat ? green : '#333'}`, background: activeCategory === cat ? green : 'transparent', color: activeCategory === cat ? '#000' : '#aaa', fontWeight: activeCategory === cat ? '700' : '500', cursor: 'pointer', fontSize: '14px', whiteSpace: 'nowrap' }}>
             {cat}
           </button>
@@ -809,9 +869,9 @@ function BrowsePage() {
             <p style={{ color: '#555', fontSize: '13px', marginBottom: '20px' }}>
               Showing {filtered.length} product{filtered.length === 1 ? '' : 's'} · newest first
             </p>
-            <div className="rt-products" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
+            <div ref={productsGridRef} className="rt-products" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
                             {filtered.map(p => (
-                <div key={p.id}
+                <div key={p.id} {...{ [IMPRESSION_ATTR]: p.id, [IMPRESSION_SELLER_ATTR]: p.sellerId }}
                   style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222', position: 'relative', display: 'flex', flexDirection: 'column' }}>
                   <div onClick={() => handleCardClick(p)} style={{ cursor: 'pointer', position: 'relative' }}>
                     {p.sellerSlug === mySlug && mySlug && (<div style={{ position: 'absolute', top: '6px', left: '6px', background: green, color: '#000', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: '800', zIndex: 2 }}>Yours</div>)}

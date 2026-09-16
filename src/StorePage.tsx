@@ -18,7 +18,8 @@ import { consumePendingAction } from './signInGate'
 import { haversineKm } from './geo'
 import { formatDistance, isApproximatePin, type GeoSource, type Place } from './place'
 import { useBuyerLocation } from './useBuyerLocation'
-import { track } from './tracking'
+import { trackEvent, detectPlatform } from './analytics'
+import { useImpression } from './analytics/useImpression'
 import { uploadImageToCloudinary } from './uploadImage'
 import ConfirmDialog from './ConfirmDialog'
 import ProductPreview from './ProductPreview'
@@ -74,30 +75,6 @@ function formatCount(n: number) {
 const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'dzudmmuxg'
 const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'p2z65zrv'
 
-function detectPlatform(searchParams: URLSearchParams) {
-  const rawSource = (searchParams.get('source') || searchParams.get('utm_source') || '').toLowerCase()
-  const referrer = typeof document !== 'undefined' ? document.referrer.toLowerCase() : ''
-
-  if (rawSource.includes('whatsapp')) return 'WhatsApp'
-  if (rawSource.includes('instagram')) return 'Instagram'
-  if (rawSource.includes('tiktok')) return 'TikTok'
-  if (rawSource.includes('telegram')) return 'Telegram'
-  if (rawSource.includes('twitter')) return 'Twitter'
-  if (rawSource.includes('facebook')) return 'Facebook'
-  if (rawSource.includes('email')) return 'Email'
-  if (rawSource.includes('web')) return 'Web'
-
-  if (referrer.includes('whatsapp') || referrer.includes('wa.me') || referrer.includes('api.whatsapp.com')) return 'WhatsApp'
-  if (referrer.includes('instagram.com')) return 'Instagram'
-  if (referrer.includes('tiktok.com')) return 'TikTok'
-  if (referrer.includes('telegram.me') || referrer.includes('t.me')) return 'Telegram'
-  if (referrer.includes('twitter.com')) return 'Twitter'
-  if (referrer.includes('facebook.com')) return 'Facebook'
-  if (referrer.includes('mail.google.com') || referrer.includes('outlook.live.com') || referrer.includes('mail.yahoo.com')) return 'Email'
-
-  return 'Web'
-}
-
 function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onRefresh, onPreview, inBag, bagged, sold, onToggleBag }: any) {
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(p.name)
@@ -107,6 +84,9 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onRefresh, onPr
   const [uploadingEdit, setUploadingEdit] = useState(false)
   const [isOutOfStock, setIsOutOfStock] = useState(p.outOfStock || false)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  // One `product_impression` per product per session, once the card is half on screen.
+  const cardRef = useRef<HTMLDivElement | null>(null)
+  useImpression(cardRef, { productId: p.id, sellerId }, { surface: 'store' })
 
   const images = p.images?.length > 0 ? p.images : [p.imageUrl].filter(Boolean)
 
@@ -187,7 +167,7 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onRefresh, onPr
   }
 
   return (
-    <div style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: `1px solid ${isOutOfStock ? '#333' : '#222'}`, position: 'relative', opacity: isOutOfStock && !isOwner ? 0.7 : 1 }}>
+    <div ref={cardRef} style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: `1px solid ${isOutOfStock ? '#333' : '#222'}`, position: 'relative', opacity: isOutOfStock && !isOwner ? 0.7 : 1 }}>
 
       {/* Out of Stock Badge */}
       {isOutOfStock && (
@@ -431,7 +411,7 @@ const messageDeepLinkId = searchParams.get('messageId')
               sourcePlatform: platform,
               createdAt: new Date(),
             }).catch(() => {}) // fire-and-forget
-            track('store_visited', auth.currentUser?.uid || null, platform, { sellerSlug: slug })
+            trackEvent('store_visited', { sellerId: docData.id, slug, channel: platform })
           }
           await fetchProducts(docData.id)
           const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -509,12 +489,14 @@ const messageDeepLinkId = searchParams.get('messageId')
   const handleToggleBag = (p: Product) => {
     if (isInBag(p.id)) {
       removeFromBag(p.id)
+      trackEvent('bag_removed', { productId: p.id, sellerId, price: p.price, surface: 'store', bagSize: Math.max(0, bagCount - 1) })
       setBagCounts(prev => ({
         ...prev,
         [p.id]: { count: Math.max(0, (prev[p.id]?.count || 0) - 1), baggedCount: prev[p.id]?.baggedCount || 0 },
       }))
     } else {
       addToBag({ productId: p.id, productName: p.name, productPrice: p.price, imageUrl: p.imageUrl, images: p.images?.length ? p.images : (p.imageUrl ? [p.imageUrl] : []), sellerSlug: seller?.slug || '', sellerId, businessName: seller?.businessName || '' })
+      trackEvent('bag_added', { productId: p.id, sellerId, price: p.price, surface: 'store', bagSize: bagCount + 1 })
       setBagCounts(prev => ({
         ...prev,
         [p.id]: { count: (prev[p.id]?.count || 0) + 1, baggedCount: (prev[p.id]?.baggedCount || 0) + 1 },
@@ -628,7 +610,14 @@ const handleOrder = async () => {
     })
 
     await incrementProductOrderCount(sellerId, orderProduct.id, orderProduct.orderCount || 0)
-    track('order_placed', auth.currentUser?.uid || null, sourcePlatform, { productId: orderProduct.id, productName: orderProduct.name, sellerId })
+    trackEvent('order_placed', {
+      productId: orderProduct.id,
+      sellerId,
+      price: orderProduct.price,
+      quantity,
+      channel: sourcePlatform,
+      surface: 'store',
+    })
 
     if (auth.currentUser?.uid === sellerId) {
       suppressNextSellerOrderAlert()
@@ -680,7 +669,14 @@ const handleSendMessage = async () => {
       guestImageUrl ? { imageUrl: guestImageUrl, type: 'image' } : undefined
     )
     console.log('Message sent')
-    track('message_sent', auth.currentUser?.uid || null, detectPlatform(searchParams), { productId: messageProduct.id, productName: messageProduct.name, sellerId })
+    trackEvent('message_sent', {
+      productId: messageProduct.id,
+      sellerId,
+      hasPhoto: Boolean(guestImageUrl),
+      length: messageText.trim().length,
+      surface: 'store',
+      channel: detectPlatform(searchParams),
+    })
     clearMsgDraft()
     setShowQuickReplies(false)
     setMessageProduct(null)

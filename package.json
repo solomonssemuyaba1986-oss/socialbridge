@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "otp": "node server/index.js",
     "export:training": "node functions/export-training-data.js",
+    "analytics:report": "node functions/analytics-report.js",
     "deploy:rules": "firebase deploy --only firestore:rules",
     "deploy:indexes": "firebase deploy --only firestore:indexes"
   },

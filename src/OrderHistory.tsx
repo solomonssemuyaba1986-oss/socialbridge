@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useSellerOrders, type SellerOrder } from './useSellerOrders.ts'
 import { updateDoc, doc, deleteDoc, increment } from 'firebase/firestore'
 import { db } from './firebase'
+import { trackEvent } from './analytics'
 import ConfirmDialog from './ConfirmDialog'
 import Sidebar from './Sidebar'
 
@@ -56,6 +57,17 @@ function OrderHistory() {
       console.error('Failed to update order status:', err)
       return
     }
+    // How long the buyer waited, and what the seller did — the core of seller
+    // fulfilment behaviour. (`fulfilled` is our confirmation; there is no
+    // separate delivered/completed step yet, so nothing is invented here.)
+    const placedAt = order?.createdAt?.toDate ? order.createdAt.toDate().getTime() : 0
+    trackEvent('order_status_changed', {
+      orderId,
+      from: order?.status || 'pending',
+      to: status,
+      latencyMinutes: placedAt ? Math.max(0, Math.round((Date.now() - placedAt) / 60000)) : undefined,
+      productId: order?.productId,
+    })
     // A real sale only when an order FIRST becomes fulfilled — never on repeats.
     if (!wasFulfilled && status === 'fulfilled' && order?.productId) {
       try {
@@ -70,6 +82,7 @@ function OrderHistory() {
     if (!userId || !deleteTarget) return
     try {
       await deleteDoc(doc(db, 'sellers', userId, 'orders', deleteTarget.id))
+      trackEvent('order_deleted', { orderId: deleteTarget.id, status: deleteTarget.status })
     } catch (err) {
       console.error('Delete order failed:', err)
       alert('Could not delete this order. Try again.')
@@ -159,7 +172,11 @@ function OrderHistory() {
                 return (
                   <div key={o.id}>
                     <div
-                      onClick={() => setSelectedId(isSelected ? null : o.id)}
+                      onClick={() => {
+                        const opening = !isSelected
+                        setSelectedId(opening ? o.id : null)
+                        if (opening) trackEvent('order_viewed', { orderId: o.id, status: o.status })
+                      }}
                       style={{
                         background: isSelected ? '#1a2a1a' : '#1a1a1a',
                         borderRadius: isSelected && selected ? '12px 12px 0 0' : '12px',

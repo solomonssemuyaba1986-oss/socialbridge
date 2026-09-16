@@ -10,7 +10,8 @@ import { useDraft } from './useDraft'
 import { uploadImageToCloudinary } from './uploadImage'
 import { sendConversationMessage } from './useConversation'
 import { notify } from './notifications'
-import { detectSource, track } from './tracking'
+import { detectSource } from './tracking'
+import { trackEvent } from './analytics'
 import { requireSignIn } from './signInGate'
 import SignInPrompt from './SignInPrompt'
 import QuickRepliesPanel from './QuickRepliesPanel'
@@ -21,6 +22,8 @@ type Props = {
   messageProduct: CardProduct | null
   onCloseOrder: () => void
   onCloseMessage: () => void
+  /** Which page opened these modals — stamped on order/message events. */
+  surface?: string
 }
 
 /**
@@ -33,6 +36,7 @@ export default function ProductActions({
   messageProduct,
   onCloseOrder,
   onCloseMessage,
+  surface = 'nearby',
 }: Props) {
   const navigate = useNavigate()
   const [buyerName, setBuyerName] = useState('')
@@ -111,10 +115,13 @@ export default function ProductActions({
         quantity,
       })
       await incrementProductOrderCount(orderProduct.sellerId, orderProduct.id, orderProduct.orderCount || 0)
-      track('order_placed', auth.currentUser.uid, sourcePlatform, {
+      trackEvent('order_placed', {
         productId: orderProduct.id,
-        productName: orderProduct.name,
         sellerId: orderProduct.sellerId,
+        price: orderProduct.price,
+        quantity,
+        channel: sourcePlatform,
+        surface,
       })
       setOrderSuccess(true)
       setTimeout(() => {
@@ -167,10 +174,13 @@ export default function ProductActions({
           productImage: messageProduct.imageUrl,
         },
       )
-      track('message_sent', auth.currentUser.uid, detectSource(), {
+      trackEvent('message_sent', {
         productId: messageProduct.id,
-        productName: messageProduct.name,
         sellerId: messageProduct.sellerId,
+        hasPhoto: Boolean(photoUrl),
+        length: messageText.trim().length,
+        surface,
+        channel: detectSource(),
       })
       clearMsgDraft()
       closeMessageModal()

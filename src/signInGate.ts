@@ -1,4 +1,5 @@
 import type { NavigateFunction } from 'react-router-dom'
+import { trackEvent } from './analytics'
 
 /**
  * "Sign in first, then finish what you were doing."
@@ -66,6 +67,9 @@ export function clearPendingIntent(): void {
  */
 export function requireSignIn(navigate: NavigateFunction, intent: PendingIntent): void {
   setPendingIntent(intent)
+  // The wall is the single biggest drop-off in the app: the action that hit it,
+  // and whether the person came back to it, are both tracked.
+  trackEvent('signin_wall_shown', { action: intent.action, surface: intent.returnTo })
   navigate('/signin', { state: { returnTo: intent.returnTo, pendingAction: intent.action } })
 }
 
@@ -89,5 +93,6 @@ export function consumePendingAction<T extends { id: string }>(
   if (!product) return
   if (pending.action === 'order') open.order(product)
   else open.message(product)
+  trackEvent('signin_wall_passed', { action: pending.action, surface: pending.returnTo, method: 'resumed' })
   clearPendingIntent()
 }
