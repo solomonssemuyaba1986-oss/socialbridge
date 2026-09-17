@@ -7,6 +7,7 @@ import { useSellerOrders } from './useSellerOrders'
 import { notify } from './notifications'
 import LoadingScreen from './LoadingScreen'
 import Sidebar from './Sidebar'
+import { getStoreAgeLabel } from './useSellerStats'
 import { resolveSellerLocation, type GeoSource, type Place } from './place'
 
 interface Seller {
@@ -23,6 +24,8 @@ interface Seller {
   recoveryEmailVerified?: boolean
   recoveryEmailPromptCount?: number
   recoveryEmailLastPrompted?: any
+  /** Set when the store was created — shown as "Selling since …" (trust signal). */
+  createdAt?: unknown
 }
 
 interface Product {
@@ -48,6 +51,16 @@ function Dashboard() {
     return null
   })()
   const [seller, setSeller] = useState<Seller | null>(initialCache?.seller || null)
+  /** "Selling since Mar 2026" — derived from the stored createdAt, never invented. */
+  const [storeAge, setStoreAge] = useState('')
+
+  // Derive it whenever the seller doc (or the cached copy) changes. Declared here,
+  // above the loading guard, so the hook order never changes.
+  useEffect(() => {
+    if (!seller) return
+    const timer = window.setTimeout(() => setStoreAge(getStoreAgeLabel(seller.createdAt)), 0)
+    return () => window.clearTimeout(timer)
+  }, [seller])
   const [products, setProducts] = useState<Product[]>(initialCache?.products || [])
   const [loading, setLoading] = useState(!initialCache)
   const [userId, setUserId] = useState<string>('')
@@ -191,7 +204,6 @@ function Dashboard() {
   )
 
   const storeLink = `${window.location.origin}/store/${seller.slug}`
-
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', display: 'flex' }}>
       {/* Spotlight dark overlay */}
@@ -224,9 +236,23 @@ function Dashboard() {
               style={{ display: 'none', padding: '10px 12px', borderRadius: '12px', border: '1px solid #333', background: '#111', color: '#fff', cursor: 'pointer', fontSize: '16px' }}>
               ☰
             </button>
-            <div>
-              <div style={{ fontSize: '20px', fontWeight: 800 }}>Seller Dashboard</div>
-              <div style={{ fontSize: '13px', color: '#888' }}>Manage products, orders, inbox and growth.</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                {seller?.logoUrl ? (
+                  <img src={seller.logoUrl} alt={seller.businessName || ''}
+                    style={{ width: 30, height: 30, borderRadius: 10, objectFit: 'cover', border: '1px solid #222', flexShrink: 0 }} />
+                ) : (
+                  <span style={{ width: 30, height: 30, borderRadius: 10, background: green, color: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, flexShrink: 0 }}>
+                    {(seller?.businessName || 'Y').charAt(0).toUpperCase()}
+                  </span>
+                )}
+                <span style={{ fontSize: '20px', fontWeight: 800, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {seller?.businessName || 'Your store'}
+                </span>
+              </div>
+              <div style={{ fontSize: '13px', color: '#888' }}>
+                {storeAge ? `${storeAge} · ` : ''}Manage products, orders, inbox and growth.
+              </div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>

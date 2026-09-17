@@ -13,6 +13,32 @@ function NetworkGuard() {
   const { online, refresh } = useOnlineStatus()
   const wasOfflineRef = useRef(false)
   const [showBackOnline, setShowBackOnline] = useState(false)
+  /** The blocking screen waits for a *confirmed* offline state (see the effect). */
+  const [confirmedOffline, setConfirmedOffline] = useState(false)
+
+  /**
+   * Never accuse someone of being offline on the strength of one stale probe:
+   * give it a moment, then verify with a fresh one. This is the difference between
+   * "came back to the tab and got told I'm offline" and a screen that only appears
+   * when the connection really is gone.
+   */
+  useEffect(() => {
+    if (online) return
+    const grace = window.setTimeout(async () => {
+      const reachable = await refresh()
+      if (!reachable) setConfirmedOffline(true)
+    }, 1500)
+    return () => window.clearTimeout(grace)
+  }, [online, refresh])
+
+  // Back online → drop the confirmation (deferred, so no synchronous setState).
+  useEffect(() => {
+    if (!online || !confirmedOffline) return
+    const timer = window.setTimeout(() => setConfirmedOffline(false), 0)
+    return () => window.clearTimeout(timer)
+  }, [online, confirmedOffline])
+
+  const blocking = !online && confirmedOffline
 
   // Detect the offline → online transition (ref-based so no re-render loop kills the timer)
   useEffect(() => {
@@ -36,7 +62,7 @@ function NetworkGuard() {
 
   return (
     <>
-      {!online && <OfflineScreen onRetry={refresh} />}
+      {blocking && <OfflineScreen onRetry={refresh} />}
       {showBackOnline && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, zIndex: 3000,

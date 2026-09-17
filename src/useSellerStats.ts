@@ -332,6 +332,11 @@ export function useSellerStats(sellerId: string | null) {
   }
 }
 
+/** "Selling since Mar 2026" / "12 days on rachett" / "New on rachett". */
+export function getStoreAgeLabel(createdAt: unknown): string {
+  return computeStoreAge(createdAt).label
+}
+
 export function getSalesLabel(totalSales: number): string {
   return computeSalesLabel(totalSales)
 }

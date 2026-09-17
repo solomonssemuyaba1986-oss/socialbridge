@@ -405,6 +405,8 @@ function SetupStore() {
         recoveryEmailPromptCount: isPhoneSignIn ? 0 : -1,
         recoveryEmailLastPrompted: isPhoneSignIn ? null : null,
         createdAt: new Date(),
+      /** Provenance for the date above — a backfill never overwrites a real one. */
+      createdAtSource: 'setup',
       })
       // Celebration, not a redirect — the seller sees their live shop link and
       // the one next action (add a product), plus a WhatsApp share for their bio.

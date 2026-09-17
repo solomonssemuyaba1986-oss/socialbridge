@@ -2,12 +2,25 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 const PROBE_URL = 'https://www.gstatic.com/generate_204'
 const PROBE_INTERVAL = 8000
+/**
+ * A flaky probe must never take the app down. Two failures used to be enough —
+ * and because timers/fetches are throttled while a tab is in the background, the
+ * *return* to a page was the moment the app decided you were offline.
+ */
+const FAILS_BEFORE_OFFLINE = 3
+const PROBE_TIMEOUT_MS = 6000
 
 async function probeReachable(): Promise<boolean> {
   try {
     // no-cors: we only need to know the request succeeded (i.e. internet exists)
-    await fetch(PROBE_URL, { mode: 'no-cors', cache: 'no-store' })
-    return true
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS)
+    try {
+      await fetch(PROBE_URL, { mode: 'no-cors', cache: 'no-store', signal: controller.signal })
+      return true
+    } finally {
+      window.clearTimeout(timer)
+    }
   } catch {
     return false
   }
@@ -30,6 +43,8 @@ export function useOnlineStatus() {
     let cancelled = false
 
     const runProbe = async (): Promise<boolean> => {
+      // Never let a background tab's throttled probe count as a failure.
+      if (typeof document !== 'undefined' && document.hidden) return true
       const reachable = await probeReachable()
       if (cancelled) return reachable
       if (reachable) {
@@ -37,7 +52,7 @@ export function useOnlineStatus() {
         setOnline(true)
       } else {
         failedRef.current += 1
-        if (failedRef.current >= 2) setOnline(false)
+        if (failedRef.current >= FAILS_BEFORE_OFFLINE) setOnline(false)
       }
       return reachable
     }
@@ -45,9 +60,23 @@ export function useOnlineStatus() {
 
     const handleOnline = () => { failedRef.current = 0; setOnline(true) }
     const handleOffline = () => { failedRef.current = 0; setOnline(false) }
+    /**
+     * Coming back to a page (tab switch, phone unlock, bfcache restore) is exactly
+     * when a stale "offline" flag used to greet people. Wipe the slate and verify
+     * right away instead of telling them they are offline.
+     */
+    const handleVisible = () => {
+      if (typeof document !== 'undefined' && document.hidden) return
+      failedRef.current = 0
+      if (navigator.onLine) setOnline(true)
+      void runProbeRef.current()
+    }
 
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
+    document.addEventListener('visibilitychange', handleVisible)
+    window.addEventListener('pageshow', handleVisible)
+    window.addEventListener('focus', handleVisible)
     const timer = window.setInterval(runProbe, PROBE_INTERVAL)
 
     return () => {
@@ -55,6 +84,9 @@ export function useOnlineStatus() {
       window.clearInterval(timer)
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
+      document.removeEventListener('visibilitychange', handleVisible)
+      window.removeEventListener('pageshow', handleVisible)
+      window.removeEventListener('focus', handleVisible)
     }
   }, [])
 

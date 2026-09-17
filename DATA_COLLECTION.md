@@ -77,7 +77,7 @@ Written by `SetupStore.tsx:426-450` (create), `EditStore.tsx:234-258` (edit), `D
 | `logoUrl` | string (Cloudinary) | falls back to the provider photoURL at creation |
 | `idDocumentPath` | string | **Legacy — no longer written.** National ID capture is off (see §11); older stores may still carry a path. Always stripped from exports. |
 | `idStatus` | `'pending'` | **Legacy — no longer written.** Was always `'pending'` with nothing to advance it. |
-| `createdAt` | Date | store age (drives the "Active Seller" badge) |
+| `createdAt` | Date | when the store was created (`SetupStore.tsx:407`) — powers the "Selling since …" trust line in the sidebar and dashboard. Older stores may be missing it; `functions/backfill-store-dates.js` fills it from real evidence only (first product → first order → first visit) and records where it came from. |
 | *read but never written* | `verifiedSeller`, `realSellerBadgeEarnedAt`, `realSellerBadgeGraceUntil`, `activeSellerBadgeEarnedAt`, `activeSellerBadgeGraceUntil` | `useSellerStats.ts:198-208` — badges are recomputed client-side, never persisted |
 
 ### 2.3 Subcollections under `sellers/{uid}/`
