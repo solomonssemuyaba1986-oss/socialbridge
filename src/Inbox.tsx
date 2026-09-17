@@ -6,6 +6,7 @@ import { useSellerMessages, isUnreadMessage, type SellerMessage } from './useSel
 import { useSellerConversations, type SellerConversation } from './useSellerConversations'
 import { useBuyerConversations, type BuyerConversation } from './useBuyerConversations'
 import ConversationPanel from './ConversationPanel'
+import DraftResumeSheet from './DraftResumeSheet'
 import { getConversationId, markConversationRead } from './useConversation'
 import LoadingScreen from './LoadingScreen'
 import { getDraft, useAllDrafts } from './useDraft'
@@ -103,6 +104,8 @@ function Inbox() {
   const [logoMap, setLogoMap] = useState<Record<string, string>>({})
   /** sellerId -> store link, so an old draft with no slug recorded can still be opened. */
   const [slugMap, setSlugMap] = useState<Record<string, string>>({})
+  /** The draft open in the resume sheet — product, words, one tap from Send. */
+  const [resumeTarget, setResumeTarget] = useState<DraftMeta | null>(null)
   const { isSeller, pendingOrdersCount } = useSellerLive()
   // Draft rows refresh themselves — `useAllDrafts` listens to the same event.
 
@@ -343,21 +346,12 @@ function Inbox() {
   }
 
   /**
-   * "Resume" from the pinned block: open the row that carries this draft and bring
-   * it into view — clearing a search or the unread filter first, because a hidden
-   * row would look like the tap did nothing.
+   * "Resume" from the pinned block: the draft opens in its own sheet — product and
+   * words already in place, one tap from Send. No hunting for a row first.
    */
   const resumeDraft = (draft: DraftMeta) => {
-    const key = draftRowKey(draft)
-    if (!key) return
-    if (!visible.some(t => t.key === key)) {
-      setSearch('')
-      setFilter('all')
-    }
-    if (selectedKey !== key) openChat(key)
-    window.setTimeout(() => {
-      document.getElementById(`thread-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }, 80)
+    // Resolve a store link even for drafts saved before slugs were recorded.
+    setResumeTarget({ ...draft, sellerSlug: draft.sellerSlug || slugMap[draft.sellerId] || undefined })
   }
 
   const chatProps = selected ? (() => {
@@ -475,9 +469,6 @@ function Inbox() {
               <span style={{ color: '#888', fontSize: '11px' }}>only you can see these · they read it when you tap Send</span>
             </div>
             {openDrafts.map(draft => {
-              const rowKey = draftRowKey(draft)
-              // Recorded slug first; otherwise the seller doc we already fetched.
-              const slug = draft.sellerSlug || slugMap[draft.sellerId] || ''
               return (
                 <div key={draft.conversationId} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', borderTop: '1px solid #1d1626' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -488,19 +479,10 @@ function Inbox() {
                     <div style={{ color: '#b026ff', fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{draft.text}</div>
                     <div style={{ color: '#666', fontSize: '11px' }}>{draftAge(draft) || 'just now'}</div>
                   </div>
-                  {rowKey ? (
-                    <button onClick={() => resumeDraft(draft)}
-                      style={{ padding: '6px 12px', borderRadius: '999px', border: '1px solid #b026ff', background: 'transparent', color: '#b026ff', fontWeight: '700', fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                      Resume
-                    </button>
-                  ) : slug && draft.productId ? (
-                    <button onClick={() => navigate(`/store/${slug}?productId=${draft.productId}`)}
-                      style={{ padding: '6px 12px', borderRadius: '999px', border: '1px solid #b026ff', background: 'transparent', color: '#b026ff', fontWeight: '700', fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                      Open
-                    </button>
-                  ) : (
-                    <span style={{ color: '#666', fontSize: '11px', whiteSpace: 'nowrap' }}>needs the product link</span>
-                  )}
+                  <button onClick={() => resumeDraft(draft)}
+                    style={{ padding: '6px 12px', borderRadius: '999px', border: '1px solid #b026ff', background: '#b026ff', color: '#000', fontWeight: '800', fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    Resume
+                  </button>
                   <button onClick={() => discardDraft(draft.conversationId)}
                     style={{ padding: '6px 12px', borderRadius: '999px', border: '1px solid #333', background: 'transparent', color: '#888', fontWeight: '700', fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                     Discard
@@ -642,6 +624,24 @@ function Inbox() {
           </div>
         )}
       </div>
+
+      {/* Resume: the product and your words, already in the box */}
+      {resumeTarget && (
+        <DraftResumeSheet
+          draft={resumeTarget}
+          onClose={() => setResumeTarget(null)}
+          onSent={(conversationId) => {
+            setResumeTarget(null)
+            // If the thread now has a row, open it so the message can be seen leaving.
+            const buyerKey = `buyer-${conversationId}`
+            const sellerKey = `seller-${conversationId}`
+            const key = threads.some(t => t.key === buyerKey) ? buyerKey
+              : threads.some(t => t.key === sellerKey) ? sellerKey
+              : ''
+            if (key) openChat(key)
+          }}
+        />
+      )}
     </div>
   )
 }

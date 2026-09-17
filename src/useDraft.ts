@@ -125,7 +125,7 @@ async function pullDraftFromAccount(uid: string, conversationId: string): Promis
  * (`text`, `setText`, `draft`, `clearDraft`); `context` is what lets the draft be
  * listed in the Inbox and followed on the account.
  */
-export function useDraft(key: string, context?: DraftContext, options?: { surface?: string }) {
+export function useDraft(key: string, context?: DraftContext, options?: { surface?: string; seed?: string }) {
   const store = useMemo(() => browserStore(), [])
   const storageKey = !key || key === DRAFT_NONE ? DRAFT_NONE : key
   const conversationId = conversationIdFromKey(storageKey)
@@ -144,13 +144,15 @@ export function useDraft(key: string, context?: DraftContext, options?: { surfac
     return parseDraft(store.getItem(`${DRAFT_PREFIX}product_${productId}`), conversationIdFromKey(k))
   }
 
-  const [text, setText] = useState<string>(() => load(storageKey, context?.productId)?.text || '')
+  const seed = options?.seed || ''
+  const [text, setText] = useState<string>(() => load(storageKey, context?.productId)?.text || seed)
   const [currentKey, setCurrentKey] = useState(storageKey)
 
-  // Opening a different product/conversation loads that draft instead.
+  // Opening a different product/conversation loads that draft instead. The `seed`
+  // is the fallback for a caller that already holds the words (the resume sheet).
   if (currentKey !== storageKey) {
     setCurrentKey(storageKey)
-    setText(load(storageKey, context?.productId)?.text || '')
+    setText(load(storageKey, context?.productId)?.text || seed)
   }
 
   /** A new target means a fresh draft — reset the per-draft bookkeeping. */
