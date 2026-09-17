@@ -14,9 +14,14 @@ type Props = {
   message?: string
   variant?: 'grid' | 'rows'
   logo?: string
+  /**
+   * Sit inside the page (below its header) instead of taking over the whole
+   * viewport — so a cold load reads as *one* page loading, not two.
+   */
+  inline?: boolean
 }
 
-export default function LoadingScreen({ message, variant = 'grid', logo }: Props) {
+export default function LoadingScreen({ message, variant = 'grid', logo, inline = false }: Props) {
   const [msgIndex, setMsgIndex] = useState(0)
 
   useEffect(() => {
@@ -44,7 +49,7 @@ export default function LoadingScreen({ message, variant = 'grid', logo }: Props
           100% { width: 100% }
         }
       `}</style>
-      <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', color: '#fff', padding: '20px' }}>
+      <div style={{ minHeight: inline ? 0 : '100vh', background: '#0f0f0f', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', color: '#fff', padding: inline ? '48px 20px' : '20px' }}>
         <img src={logo || '/logo.jpg'} alt="rachett" style={{ width: 64, height: 64, borderRadius: 16, objectFit: 'cover', marginBottom: 20 }} />
         <p style={{ color: '#999', fontSize: 14, margin: '0 0 16px', textAlign: 'center', minHeight: 20 }}>{message || LOADING_MESSAGES[msgIndex]}</p>
 

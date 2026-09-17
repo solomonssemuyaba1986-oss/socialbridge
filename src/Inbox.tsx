@@ -87,6 +87,9 @@ function draftAgeMinutes(at?: number): number | undefined {
 
 const isDev = Boolean(import.meta.env?.DEV)
 
+/** Set once the Inbox has shown real data — later visits skip the skeleton. */
+let inboxPrimed = false
+
 function Inbox() {
   const navigate = useNavigate()
   const { messages, unreadCount: unreadMessages, loading: messagesLoading } = useSellerMessages()
@@ -255,6 +258,16 @@ function Inbox() {
 
   const totalUnread = unreadMessages + unreadSellerConversations + unreadBuyerConversations
   const loading = messagesLoading || conversationsLoading || buyerConversationsLoading
+  /**
+   * The skeleton is for the first visit in this session only. Afterwards the shell
+   * renders instantly and the data streams in — no full-screen loader on every
+   * trip back to the Inbox.
+   */
+  const showInitialLoad = loading && threads.length === 0 && !inboxPrimed
+
+  useEffect(() => {
+    if (!loading) inboxPrimed = true
+  }, [loading])
   const q = search.trim().toLowerCase()
   const qDigits = q.replace(/[^\d+]/g, '')
   const searched = q
@@ -337,12 +350,6 @@ function Inbox() {
     return null
   })() : null
 
-  if (loading) {
-    return (
-      <LoadingScreen variant="rows" message="Loading your conversations..." />
-    )
-  }
-
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
       <div className="rt-topnav" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #1a1a1a' }}>
@@ -416,7 +423,11 @@ function Inbox() {
           </p>
         )}
 
-        {visible.length === 0 ? (
+          {showInitialLoad ? (
+            <LoadingScreen inline variant="rows" message="Loading your conversations..." />
+          ) : loading && threads.length === 0 ? (
+            <p style={{ color: '#666', fontSize: 13, textAlign: 'center', padding: '24px 0' }}>Loading…</p>
+          ) : visible.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 20px' }}>
             <div style={{ fontSize: '48px', marginBottom: '16px' }}>{search ? '🔍' : (filter === 'unread' ? '🎉' : '📭')}</div>
             <p style={{ color: '#555', fontSize: '15px' }}>{search ? `No results for "${search}"` : (filter === 'unread' ? 'No unread messages' : 'No messages yet')}</p>

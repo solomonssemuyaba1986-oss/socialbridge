@@ -51,7 +51,7 @@ export const EVENT_PROPS = {
 
   // ── Search ───────────────────────────────────────────────────────────────
   search_performed: ['query', 'surface', 'resultCount', 'zeroResult', 'category', 'sortBy'],
-  search_suggestion_clicked: ['query', 'suggestion', 'kind'],
+  search_suggestion_clicked: ['query', 'suggestion', 'kind', 'surface'],
   recent_search_clicked: ['query', 'surface'],
   search_cleared: ['surface', 'hadQuery'],
 

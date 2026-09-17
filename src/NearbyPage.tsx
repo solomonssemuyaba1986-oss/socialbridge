@@ -16,6 +16,8 @@ import FloatingBag from './FloatingBag'
 import { getMainCategories } from './categories'
 import { green, productImages, seededShuffle, toMillis, type CardProduct } from './productCardUtils'
 import { trackEvent } from './analytics'
+import SearchSuggest from './SearchSuggest'
+import { buildSuggestions, type Suggestion } from './useSuggestions'
 import { consumePendingAction } from './signInGate'
 
 interface NearbySeller {
@@ -131,6 +133,9 @@ function NearbyPage() {
 
   const [manualText, setManualText] = useState('')
   const [search, setSearch] = useState('')
+  /** Type-ahead: same honest source list as Browse (only real shops/products). */
+  const [showSuggest, setShowSuggest] = useState(false)
+  const [activeSuggest, setActiveSuggest] = useState(-1)
   /** null = the discovery feed; a key = one sorted list (tap the active chip to go back). */
   const [sort, setSort] = useState<SortKey | null>(readSortPref)
   const [activeCategory, setActiveCategory] = useState('All')
@@ -464,6 +469,75 @@ function NearbyPage() {
     return () => window.clearTimeout(timer)
   }, [search, searchResults.length, activeCategory])
 
+  /** Type-ahead for this page — only shops and products we actually have loaded. */
+  const suggestions = useMemo(
+    () => buildSuggestions(search, {
+      stores: [...new Map(
+        products
+          .filter(p => p.sellerSlug)
+          .map(p => [p.sellerSlug, { slug: p.sellerSlug, businessName: p.businessName }]),
+      ).values()],
+      products: products.map(p => ({
+        id: p.id,
+        name: p.name,
+        sellerSlug: p.sellerSlug,
+        businessName: p.businessName,
+        imageUrl: p.imageUrl,
+        category: p.category,
+      })),
+      categories: CATEGORIES.slice(1),
+    }),
+    [search, products],
+  )
+
+  const pickSuggestion = (s: Suggestion) => {
+    trackEvent('search_suggestion_clicked', {
+      query: search.trim(),
+      suggestion: s.label,
+      kind: s.kind,
+      surface: 'nearby',
+    })
+    setShowSuggest(false)
+    setActiveSuggest(-1)
+    if (s.kind === 'category') {
+      setActiveCategory(s.label)
+      setSearch('')
+      return
+    }
+    if (s.slug && s.kind === 'product' && s.productId) {
+      navigate(`/store/${s.slug}?productId=${s.productId}`)
+      return
+    }
+    if (s.slug) {
+      navigate(`/store/${s.slug}`)
+      return
+    }
+    setSearch(s.label)
+  }
+
+  const onSearchKeyDown = (e: { key: string; preventDefault?: () => void }) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (suggestions.length === 0) return
+      e.preventDefault?.()
+      setShowSuggest(true)
+      setActiveSuggest(prev => {
+        const next = e.key === 'ArrowDown' ? prev + 1 : prev - 1
+        if (next < -1) return suggestions.length - 1
+        if (next >= suggestions.length) return -1
+        return next
+      })
+      return
+    }
+    if (e.key === 'Escape') {
+      setShowSuggest(false)
+      setActiveSuggest(-1)
+      return
+    }
+    if (e.key === 'Enter' && showSuggest && activeSuggest >= 0 && suggestions[activeSuggest]) {
+      pickSuggestion(suggestions[activeSuggest])
+    }
+  }
+
   /**
    * Quick controls: tap a chip to sort the whole list by it; tap the active chip
    * again to go back to the discovery feed. The choice is remembered per device.
@@ -586,13 +660,22 @@ function NearbyPage() {
             onChange={e => {
               const value = e.target.value
               setSearch(value)
+              setActiveSuggest(-1)
+              setShowSuggest(true)
               // Search looks across every category — otherwise a category tapped
               // earlier silently hides the results the buyer just asked for.
               if (value.trim() && activeCategory !== 'All') setActiveCategory('All')
             }}
+            onKeyDown={onSearchKeyDown}
+            onFocus={() => setShowSuggest(true)}
+            onBlur={() => window.setTimeout(() => setShowSuggest(false), 120)}
+            autoComplete="off"
             placeholder="Search products near you — shoes, charger, dress…"
             style={{ width: '100%', padding: '14px 16px', borderRadius: '12px', border: '1px solid #333', background: '#111', color: '#fff', fontSize: '15px', boxSizing: 'border-box' }}
           />
+          {showSuggest && search.trim().length > 0 && (
+            <SearchSuggest suggestions={suggestions} activeIndex={activeSuggest} onPick={pickSuggestion} />
+          )}
           {search && (
             <button onClick={() => setSearch('')}
               style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: '#666', cursor: 'pointer', fontSize: '16px' }}>

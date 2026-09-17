@@ -22,6 +22,8 @@ import { toMillis } from './productCardUtils'
 import { useProductFeed } from './useProductFeed'
 import StoreCard from './StoreCard'
 import Fuse from 'fuse.js'
+import SearchSuggest from './SearchSuggest'
+import { buildSuggestions, type Suggestion } from './useSuggestions'
 
 interface Product {
   id: string
@@ -57,6 +59,7 @@ function BrowsePage() {
     products: feedRows,
     loading: feedLoading,
     loadingMore,
+    refreshing,
     hasMore,
     error: feedError,
     loadMore,
@@ -85,6 +88,9 @@ function BrowsePage() {
   const [filtered, setFiltered] = useState<Product[]>([])
   const [activeCategory, setActiveCategory] = useState('All')
   const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get('q') || '')
+  /** Type-ahead dropdown: open while typing, navigable with ↑/↓, picked with Enter. */
+  const [showSuggest, setShowSuggest] = useState(false)
+  const [activeSuggest, setActiveSuggest] = useState(-1)
   const loading = feedLoading
   const [sortBy, setSortBy] = useState<'relevance' | 'price-asc' | 'price-desc' | 'newest' | 'popular'>('relevance')
   const [minPrice, setMinPrice] = useState('')
@@ -199,6 +205,57 @@ function BrowsePage() {
     if (hadQueryRef.current && !has) trackEvent('search_cleared', { surface: 'browse', hadQuery: true })
     hadQueryRef.current = has
   }, [search])
+
+  /**
+   * Type-ahead: built from the shops we loaded, the products in the catalogue, the
+   * real categories and this person's own recent searches. Nothing invented — see
+   * `useSuggestions`.
+   */
+  const suggestions = useMemo(
+    () => buildSuggestions(search, {
+      stores: stores.map(s => ({ slug: s.slug, businessName: s.businessName, aliases: s.aliases, logoUrl: s.logoUrl })),
+      products: products.map(p => ({
+        id: p.id,
+        name: p.name,
+        sellerSlug: p.sellerSlug,
+        businessName: p.businessName,
+        imageUrl: p.imageUrl,
+        category: p.category,
+      })),
+      categories: categories.slice(1),
+      recentSearches,
+    }),
+    [search, stores, products, recentSearches],
+  )
+
+  const pickSuggestion = (s: Suggestion) => {
+    trackEvent('search_suggestion_clicked', {
+      query: search.trim(),
+      suggestion: s.label,
+      kind: s.kind,
+      surface: 'browse',
+    })
+    setShowSuggest(false)
+    setActiveSuggest(-1)
+    if (s.kind === 'category') {
+      setActiveCategory(s.label)
+      setSearch('')
+      return
+    }
+    if (s.kind === 'recent') {
+      setSearch(s.label)
+      return
+    }
+    if (s.slug && s.kind === 'product' && s.productId) {
+      navigate(`/store/${s.slug}?productId=${s.productId}`)
+      return
+    }
+    if (s.slug) {
+      navigate(`/store/${s.slug}`)
+      return
+    }
+    setSearch(s.label)
+  }
 
   const handleToggleBag = (p: Product) => {
     if (isInBag(p.id)) {
@@ -492,8 +549,31 @@ function BrowsePage() {
     saveRecentSearch(term)
   }
 
-  const handleSearchKeyDown = (e: { key: string }) => {
+  const handleSearchKeyDown = (e: { key: string; preventDefault?: () => void }) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (suggestions.length === 0) return
+      e.preventDefault?.()
+      setShowSuggest(true)
+      setActiveSuggest(prev => {
+        const next = e.key === 'ArrowDown' ? prev + 1 : prev - 1
+        if (next < -1) return suggestions.length - 1
+        if (next >= suggestions.length) return -1
+        return next
+      })
+      return
+    }
+    if (e.key === 'Escape') {
+      setShowSuggest(false)
+      setActiveSuggest(-1)
+      return
+    }
     if (e.key === 'Enter') {
+      // A highlighted suggestion wins; otherwise search as before.
+      if (showSuggest && activeSuggest >= 0 && suggestions[activeSuggest]) {
+        pickSuggestion(suggestions[activeSuggest])
+        return
+      }
+      setShowSuggest(false)
       saveRecentSearch(search)
       trackEvent('search_performed', {
         query: search.trim(),
@@ -678,10 +758,16 @@ function BrowsePage() {
           <input
             placeholder="Search products, stores..."
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => { setSearch(e.target.value); setActiveSuggest(-1); setShowSuggest(true) }}
             onKeyDown={handleSearchKeyDown}
+            onFocus={() => setShowSuggest(true)}
+            onBlur={() => window.setTimeout(() => setShowSuggest(false), 120)}
+            autoComplete="off"
             style={{ width: '100%', padding: '14px 16px 14px 44px', borderRadius: '10px', border: '1px solid #333', background: '#1a1a1a', color: '#fff', fontSize: '15px', boxSizing: 'border-box', outline: 'none' }}
           />
+          {showSuggest && search.trim().length > 0 && (
+            <SearchSuggest suggestions={suggestions} activeIndex={activeSuggest} onPick={pickSuggestion} />
+          )}
         </div>
         {/* Result count — always on screen while searching, even at zero */}
         {search.trim() && (
@@ -836,8 +922,8 @@ function BrowsePage() {
 
       {/* Products */}
       <div className="rt-container" style={{ maxWidth: '800px', margin: '0 auto', padding: '32px 16px' }}>
-        {loading ? (
-          <LoadingScreen message="Fetching products for you..." />
+        {loading && filtered.length === 0 ? (
+          <LoadingScreen inline variant="rows" message="Fetching products for you..." />
         ) : filtered.length === 0 ? (
           <div style={{ padding: '24px 0' }}>
             {/* One small line — the trending grid does the talking */}
@@ -901,6 +987,7 @@ function BrowsePage() {
           <>
             <p style={{ color: '#555', fontSize: '13px', marginBottom: '20px' }}>
               Showing {filtered.length} product{filtered.length === 1 ? '' : 's'} · newest first
+              {refreshing && <span style={{ color: '#666' }}> · updating…</span>}
             </p>
             <div ref={productsGridRef} className="rt-products" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
                             {filtered.map(p => (

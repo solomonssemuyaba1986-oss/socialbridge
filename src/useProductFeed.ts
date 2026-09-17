@@ -51,18 +51,44 @@ function createdMs(row: DocumentData): number {
  * back to the old per-seller walk (a batch of stores at a time) — the page keeps
  * working and the console says exactly which index to create.
  */
-export function useProductFeed({ pageSize = 24 }: Options = {}) {
-  const [products, setProducts] = useState<FeedProduct[]>([])
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [error, setError] = useState('')
+/**
+ * Survives remounts, so going Browse → store → back is instant instead of showing
+ * a full-screen loader again. Kept short-lived on purpose (a stale catalogue is
+ * worse than a fresh one) — the background refresh below replaces it either way.
+ */
+interface FeedCache {
+  rows: FeedProduct[]
+  cursor: QueryDocumentSnapshot | null
+  hasMore: boolean
+  mode: 'feed' | 'fallback'
+  updatedAt: number
+}
 
-  const cursorRef = useRef<QueryDocumentSnapshot | null>(null)
-  const modeRef = useRef<'feed' | 'fallback'>('feed')
+let feedCache: FeedCache | null = null
+const FEED_CACHE_MAX_AGE_MS = 5 * 60 * 1000
+
+function readCache(): FeedCache | null {
+  if (!feedCache) return null
+  if (Date.now() - feedCache.updatedAt > FEED_CACHE_MAX_AGE_MS) return null
+  return feedCache
+}
+
+export function useProductFeed({ pageSize = 24 }: Options = {}) {
+  const cached = readCache()
+  const [products, setProducts] = useState<FeedProduct[]>(() => cached?.rows ?? [])
+  /** Only a genuine cold start counts as "loading" — a cached page refreshes quietly. */
+  const [loading, setLoading] = useState(() => !cached)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(() => cached?.hasMore ?? true)
+  const [error, setError] = useState('')
+  /** True while we already have rows on screen and are refreshing them. */
+  const [refreshing, setRefreshing] = useState(false)
+  const cursorRef = useRef<QueryDocumentSnapshot | null>(cached?.cursor ?? null)
+  const modeRef = useRef<'feed' | 'fallback'>(cached?.mode ?? 'feed')
   const fallbackSellersRef = useRef<string[]>([])
   const fallbackIndexRef = useRef(0)
   const inFlightRef = useRef(false)
+  const rowsRef = useRef<FeedProduct[]>(cached?.rows ?? [])
 
   const readFeedPage = useCallback(async (first: boolean) => {
     const base = collectionGroup(db, 'products')
@@ -118,7 +144,9 @@ export function useProductFeed({ pageSize = 24 }: Options = {}) {
   const load = useCallback(async (first: boolean) => {
     if (inFlightRef.current) return
     inFlightRef.current = true
-    if (first) setLoading(true)
+    const coldStart = first && rowsRef.current.length === 0
+    if (coldStart) setLoading(true)
+    else if (first) setRefreshing(true)
     else setLoadingMore(true)
 
     try {
@@ -140,9 +168,19 @@ export function useProductFeed({ pageSize = 24 }: Options = {}) {
         page = await readFallbackPage(first)
       }
 
-      setProducts(prev => (first ? page.rows : [...prev, ...page.rows]))
+      const nextRows = first ? page.rows : [...rowsRef.current, ...page.rows]
+      rowsRef.current = nextRows
+      setProducts(nextRows)
       setHasMore(page.more)
       setError('')
+      // Remember it so a remount (Browse → store → back) is instant.
+      feedCache = {
+        rows: nextRows,
+        cursor: cursorRef.current,
+        hasMore: page.more,
+        mode: modeRef.current,
+        updatedAt: Date.now(),
+      }
     } catch (err) {
       console.error('BrowsePage: catalog load failed', err)
       setError('Could not load the catalog. Check your connection and try again.')
@@ -151,6 +189,7 @@ export function useProductFeed({ pageSize = 24 }: Options = {}) {
       inFlightRef.current = false
       setLoading(false)
       setLoadingMore(false)
+      setRefreshing(false)
     }
   }, [readFeedPage, readFallbackPage])
 
@@ -164,5 +203,10 @@ export function useProductFeed({ pageSize = 24 }: Options = {}) {
   const loadMore = useCallback(() => { void load(false) }, [load])
   const reload = useCallback(() => { void load(true) }, [load])
 
-  return { products, loading, loadingMore, hasMore, error, loadMore, reload }
+  return { products, loading, loadingMore, refreshing, hasMore, error, loadMore, reload }
+}
+
+/** Used by tests/tools to prove the cache behaves; harmless in the app. */
+export function __resetFeedCache() {
+  feedCache = null
 }
