@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth, db } from './firebase'
+import { getConversationId } from './useConversation'
 import { trackEvent } from './analytics'
 import {
   DRAFT_NONE,
@@ -285,7 +286,19 @@ export function useDraft(key: string, context?: DraftContext, options?: { surfac
     })
     if (context?.productId) removeDraft(store, `product_${context.productId}`)
     notifyDraftChange()
-  }, [storageKey, conversationId, context?.sellerId, context?.buyerId, context?.productId, store])
+  }, [
+    storageKey,
+    conversationId,
+    context?.sellerId,
+    context?.buyerId,
+    context?.productId,
+    context?.productName,
+    context?.productPrice,
+    context?.productImage,
+    context?.counterpartName,
+    context?.counterpartRole,
+    store,
+  ])
 
   /**
    * Flush right now. Wired to every "close the sheet" path so a draft typed in the
@@ -355,6 +368,36 @@ export function useAllDrafts() {
   }, [])
 
   const drafts = useMemo(() => capDrafts(mergeDrafts(local, account)), [local, account])
+
+  /**
+   * A draft typed before we knew who you were (signed out, or auth still
+   * restoring) is keyed to the product. Once the uid is known, move it onto the
+   * conversation key so it appears in the Inbox — the seller still sees nothing.
+   * Preserves the original timestamp so the age stays honest.
+   */
+  useEffect(() => {
+    if (!uid) return
+    const carried = local.filter(d => d.conversationId.startsWith('product_') && d.text.trim())
+    if (carried.length === 0) return
+    let changed = false
+    for (const draft of carried) {
+      const iAmBuyer = draft.counterpartRole === 'seller'
+      const sellerId = iAmBuyer ? draft.sellerId : (draft.sellerId || uid)
+      const buyerId = iAmBuyer ? (draft.buyerId || uid) : draft.buyerId
+      if (!sellerId || !buyerId || sellerId === buyerId) continue
+      const conversationId = getConversationId(sellerId, buyerId)
+      writeDraft(store, { ...draft, conversationId, sellerId, buyerId })
+      removeDraft(store, draft.conversationId)
+      changed = true
+    }
+    if (changed) {
+      // The event refreshes every listener; our own state catches up on the next
+      // tick so this housekeeping never re-renders synchronously inside the effect.
+      notifyDraftChange()
+      const timer = window.setTimeout(() => setLocal(listDrafts(store)), 0)
+      return () => window.clearTimeout(timer)
+    }
+  }, [uid, local, store])
 
   const discardDraft = useCallback((conversationId: string) => {
     removeDraft(store, conversationId)

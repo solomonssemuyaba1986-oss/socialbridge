@@ -6,7 +6,7 @@ import { useSellerMessages, isUnreadMessage, type SellerMessage } from './useSel
 import { useSellerConversations, type SellerConversation } from './useSellerConversations'
 import { useBuyerConversations, type BuyerConversation } from './useBuyerConversations'
 import ConversationPanel from './ConversationPanel'
-import { markConversationRead } from './useConversation'
+import { getConversationId, markConversationRead } from './useConversation'
 import LoadingScreen from './LoadingScreen'
 import { getDraft, useAllDrafts } from './useDraft'
 import { draftAge, type DraftMeta } from './draftStore'
@@ -84,6 +84,8 @@ function draftAgeMinutes(at?: number): number | undefined {
   if (!at) return undefined
   return Math.max(0, Math.round((Date.now() - at) / 60000))
 }
+
+const isDev = Boolean(import.meta.env?.DEV)
 
 function Inbox() {
   const navigate = useNavigate()
@@ -205,17 +207,26 @@ function Inbox() {
       ...buyerConversations.map(c => c.id),
       ...sellerConversations.map(c => c.id),
     ])
+    const myUid = auth.currentUser?.uid || ''
+    const skippedDrafts: string[] = []
     openDrafts.forEach(d => {
-      // Only conversation-keyed drafts can open a chat. A product-keyed draft (typed
-      // while signed out) is moved onto its conversation the moment you sign in.
-      if (!d.sellerId || !d.buyerId || d.conversationId.startsWith('product_')) return
-      if (knownConversationIds.has(d.conversationId)) return
+      // Fill in whichever side we are from the signed-in uid, so a draft typed
+      // before auth resolved (keyed to the product) still gets its own row.
       const iAmBuyer = d.counterpartRole === 'seller'
+      const sellerId = iAmBuyer ? d.sellerId : (d.sellerId || myUid)
+      const buyerId = iAmBuyer ? (d.buyerId || myUid) : d.buyerId
+      if (!sellerId || !buyerId || sellerId === buyerId) {
+        skippedDrafts.push(`${d.conversationId} (no counterpart yet)`)
+        return
+      }
+      const conversationId = getConversationId(sellerId, buyerId)
+      // The thread already exists → the draft shows on that thread instead (below).
+      if (knownConversationIds.has(conversationId)) return
       list.push({
-        key: `draft-${d.conversationId}`,
+        key: `draft-${conversationId}`,
         name: d.counterpartName || (iAmBuyer ? 'Seller' : 'Buyer'),
         avatarText: (d.counterpartName || 'D').charAt(0).toUpperCase(),
-        avatarUrl: iAmBuyer ? logoMap[d.sellerId] : undefined,
+        avatarUrl: iAmBuyer ? logoMap[sellerId] : undefined,
         preview: d.text,
         timeValue: d.at || 0,
         timeLabel: draftAge(d),
@@ -223,10 +234,22 @@ function Inbox() {
         unreadCount: 0,
         hasDraft: true,
         kind: iAmBuyer ? 'buyer' : 'seller',
-        draft: d,
+        draft: { ...d, conversationId, sellerId, buyerId },
       })
     })
-    list.sort((a, b) => b.timeValue - a.timeValue)
+    // Your own unfinished messages first — a draft must be impossible to miss.
+    list.sort((a, b) => {
+      const aDraft = a.draft || a.hasDraft ? 1 : 0
+      const bDraft = b.draft || b.hasDraft ? 1 : 0
+      if (aDraft !== bDraft) return bDraft - aDraft
+      return b.timeValue - a.timeValue
+    })
+    if (isDev && (openDrafts.length > 0 || list.some(t => t.draft))) {
+      console.log(
+        `[drafts] inbox: ${list.filter(t => t.draft).length} draft row(s) from ${openDrafts.length} draft(s)`,
+        skippedDrafts.length > 0 ? { skipped: skippedDrafts } : '',
+      )
+    }
     return list
   }, [buyerConversations, sellerConversations, messages, logoMap, openDrafts])
 
