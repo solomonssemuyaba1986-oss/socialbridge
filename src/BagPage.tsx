@@ -6,7 +6,7 @@ import { detectSource } from './tracking'
 import { trackEvent } from './analytics'
 import { useBag } from './useBag'
 import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder'
-import { useDraft } from './useDraft'
+import { useAllDrafts, useDraft } from './useDraft'
 import QuickRepliesPanel from './QuickRepliesPanel'
 import { uploadImageToCloudinary } from './uploadImage'
 import ProductPreview from './ProductPreview'
@@ -83,6 +83,9 @@ function BagPage() {
   )
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const sellerIdCache = useRef<Map<string, string>>(new Map())
+  // Unsent messages, so a row in the bag can say "you already wrote about this".
+  const { drafts: myDrafts } = useAllDrafts()
+  const draftProductIds = new Set(myDrafts.map(d => d.productId).filter((id): id is string => Boolean(id)))
   const guestFileRef = useRef<HTMLInputElement | null>(null)
   const [guestImageUrl, setGuestImageUrl] = useState('')
   const [guestUploading, setGuestUploading] = useState(false)
@@ -455,6 +458,11 @@ function BagPage() {
                         <button onClick={() => { trackEvent('bag_quantity_changed', { productId: item.productId, from: item.quantity, to: item.quantity + 1 }); setQuantity(item.productId, item.quantity + 1) }}
                           style={{ width: '28px', height: '28px', background: '#222', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
                       </div>
+                      {draftProductIds.has(item.productId) && (
+                        <span style={{ padding: '2px 8px', background: 'rgba(176,38,255,0.12)', color: '#b026ff', border: '1px solid #b026ff', borderRadius: '999px', fontSize: '10px', fontWeight: '800', whiteSpace: 'nowrap' }}>
+                          📝 Draft
+                        </span>
+                      )}
                       <button onClick={() => openMessage(item)}
                         style={{ padding: '6px 12px', background: '#222', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '11px', whiteSpace: 'nowrap' }}>
                         💬 Message
@@ -576,7 +584,7 @@ function BagPage() {
               <>
                 {/* Message Input */}
                 {draftMsg && (
-                  <span style={{ color: '#888', fontSize: 12, fontWeight: 700, display: 'block', marginBottom: 4 }}>📝 Draft</span>
+                  <span style={{ color: '#888', fontSize: 12, fontWeight: 700, display: 'block', marginBottom: 4 }}>📝 Saved as a draft — it stays in your Inbox until you send or cancel.</span>
                 )}
                 <textarea placeholder="Write your message..." value={messageText} onChange={e => setMessageText(e.target.value)}
                   style={{ width: '100%', minHeight: '100px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '8px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
@@ -607,7 +615,7 @@ function BagPage() {
               />
             )}
 
-            <button onClick={closeMessageModal}
+            <button onClick={() => { clearMsgDraft(); setGuestImageUrl(''); setMessageTarget(null); setShowQuickReplies(false) }}
               style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
               Cancel
             </button>

@@ -335,7 +335,7 @@ export default function ProductActions({
             {auth.currentUser ? (
               <>
                 {draftMsg && (
-                  <span style={{ color: '#888', fontSize: 12, fontWeight: 700, display: 'block', marginBottom: 4 }}>📝 Draft</span>
+                  <span style={{ color: '#888', fontSize: 12, fontWeight: 700, display: 'block', marginBottom: 4 }}>📝 Saved as a draft — it stays in your Inbox until you send or cancel.</span>
                 )}
                 <textarea placeholder="Write your message..." value={messageText} onChange={e => setMessageText(e.target.value)}
                   style={{ width: '100%', minHeight: '100px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '8px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
@@ -367,7 +367,7 @@ export default function ProductActions({
               />
             )}
 
-            <button onClick={closeMessageModal}
+            <button onClick={() => { clearMsgDraft(); setPhotoUrl(''); setShowQuickReplies(false); onCloseMessage() }}
               style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
               Cancel
             </button>

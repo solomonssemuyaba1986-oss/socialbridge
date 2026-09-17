@@ -41,10 +41,8 @@ export interface DraftMeta {
 export const DRAFT_PREFIX = 'rachett_draft_'
 /** The placeholder key the hook uses when no draft target is open. */
 export const DRAFT_NONE = `${DRAFT_PREFIX}none`
-/** How many drafts follow a signed-in account. */
-export const MAX_ACCOUNT_DRAFTS = 10
-/** Drafts older than this are dropped rather than nagging forever. */
-export const DRAFT_TTL_DAYS = 30
+/** How many drafts follow a signed-in account (the device copy has no limit). */
+export const MAX_ACCOUNT_DRAFTS = 25
 export const MAX_DRAFT_TEXT = 500
 
 export function draftKey(conversationId: string): string {
@@ -123,8 +121,9 @@ export function removeDraft(store: StorageLike, conversationId: string): void {
   }
 }
 
-/** Every draft on this device, newest first (stale ones are dropped). */
-export function listDrafts(store: StorageLike, now = Date.now()): DraftMeta[] {
+/** Every draft on this device, newest first. **Nothing expires** — a draft lives
+ *  until the person sends it or taps Cancel. */
+export function listDrafts(store: StorageLike): DraftMeta[] {
   let keys: string[]
   try {
     keys = store.keys().filter((k) => k.startsWith(DRAFT_PREFIX) && k !== DRAFT_NONE)
@@ -136,7 +135,7 @@ export function listDrafts(store: StorageLike, now = Date.now()): DraftMeta[] {
     const meta = readDraft(store, key.slice(DRAFT_PREFIX.length))
     if (meta) drafts.push(meta)
   }
-  return pruneStale(drafts, now).sort((a, b) => b.at - a.at)
+  return drafts.sort((a, b) => b.at - a.at)
 }
 
 /**
@@ -157,12 +156,6 @@ export function mergeDrafts(local: DraftMeta[], account: DraftMeta[]): DraftMeta
 /** Keeps the newest N — the account copy must stay small. */
 export function capDrafts(list: DraftMeta[], max = MAX_ACCOUNT_DRAFTS): DraftMeta[] {
   return [...list].sort((a, b) => b.at - a.at).slice(0, max)
-}
-
-/** Drops drafts nobody came back to. */
-export function pruneStale(list: DraftMeta[], now: number, ttlDays = DRAFT_TTL_DAYS): DraftMeta[] {
-  const cutoff = now - ttlDays * 24 * 60 * 60 * 1000
-  return list.filter((draft) => !draft.at || draft.at >= cutoff)
 }
 
 /** What the Inbox row calls this draft. */

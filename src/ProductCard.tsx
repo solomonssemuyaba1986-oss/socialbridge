@@ -9,6 +9,8 @@ type Props = {
   inBag: boolean
   bagged: number
   isMine?: boolean
+  /** True when you have unsent words waiting for this seller — the card says so. */
+  hasDraft?: boolean
   /** Which page this card is on — stamped on impressions and taps. */
   surface?: string
   onOpen: () => void
@@ -29,6 +31,7 @@ function ProductCard({
   inBag,
   bagged,
   isMine,
+  hasDraft,
   surface = 'nearby',
   onOpen,
   onPreview,
@@ -77,6 +80,11 @@ function ProductCard({
         {distanceLabel && (
           <div style={{ position: 'absolute', top: '6px', left: '6px', background: 'rgba(0,0,0,0.7)', color: green, border: `1px solid ${green}`, padding: '2px 7px', borderRadius: '8px', fontSize: '11px', fontWeight: '800', zIndex: 2, backdropFilter: 'blur(4px)', lineHeight: 1.4, whiteSpace: 'nowrap' }}>
             📍 {distanceLabel}
+          </div>
+        )}
+        {hasDraft && (
+          <div style={{ position: 'absolute', top: distanceLabel ? '30px' : '6px', left: '6px', background: 'rgba(0,0,0,0.7)', color: '#b026ff', border: '1px solid #b026ff', padding: '2px 7px', borderRadius: '8px', fontSize: '11px', fontWeight: '800', zIndex: 2, backdropFilter: 'blur(4px)', lineHeight: 1.4, whiteSpace: 'nowrap' }}>
+            📝 Draft
           </div>
         )}
         <button

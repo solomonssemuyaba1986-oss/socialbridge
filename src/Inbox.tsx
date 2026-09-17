@@ -9,7 +9,7 @@ import ConversationPanel from './ConversationPanel'
 import { getConversationId, markConversationRead } from './useConversation'
 import LoadingScreen from './LoadingScreen'
 import { getDraft, useAllDrafts } from './useDraft'
-import { draftAge, type DraftMeta } from './draftStore'
+import { draftAge, draftLabel, type DraftMeta } from './draftStore'
 import { useSellerLive } from './sellerLive'
 import { trackEvent } from './analytics'
 
@@ -265,6 +265,24 @@ function Inbox() {
    */
   const showInitialLoad = loading && threads.length === 0 && !inboxPrimed
 
+  /**
+   * Where a draft should take you when you tap it: its existing thread if there is
+   * one, otherwise the draft's own row in the list below. `null` while the draft
+   * doesn't know who it's addressed to yet (before sign-in resolved).
+   */
+  const draftRowKey = (draft: DraftMeta): string | null => {
+    const myUid = auth.currentUser?.uid || ''
+    const iAmBuyer = draft.counterpartRole === 'seller'
+    const sellerId = iAmBuyer ? draft.sellerId : (draft.sellerId || myUid)
+    const buyerId = iAmBuyer ? (draft.buyerId || myUid) : draft.buyerId
+    if (!sellerId || !buyerId || sellerId === buyerId) return null
+    const conversationId = getConversationId(sellerId, buyerId)
+    const threadKey = iAmBuyer ? `buyer-${conversationId}` : `seller-${conversationId}`
+    if (threads.some(t => t.key === threadKey)) return threadKey
+    if (threads.some(t => t.key === `draft-${conversationId}`)) return `draft-${conversationId}`
+    return null
+  }
+
   useEffect(() => {
     if (!loading) inboxPrimed = true
   }, [loading])
@@ -421,6 +439,57 @@ function Inbox() {
             {' for '}<strong style={{ color: '#fff' }}>“{search.trim()}”</strong>
             {filter === 'unread' && visible.length !== searched.length ? ` · ${visible.length} unread` : ''}
           </p>
+        )}
+
+        {/* Unsent messages — pinned at the top, in every state, impossible to miss */}
+        {openDrafts.length > 0 && (
+          <div style={{ marginBottom: '16px', border: '1px solid #2a1a3a', borderRadius: '14px', overflow: 'hidden', background: '#14101a' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', borderBottom: '1px solid #241a33' }}>
+              <strong style={{ color: '#b026ff', fontSize: '13px', fontWeight: '800' }}>📝 Drafts ({openDrafts.length})</strong>
+              <span style={{ color: '#888', fontSize: '11px' }}>only you can see these · they read it when you tap Send</span>
+            </div>
+            {openDrafts.map(draft => {
+              const rowKey = draftRowKey(draft)
+              return (
+                <div key={draft.conversationId} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', borderTop: '1px solid #1d1626' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '13px', fontWeight: '700', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {draftLabel(draft)}
+                      {draft.counterpartName ? <span style={{ color: '#aaa', fontWeight: 600 }}> · {draft.counterpartName}</span> : null}
+                    </div>
+                    <div style={{ color: '#b026ff', fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{draft.text}</div>
+                    <div style={{ color: '#666', fontSize: '11px' }}>{draftAge(draft) || 'just now'}</div>
+                  </div>
+                  {rowKey ? (
+                    <button onClick={() => openChat(rowKey)}
+                      style={{ padding: '6px 12px', borderRadius: '999px', border: '1px solid #b026ff', background: 'transparent', color: '#b026ff', fontWeight: '700', fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      Resume
+                    </button>
+                  ) : (
+                    <span style={{ color: '#666', fontSize: '11px', whiteSpace: 'nowrap' }}>no chat yet</span>
+                  )}
+                  <button onClick={() => discardDraft(draft.conversationId)}
+                    style={{ padding: '6px 12px', borderRadius: '999px', border: '1px solid #333', background: 'transparent', color: '#888', fontWeight: '700', fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    Discard
+                  </button>
+                </div>
+              )
+            })}
+            {/* Why a draft isn't a row — the answer on screen, not in the console */}
+            {isDev && (
+              <div style={{ padding: '6px 14px', borderTop: '1px solid #1d1626', color: '#555', fontSize: '10px', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                dev · {openDrafts.length} parsed · raw keys: {(() => {
+                  try {
+                    const raw = Object.keys(window.localStorage).filter(k => k.startsWith('rachett_draft'))
+                    return raw.length > 0 ? raw.join(', ') : 'none'
+                  } catch { return 'unreadable' }
+                })()}
+                {openDrafts.filter(d => !draftRowKey(d)).length > 0
+                  ? ` · no chat yet: ${openDrafts.filter(d => !draftRowKey(d)).map(d => d.conversationId).join(', ')}`
+                  : ''}
+              </div>
+            )}
+          </div>
         )}
 
           {showInitialLoad ? (

@@ -9,6 +9,7 @@ import { formatDistance, isApproximatePin, placeLabel, type GeoSource, type Plac
 import { useBuyerLocation } from './useBuyerLocation'
 import { useBag, getBagCounts, type BagCountData } from './useBag'
 import ProductCard from './ProductCard'
+import { useAllDrafts } from './useDraft'
 import ProductCardSkeleton from './ProductCardSkeleton'
 import ProductActions from './ProductActions'
 import ProductPreview from './ProductPreview'
@@ -150,6 +151,9 @@ function NearbyPage() {
   const [orderProduct, setOrderProduct] = useState<CardProduct | null>(null)
   const [messageProduct, setMessageProduct] = useState<CardProduct | null>(null)
   const [preview, setPreview] = useState<{ images: string[]; index: number } | null>(null)
+  // Unsent messages — a card you already wrote about says so.
+  const { drafts: myDrafts } = useAllDrafts()
+  const draftProductIds = new Set(myDrafts.map(d => d.productId).filter((id): id is string => Boolean(id)))
   const [userId, setUserId] = useState<string | null>(auth.currentUser?.uid || null)
   const [shuffleSeed, setShuffleSeed] = useState(() => Date.now())
   const rangeWrapRef = useRef<HTMLDivElement | null>(null)
@@ -589,6 +593,7 @@ function NearbyPage() {
         inBag={isInBag(p.id)}
         bagged={bagCounts[p.id]?.baggedCount || 0}
         isMine={p.sellerId === userId}
+        hasDraft={draftProductIds.has(p.id)}
         onOpen={() => openProduct(p)}
         onPreview={() => {
           const imgs = productImages(p)

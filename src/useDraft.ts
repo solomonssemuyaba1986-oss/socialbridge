@@ -23,11 +23,9 @@ import { trackEvent } from './analytics'
 import {
   DRAFT_NONE,
   DRAFT_PREFIX,
-  capDrafts,
   listDrafts,
   mergeDrafts,
   parseDraft,
-  pruneStale,
   readDraft,
   removeDraft,
   toAccountDrafts,
@@ -170,6 +168,9 @@ export function useDraft(key: string, context?: DraftContext, options?: { surfac
       if (isDev) console.warn('[drafts] nothing to save — no product or conversation is open')
       return null
     }
+    // Sent or cancelled on purpose: a late flush (unmount, tab hide) must not bring
+    // the draft back. Typing again clears this, so the next draft is unaffected.
+    if (resolvedRef.current) return null
     if (!ctx) {
       // No context to attach (should not happen: every sheet passes one). Keep the
       // old bare-text behaviour rather than losing what was typed.
@@ -320,7 +321,16 @@ export function useDraft(key: string, context?: DraftContext, options?: { surfac
     if (uid && conversationId) void pullDraftFromAccount(uid, conversationId)
   }, [store, conversationId])
 
-  return { text, setText, draft: text.trim().length > 0, clearDraft, saveNow }
+  /**
+   * The sheets' `setText`. Typing after a send or a cancel starts a *new* draft —
+   * without this, the next keystroke would be swallowed by the resolved flag.
+   */
+  const updateText = useCallback((value: string) => {
+    if (value.trim()) resolvedRef.current = false
+    setText(value)
+  }, [])
+
+  return { text, setText: updateText, draft: text.trim().length > 0, clearDraft, saveNow }
 }
 
 /**
@@ -358,7 +368,8 @@ export function useAllDrafts() {
       unsub = onSnapshot(doc(db, 'users', user.uid), (snap) => {
         const data = snap.data() as { drafts?: unknown } | undefined
         const list = Array.isArray(data?.drafts) ? (data.drafts as DraftMeta[]).filter((d) => d && d.conversationId) : []
-        setAccount(pruneStale(list, Date.now()))
+        // No expiry: whatever the account remembers is shown as-is.
+        setAccount(list)
       }, (err) => {
         console.warn('Draft listen failed:', err)
         setAccount([])
@@ -367,7 +378,7 @@ export function useAllDrafts() {
     return () => { authUnsub(); unsub?.() }
   }, [])
 
-  const drafts = useMemo(() => capDrafts(mergeDrafts(local, account)), [local, account])
+  const drafts = useMemo(() => mergeDrafts(local, account), [local, account])
 
   /**
    * A draft typed before we knew who you were (signed out, or auth still
