@@ -33,6 +33,8 @@ export interface DraftMeta {
   productName?: string
   productPrice?: string
   productImage?: string
+  /** Their store link — lets a draft be reopened even before a chat exists. */
+  sellerSlug?: string
   text: string
   /** ms — when the text last changed. */
   at: number
@@ -83,6 +85,7 @@ export function parseDraft(raw: string | null, conversationId = ''): DraftMeta |
       productName: parsed.productName,
       productPrice: parsed.productPrice,
       productImage: parsed.productImage,
+      sellerSlug: parsed.sellerSlug,
       text,
       at: typeof parsed.at === 'number' ? parsed.at : 0,
     }

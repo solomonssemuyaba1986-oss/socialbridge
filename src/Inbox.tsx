@@ -101,6 +101,8 @@ function Inbox() {
   const [filter, setFilter] = useState<'all' | 'unread'>('all')
   const [search, setSearch] = useState('')
   const [logoMap, setLogoMap] = useState<Record<string, string>>({})
+  /** sellerId -> store link, so an old draft with no slug recorded can still be opened. */
+  const [slugMap, setSlugMap] = useState<Record<string, string>>({})
   const { isSeller, pendingOrdersCount } = useSellerLive()
   // Draft rows refresh themselves — `useAllDrafts` listens to the same event.
 
@@ -109,24 +111,29 @@ function Inbox() {
     const ids = new Set<string>()
     buyerConversations.forEach(c => { if (c.sellerId) ids.add(c.sellerId) })
     sellerConversations.forEach(c => { if (c.buyerId) ids.add(c.buyerId) })
+    // A draft's seller, so its store link can be resolved even with no chat yet.
+    openDrafts.forEach(d => { if (d.sellerId) ids.add(d.sellerId) })
 
     const fetchLogos = async () => {
       const next: Record<string, string> = {}
+      const nextSlug: Record<string, string> = {}
       await Promise.all(Array.from(ids).map(async id => {
         try {
           const snap = await getDoc(doc(db, 'sellers', id))
           if (snap.exists()) {
             const data = snap.data()
             if (data.logoUrl) next[id] = data.logoUrl
+            if (typeof data.slug === 'string' && data.slug) nextSlug[id] = data.slug
           }
         } catch (err) {
           console.warn('Failed to fetch seller logo:', err)
         }
       }))
       setLogoMap(prev => ({ ...prev, ...next }))
+      setSlugMap(prev => ({ ...prev, ...nextSlug }))
     }
     fetchLogos()
-  }, [buyerConversations, sellerConversations])
+  }, [buyerConversations, sellerConversations, openDrafts])
 
   const threads: Thread[] = useMemo(() => {
     const list: Thread[] = []
@@ -335,6 +342,24 @@ function Inbox() {
     }
   }
 
+  /**
+   * "Resume" from the pinned block: open the row that carries this draft and bring
+   * it into view — clearing a search or the unread filter first, because a hidden
+   * row would look like the tap did nothing.
+   */
+  const resumeDraft = (draft: DraftMeta) => {
+    const key = draftRowKey(draft)
+    if (!key) return
+    if (!visible.some(t => t.key === key)) {
+      setSearch('')
+      setFilter('all')
+    }
+    if (selectedKey !== key) openChat(key)
+    window.setTimeout(() => {
+      document.getElementById(`thread-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 80)
+  }
+
   const chatProps = selected ? (() => {
     if (selected.kind === 'buyer' && selected.buyerConvo) {
       const c = selected.buyerConvo
@@ -360,6 +385,7 @@ function Inbox() {
         buyerId: d.buyerId,
         sellerName: iAmBuyer ? d.counterpartName : (auth.currentUser?.displayName || 'You'),
         buyerName: iAmBuyer ? (auth.currentUser?.displayName || 'Buyer') : d.counterpartName,
+        productId: d.productId,
         productName: d.productName,
         productPrice: d.productPrice,
         productImage: d.productImage,
@@ -450,6 +476,8 @@ function Inbox() {
             </div>
             {openDrafts.map(draft => {
               const rowKey = draftRowKey(draft)
+              // Recorded slug first; otherwise the seller doc we already fetched.
+              const slug = draft.sellerSlug || slugMap[draft.sellerId] || ''
               return (
                 <div key={draft.conversationId} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', borderTop: '1px solid #1d1626' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -461,12 +489,17 @@ function Inbox() {
                     <div style={{ color: '#666', fontSize: '11px' }}>{draftAge(draft) || 'just now'}</div>
                   </div>
                   {rowKey ? (
-                    <button onClick={() => openChat(rowKey)}
+                    <button onClick={() => resumeDraft(draft)}
                       style={{ padding: '6px 12px', borderRadius: '999px', border: '1px solid #b026ff', background: 'transparent', color: '#b026ff', fontWeight: '700', fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                       Resume
                     </button>
+                  ) : slug && draft.productId ? (
+                    <button onClick={() => navigate(`/store/${slug}?productId=${draft.productId}`)}
+                      style={{ padding: '6px 12px', borderRadius: '999px', border: '1px solid #b026ff', background: 'transparent', color: '#b026ff', fontWeight: '700', fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      Open
+                    </button>
                   ) : (
-                    <span style={{ color: '#666', fontSize: '11px', whiteSpace: 'nowrap' }}>no chat yet</span>
+                    <span style={{ color: '#666', fontSize: '11px', whiteSpace: 'nowrap' }}>needs the product link</span>
                   )}
                   <button onClick={() => discardDraft(draft.conversationId)}
                     style={{ padding: '6px 12px', borderRadius: '999px', border: '1px solid #333', background: 'transparent', color: '#888', fontWeight: '700', fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
@@ -506,7 +539,7 @@ function Inbox() {
             {visible.map(t => {
               const isSelected = selectedKey === t.key
               return (
-                <div key={t.key}>
+                <div key={t.key} id={`thread-${t.key}`}>
                   <div onClick={() => openChat(t.key)}
                     style={{ display: 'flex', alignItems: 'center', gap: '12px', background: isSelected ? '#1a2a1a' : '#1a1a1a', borderRadius: isSelected ? '12px 12px 0 0' : '12px', padding: '14px 16px', border: `1px solid ${isSelected ? green : '#222'}`, cursor: 'pointer' }}>
                     <div style={{ position: 'relative', flexShrink: 0 }}>

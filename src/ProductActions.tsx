@@ -79,6 +79,7 @@ export default function ProductActions({
           productName: messageProduct.name,
           productPrice: messageProduct.price,
           productImage: messageProduct.imageUrl,
+          sellerSlug: messageProduct.sellerSlug,
         }
       : undefined,
     { surface },

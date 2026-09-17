@@ -77,6 +77,7 @@ function BagPage() {
           productName: messageTarget.name,
           productPrice: messageTarget.price,
           productImage: messageTarget.imageUrl,
+          sellerSlug: messageTarget.sellerSlug,
         }
       : undefined,
     { surface: 'bag' },

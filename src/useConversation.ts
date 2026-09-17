@@ -139,10 +139,11 @@ export function useConversation(sellerId: string | null, buyerId: string | null)
     text: string,
     sellerName: string,
     buyerName: string,
-    opts?: { imageUrl?: string; type?: string }
+    opts?: { imageUrl?: string; type?: string; productId?: string; productName?: string; productPrice?: string; productImage?: string }
   ) => {
-    if (!sellerId || !buyerId) return
+    if (!sellerId || !buyerId || sellerId === buyerId) return false
     await sendConversationMessage(sellerId, buyerId, senderId, text, sellerName, buyerName, opts)
+    return true
   }
 
   /** Send multiple photos atomically as one compact batch. A caption rides on the first photo. */

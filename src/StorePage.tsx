@@ -373,6 +373,7 @@ const messageDeepLinkId = searchParams.get('messageId')
           productName: messageProduct.name,
           productPrice: messageProduct.price,
           productImage: messageProduct.imageUrl,
+          sellerSlug: slugParam,
         }
       : undefined,
     { surface: 'store' },

@@ -35,6 +35,11 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
       buyerId,
       counterpartName: meIsSeller ? (buyerName || 'Buyer') : (sellerName || 'Seller'),
       counterpartRole: meIsSeller ? 'buyer' : 'seller',
+      // The product rides along so a draft left here still says what it's about.
+      productId,
+      productName,
+      productPrice,
+      productImage,
     },
     { surface: 'inbox' },
   )
@@ -181,15 +186,31 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
     if (!messageText && pendingImages.length === 0) return
     const senderId = auth.currentUser?.uid
     if (!senderId) return
+    if (!sellerId || !buyerId || sellerId === buyerId) {
+      // No silent failures: a draft with nowhere to go must say so.
+      showFeedback('This chat has no one to send to yet — open the product and tap Message again.', 'error')
+      return
+    }
     if (senderId === sellerId && senderId === buyerId) {
       showFeedback("You can't message your self.", 'error')
       return
     }
+    /**
+     * The product rides on the *first* message of a thread, so whoever receives it
+     * knows what the message is about without asking.
+     */
+    const productOpts = (!loading && messages.length === 0 && (productId || productName))
+      ? { productId, productName, productPrice, productImage }
+      : undefined
     try {
       if (pendingImages.length > 0) {
         await sendImageBatch(senderId, pendingImages, messageText || '📷 Photo', sellerName || 'Seller', buyerName || 'Buyer')
       } else {
-        await sendMessage(senderId, messageText, sellerName || 'Seller', buyerName || 'Buyer')
+        const sent = await sendMessage(senderId, messageText, sellerName || 'Seller', buyerName || 'Buyer', productOpts)
+        if (!sent) {
+          showFeedback('This chat has no one to send to yet — open the product and tap Message again.', 'error')
+          return
+        }
       }
       clearDraft()
       setPendingImages([])

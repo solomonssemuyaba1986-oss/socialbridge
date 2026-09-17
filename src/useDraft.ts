@@ -46,6 +46,8 @@ export interface DraftContext {
   productName?: string
   productPrice?: string
   productImage?: string
+  /** Their store link, so a draft can be reopened before any chat exists. */
+  sellerSlug?: string
 }
 
 /** Real localStorage, or an in-memory stand-in when storage is blocked. */
@@ -193,6 +195,7 @@ export function useDraft(key: string, context?: DraftContext, options?: { surfac
       productName: ctx.productName,
       productPrice: ctx.productPrice,
       productImage: ctx.productImage,
+      sellerSlug: ctx.sellerSlug,
       text: value,
       at: Date.now(),
     }
@@ -282,6 +285,7 @@ export function useDraft(key: string, context?: DraftContext, options?: { surfac
       productName: context?.productName,
       productPrice: context?.productPrice,
       productImage: context?.productImage,
+      sellerSlug: context?.sellerSlug,
       text: carried,
       at: Date.now(),
     })
@@ -296,6 +300,7 @@ export function useDraft(key: string, context?: DraftContext, options?: { surfac
     context?.productName,
     context?.productPrice,
     context?.productImage,
+    context?.sellerSlug,
     context?.counterpartName,
     context?.counterpartRole,
     store,

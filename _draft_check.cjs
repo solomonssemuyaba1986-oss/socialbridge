@@ -49,6 +49,7 @@ const meta = (over = {}) => ({
   productName: 'Kitenge Dress',
   productPrice: '45000',
   productImage: 'https://img/1.jpg',
+  sellerSlug: 'aisha-fabrics',
   text: 'Is this still available?',
   at: 1_700_000_000_000,
   ...over,
@@ -72,6 +73,7 @@ check('JSON round-trips every field the Inbox row needs', () => {
   const written = meta()
   writeDraft(s, written)
   assert.deepStrictEqual(readDraft(s, written.conversationId), written)
+  assert.strictEqual(readDraft(s, written.conversationId).sellerSlug, 'aisha-fabrics')
   assert.strictEqual(s.getItem(draftKey(written.conversationId)) !== null, true)
   removeDraft(s, written.conversationId)
   assert.strictEqual(readDraft(s, written.conversationId), null)
