@@ -105,7 +105,7 @@ Written by `SetupStore.tsx:426-450` (create), `EditStore.tsx:234-258` (edit), `D
 ## 3. BUYER data
 
 ### 3.1 Signed-in buyer
-- **`users/{uid}`** — `displayName`, `email`, `lastSeen`, `signupAt` (`StorePage.tsx:708-713`), `role` (`'buyer' | 'seller'` — the onboarding choice, mirrored from the device so a buyer is never asked who they are again; `role.ts`) and `quickReplies[]` (≤20 replies, ≤200 chars each — the buyer's own canned messages; `useQuickReplies.ts:6-8, 62`).
+- **`users/{uid}`** — `displayName`, `email`, `lastSeen`, `signupAt` (`StorePage.tsx:708-713`), `role` (`'buyer' | 'seller'` — the onboarding choice, mirrored from the device so a buyer is never asked who they are again; `role.ts`), `quickReplies[]` (≤20 replies, ≤200 chars each — the buyer's own canned messages; `useQuickReplies.ts:6-8, 62`) and `drafts[]` (≤10 unsent messages: text + conversation/person/product context, so your Inbox can show a draft with no thread yet and a lost phone doesn't lose the question; `draftStore.toAccountDrafts`, `useDraft.pushDraftToAccount`). A draft is **never** readable by the other party — it lives on your own document, not on the thread.
 - **`users/{uid}/bag/{productId}`** — a frozen snapshot of purchase intent: `productId`, `productName`, `productPrice`, `imageUrl`, `images[]`, `sellerSlug`, `sellerId`, `businessName`, `addedAt` (ms), `quantity` (`useBag.ts:7-18, 195`).
 
 ### 3.2 Anonymous buyer
@@ -182,7 +182,7 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 | `rachett_role` | The buyer/seller choice made on the onboarding screen — stops us asking twice (`role.ts`) | `role.ts` |
 | `rachett_nearby_sort` | The Nearby quick control the buyer prefers (`closest` / `newest` / `popular`) — remembered so the page opens the way they like it (`NearbyPage.tsx`) | `NearbyPage.tsx` |
 | `rachett_pending_action` (session) | The Buy/Message a guest was blocked on, so signing in returns them to it; expires after 15 min (`signInGate.ts`) | `signInGate.ts` |
-| `rachett_draft_*` | Unsent message drafts per thread/product | `useDraft.ts:3` |
+| `rachett_draft_*` | Unsent message drafts, keyed `rachett_draft_convo_<conversationId>`: the text plus the conversation, person and product context (`draftStore.ts` / `useDraft.ts`). Signed-in users also get a copy on `users/{uid}.drafts` so a lost phone doesn't lose the question. Cleared on send or discard; stale ones dropped after 30 days. | `draftStore.ts` |
 | `rachett_recent_searches_{uid}` | Last N searches | `BrowsePage.tsx:362-390` |
 | `rachett_analytics_anon_id` | **Device id for analytics** — an opaque `anon_…` string, so a signed-out visitor can still be followed through a funnel. No personal data. | `analytics/identity.ts` |
 | `rachett_analytics_session` (session) | Session id + timestamps; rotates after 30 minutes of silence | `analytics/identity.ts` |

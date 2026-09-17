@@ -63,7 +63,7 @@ bounded offline buffer (200, oldest dropped) and never break the UI.
 - **Opt-out** — `localStorage.rachett_analytics_off = '1'` silences every writer
   (see `setAnalyticsOptOut`). Nothing is queued or sent in that state.
 
-## The events (63)
+## The events (66)
 
 ✅ = wired in the app today · ⏳ = reserved name, add the call when the feature or
 the page needs it.
@@ -114,6 +114,9 @@ the page needs it.
 | `conversation_opened` | conversationId, counterpartRole, threadType, unread | ✅ |
 | `message_sent` | conversationId, senderRole, productId, sellerId, hasPhoto, isQuickReply, length, surface, channel | ✅ |
 | `seller_first_response` | conversationId, latencyMinutes, productId | ✅ |
+| `message_draft_started` | conversationId, surface, productId, sellerId, length | ✅ |
+| `message_draft_resumed` | conversationId, surface, ageMinutes | ✅ |
+| `message_draft_abandoned` | conversationId, surface, length | ✅ |
 | `quick_reply_created` | count, length | ⏳ |
 | `image_uploaded` | kind, surface, failed | ✅ (chat photos) |
 | `order_placed` | orderId, productId, sellerId, price, quantity, bagSize, channel, surface | ✅ |

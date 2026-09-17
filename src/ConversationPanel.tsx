@@ -26,7 +26,18 @@ type Props = {
 
 export default function ConversationPanel({ sellerId, buyerId, sellerName, buyerName, productName, productPrice, productImage, productId, orderCount }: Props) {
   const { messages, loading, sendMessage, sendImageBatch, conversationId } = useConversation(sellerId, buyerId)
-  const { text, setText, clearDraft } = useDraft(conversationId ? `convo_${conversationId}` : 'none')
+  /** Who I am on this thread — decides the draft's counterpart and sender role. */
+  const meIsSeller = Boolean(auth.currentUser?.uid) && auth.currentUser?.uid === sellerId
+  const { text, setText, clearDraft } = useDraft(
+    conversationId ? `convo_${conversationId}` : 'none',
+    {
+      sellerId,
+      buyerId,
+      counterpartName: meIsSeller ? (buyerName || 'Buyer') : (sellerName || 'Seller'),
+      counterpartRole: meIsSeller ? 'buyer' : 'seller',
+    },
+    { surface: 'inbox' },
+  )
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [showOrderModal, setShowOrderModal] = useState(false)
   const [buyerNameOrder, setBuyerNameOrder] = useState('')
@@ -274,7 +285,9 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
             </div>
           </>
         ) : messages.length === 0 ? (
-          <div style={{ color: '#666' }}>No messages yet</div>
+          <div style={{ color: '#666', textAlign: 'center', padding: '12px 0' }}>
+            {text.trim() ? '📝 Your draft is ready — hit Send when you are.' : 'No messages yet'}
+          </div>
         ) : (
           clusters.map((c: any, ci: number) => {
             if (c.kind === 'images' && c.messages.length > 1) {

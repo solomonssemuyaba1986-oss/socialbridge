@@ -10,7 +10,7 @@ import { useDraft } from './useDraft'
 import QuickRepliesPanel from './QuickRepliesPanel'
 import { uploadImageToCloudinary } from './uploadImage'
 import ProductPreview from './ProductPreview'
-import { sendConversationMessage } from './useConversation'
+import { getConversationId, sendConversationMessage } from './useConversation'
 import { notify } from './notifications'
 import { consumePendingAction, requireSignIn } from './signInGate'
 import SignInPrompt from './SignInPrompt'
@@ -49,7 +49,27 @@ function BagPage() {
   const [orderQty, setOrderQty] = useState('1')
   const [deliveryArea, setDeliveryArea] = useState('')
   const [orderMessage, setOrderMessage] = useState('')
-  const { text: messageText, setText: setMessageText, draft: draftMsg, clearDraft: clearMsgDraft } = useDraft(messageTarget ? `product_${messageTarget.id}` : 'none')
+  /** One thread, one draft — keyed by the conversation this message would create. */
+  const draftUid = auth.currentUser?.uid ?? ''
+  const messageDraftKey = messageTarget && draftUid && messageTarget.sellerId
+    ? `convo_${getConversationId(messageTarget.sellerId, draftUid)}`
+    : 'none'
+  const { text: messageText, setText: setMessageText, draft: draftMsg, clearDraft: clearMsgDraft } = useDraft(
+    messageDraftKey,
+    messageTarget && draftUid && messageTarget.sellerId
+      ? {
+          sellerId: messageTarget.sellerId,
+          buyerId: draftUid,
+          counterpartName: messageTarget.businessName || 'Seller',
+          counterpartRole: 'seller',
+          productId: messageTarget.id,
+          productName: messageTarget.name,
+          productPrice: messageTarget.price,
+          productImage: messageTarget.imageUrl,
+        }
+      : undefined,
+    { surface: 'bag' },
+  )
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const sellerIdCache = useRef<Map<string, string>>(new Map())
   const guestFileRef = useRef<HTMLInputElement | null>(null)

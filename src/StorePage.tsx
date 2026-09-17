@@ -6,7 +6,7 @@ import { suppressNextSellerOrderAlert } from './orderAlerts'
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, FacebookAuthProvider, OAuthProvider } from 'firebase/auth'
 import { CATEGORIES, getSubcategories } from './categories'
 import { notify } from './notifications'
-import { useConversation } from './useConversation.ts'
+import { getConversationId, useConversation } from './useConversation.ts'
 import { useBag, getBagCounts, type BagCountData } from './useBag'
 import { useSellerStats, getSalesLabel, formatRating, renderStars, getBadgeStatusLabel } from './useSellerStats.ts'
 import QuickRepliesPanel from './QuickRepliesPanel'
@@ -348,7 +348,27 @@ const messageDeepLinkId = searchParams.get('messageId')
 
   const [orderProduct, setOrderProduct] = useState<Product | null>(null)
   const [messageProduct, setMessageProduct] = useState<Product | null>(null)
-  const { text: messageText, setText: setMessageText, draft: draftMsg, clearDraft: clearMsgDraft } = useDraft(messageProduct ? `product_${messageProduct.id}` : 'none')
+  /** One thread, one draft — keyed by the conversation this message would create. */
+  const draftUid = auth.currentUser?.uid ?? ''
+  const messageDraftKey = messageProduct && draftUid && sellerId
+    ? `convo_${getConversationId(sellerId, draftUid)}`
+    : 'none'
+  const { text: messageText, setText: setMessageText, draft: draftMsg, clearDraft: clearMsgDraft } = useDraft(
+    messageDraftKey,
+    messageProduct && draftUid && sellerId
+      ? {
+          sellerId,
+          buyerId: draftUid,
+          counterpartName: seller?.businessName || 'Seller',
+          counterpartRole: 'seller',
+          productId: messageProduct.id,
+          productName: messageProduct.name,
+          productPrice: messageProduct.price,
+          productImage: messageProduct.imageUrl,
+        }
+      : undefined,
+    { surface: 'store' },
+  )
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [feedbackMessage, setFeedbackMessage] = useState('')
   const [feedbackType, setFeedbackType] = useState<'success' | 'error' | 'info'>('success')

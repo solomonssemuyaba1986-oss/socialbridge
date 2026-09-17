@@ -8,8 +8,10 @@ import { useBuyerConversations, type BuyerConversation } from './useBuyerConvers
 import ConversationPanel from './ConversationPanel'
 import { markConversationRead } from './useConversation'
 import LoadingScreen from './LoadingScreen'
-import { getDraft } from './useDraft'
+import { getDraft, useAllDrafts } from './useDraft'
+import { draftAge, type DraftMeta } from './draftStore'
 import { useSellerLive } from './sellerLive'
+import { trackEvent } from './analytics'
 
 const green = '#adff2f'
 
@@ -71,23 +73,31 @@ type Thread = {
   sellerConvo?: SellerConversation
   guest?: SellerMessage
   guestMessages?: SellerMessage[]
+  /** A draft with no thread yet — this row is the reminder, not a conversation. */
+  draft?: DraftMeta
 }
+/**
+ * Minutes since a draft was last typed. Module scope on purpose: `Date.now()` must
+ * not be called from the component render path.
+ */
+function draftAgeMinutes(at?: number): number | undefined {
+  if (!at) return undefined
+  return Math.max(0, Math.round((Date.now() - at) / 60000))
+}
+
 function Inbox() {
   const navigate = useNavigate()
   const { messages, unreadCount: unreadMessages, loading: messagesLoading } = useSellerMessages()
   const { conversations: sellerConversations, unreadCount: unreadSellerConversations, loading: conversationsLoading } = useSellerConversations()
   const { conversations: buyerConversations, unreadCount: unreadBuyerConversations, loading: buyerConversationsLoading } = useBuyerConversations()
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  /** Drafts this person has typed but not sent — device + account. */
+  const { drafts: openDrafts, discardDraft } = useAllDrafts()
   const [filter, setFilter] = useState<'all' | 'unread'>('all')
   const [search, setSearch] = useState('')
   const [logoMap, setLogoMap] = useState<Record<string, string>>({})
-  const [draftTick, setDraftTick] = useState(0)
   const { isSeller, pendingOrdersCount } = useSellerLive()
-  useEffect(() => {
-    const handler = () => setDraftTick(t => t + 1)
-    window.addEventListener('rachett:draftchange', handler)
-    return () => window.removeEventListener('rachett:draftchange', handler)
-  }, [])
+  // Draft rows refresh themselves — `useAllDrafts` listens to the same event.
 
   // Fetch store logos for the "other party" in each conversation (if they're rachett sellers)
   useEffect(() => {
@@ -186,9 +196,36 @@ function Inbox() {
         guestMessages: msgs.slice().reverse(), // chronological for display
       })
     })
+    /**
+     * Drafts with no thread yet. This is the whole point: you tapped Message,
+     * wrote something, life happened — so it waits here, one tap from Send, and
+     * the seller still knows nothing about it.
+     */
+    const knownConversationIds = new Set([
+      ...buyerConversations.map(c => c.id),
+      ...sellerConversations.map(c => c.id),
+    ])
+    openDrafts.forEach(d => {
+      if (!d.sellerId || !d.buyerId || knownConversationIds.has(d.conversationId)) return
+      const iAmBuyer = d.counterpartRole === 'seller'
+      list.push({
+        key: `draft-${d.conversationId}`,
+        name: d.counterpartName || (iAmBuyer ? 'Seller' : 'Buyer'),
+        avatarText: (d.counterpartName || 'D').charAt(0).toUpperCase(),
+        avatarUrl: iAmBuyer ? logoMap[d.sellerId] : undefined,
+        preview: d.text,
+        timeValue: d.at || 0,
+        timeLabel: draftAge(d),
+        unread: false,
+        unreadCount: 0,
+        hasDraft: true,
+        kind: iAmBuyer ? 'buyer' : 'seller',
+        draft: d,
+      })
+    })
     list.sort((a, b) => b.timeValue - a.timeValue)
     return list
-  }, [buyerConversations, sellerConversations, messages, logoMap, draftTick])
+  }, [buyerConversations, sellerConversations, messages, logoMap, openDrafts])
 
   const totalUnread = unreadMessages + unreadSellerConversations + unreadBuyerConversations
   const loading = messagesLoading || conversationsLoading || buyerConversationsLoading
@@ -213,6 +250,16 @@ function Inbox() {
     const closing = selectedKey === key
     setSelectedKey(prev => (prev === key ? null : key))
     if (closing) return
+
+    // Opening a draft is the moment the abandoned question gets picked back up.
+    const opened = threads.find(x => x.key === key)
+    if (opened?.draft) {
+      trackEvent('message_draft_resumed', {
+        conversationId: opened.draft.conversationId,
+        surface: 'inbox',
+        ageMinutes: draftAgeMinutes(opened.draft.at),
+      })
+    }
 
     // Mark read on open
     const t = threads.find(x => x.key === key)
@@ -243,6 +290,23 @@ function Inbox() {
     if (selected.guest) {
       const g = selected.guest
       return { sellerId: auth.currentUser?.uid || '', buyerId: g.senderUid, sellerName: 'You', buyerName: g.senderName, productName: g.productName, productPrice: g.productPrice }
+    }
+    /**
+     * A draft row: no conversation exists yet, so both ids and the display names
+     * come from the draft itself. Sending from here creates the thread.
+     */
+    if (selected.draft) {
+      const d = selected.draft
+      const iAmBuyer = d.counterpartRole === 'seller'
+      return {
+        sellerId: d.sellerId,
+        buyerId: d.buyerId,
+        sellerName: iAmBuyer ? d.counterpartName : (auth.currentUser?.displayName || 'You'),
+        buyerName: iAmBuyer ? (auth.currentUser?.displayName || 'Buyer') : d.counterpartName,
+        productName: d.productName,
+        productPrice: d.productPrice,
+        productImage: d.productImage,
+      }
     }
     return null
   })() : null
@@ -365,7 +429,17 @@ function Inbox() {
                             <span style={{ display: 'inline-flex', alignItems: 'center', marginLeft: '8px', background: '#0d2a0d', color: green, fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '999px', border: `1px solid ${green}` }}>✓</span>
                           )}
                         </p>
-                        <span style={{ color: '#555', fontSize: '11px', flexShrink: 0 }}>{t.timeLabel}</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                          <span style={{ color: '#555', fontSize: '11px' }}>{t.timeLabel}</span>
+                          {t.draft && (
+                            <button
+                              onClick={e => { e.stopPropagation(); discardDraft(t.draft!.conversationId) }}
+                              title="Discard this draft"
+                              style={{ background: 'transparent', border: 'none', color: '#666', cursor: 'pointer', fontSize: '13px', padding: '2px 6px', lineHeight: 1 }}>
+                              ✕
+                            </button>
+                          )}
+                        </span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
                         <p style={{ margin: '2px 0 0', color: t.hasDraft ? '#b026ff' : (t.unread ? '#fff' : '#888'), fontSize: '13px', fontWeight: t.unread ? 700 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>

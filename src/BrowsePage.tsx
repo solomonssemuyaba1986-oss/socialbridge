@@ -13,7 +13,7 @@ import { getMainCategories } from './categories'
 import LoadingScreen from './LoadingScreen'
 import { useDraft } from './useDraft'
 import { uploadImageToCloudinary } from './uploadImage'
-import { sendConversationMessage } from './useConversation'
+import { getConversationId, sendConversationMessage } from './useConversation'
 import { notify } from './notifications'
 import { consumePendingAction, requireSignIn } from './signInGate'
 import SignInPrompt from './SignInPrompt'
@@ -109,7 +109,26 @@ function BrowsePage() {
   const [quantity, setQuantity] = useState('1')
   const [deliveryArea, setDeliveryArea] = useState('')
   const [orderMessage, setOrderMessage] = useState('')
-  const { text: messageText, setText: setMessageText, draft: draftMsg, clearDraft: clearMsgDraft } = useDraft(messageProduct ? `product_${messageProduct.id}` : 'none')
+  /** One thread, one draft: the key is the conversation this message would create. */
+  const messageDraftKey = messageProduct && userId && messageProduct.sellerId
+    ? `convo_${getConversationId(messageProduct.sellerId, userId)}`
+    : 'none'
+  const { text: messageText, setText: setMessageText, draft: draftMsg, clearDraft: clearMsgDraft } = useDraft(
+    messageDraftKey,
+    messageProduct && userId
+      ? {
+          sellerId: messageProduct.sellerId,
+          buyerId: userId,
+          counterpartName: messageProduct.businessName || 'Seller',
+          counterpartRole: 'seller',
+          productId: messageProduct.id,
+          productName: messageProduct.name,
+          productPrice: messageProduct.price,
+          productImage: messageProduct.imageUrl,
+        }
+      : undefined,
+    { surface: 'browse' },
+  )
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const clickTimerRef = useRef<number | null>(null)
   const cardSwipeStartRef = useRef<{ id: string; x: number; y: number } | null>(null)

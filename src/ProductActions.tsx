@@ -8,7 +8,7 @@ import {
 } from './createBuyerOrder'
 import { useDraft } from './useDraft'
 import { uploadImageToCloudinary } from './uploadImage'
-import { sendConversationMessage } from './useConversation'
+import { getConversationId, sendConversationMessage } from './useConversation'
 import { notify } from './notifications'
 import { detectSource } from './tracking'
 import { trackEvent } from './analytics'
@@ -54,12 +54,32 @@ export default function ProductActions({
   const [photoUrl, setPhotoUrl] = useState('')
   const [photoUploading, setPhotoUploading] = useState(false)
   const photoFileRef = useRef<HTMLInputElement | null>(null)
+  /** One thread, one draft — keyed by the conversation this message would create. */
+  const draftUid = auth.currentUser?.uid ?? ''
+  const messageDraftKey = messageProduct && draftUid
+    ? `convo_${getConversationId(messageProduct.sellerId, draftUid)}`
+    : 'none'
   const {
     text: messageText,
     setText: setMessageText,
     draft: draftMsg,
     clearDraft: clearMsgDraft,
-  } = useDraft(messageProduct ? `product_${messageProduct.id}` : 'none')
+  } = useDraft(
+    messageDraftKey,
+    messageProduct && draftUid
+      ? {
+          sellerId: messageProduct.sellerId,
+          buyerId: draftUid,
+          counterpartName: messageProduct.businessName || 'Seller',
+          counterpartRole: 'seller',
+          productId: messageProduct.id,
+          productName: messageProduct.name,
+          productPrice: messageProduct.price,
+          productImage: messageProduct.imageUrl,
+        }
+      : undefined,
+    { surface },
+  )
 
   const closeOrder = () => {
     setOrderSuccess(false)

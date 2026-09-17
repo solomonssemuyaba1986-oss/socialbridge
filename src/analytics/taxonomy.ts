@@ -76,6 +76,10 @@ export const EVENT_PROPS = {
   conversation_opened: ['conversationId', 'counterpartRole', 'threadType', 'unread'],
   message_sent: ['conversationId', 'senderRole', 'productId', 'sellerId', 'hasPhoto', 'isQuickReply', 'length', 'surface', 'channel'],
   seller_first_response: ['conversationId', 'latencyMinutes', 'productId'],
+  // Drafts: typed but never sent. `resumed` fires when an Inbox draft row is opened.
+  message_draft_started: ['conversationId', 'surface', 'productId', 'sellerId', 'length'],
+  message_draft_resumed: ['conversationId', 'surface', 'ageMinutes'],
+  message_draft_abandoned: ['conversationId', 'surface', 'length'],
   quick_reply_created: ['count', 'length'],
   image_uploaded: ['kind', 'surface', 'failed'],
 
