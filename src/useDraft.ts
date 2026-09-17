@@ -27,12 +27,15 @@ import {
   mergeDrafts,
   parseDraft,
   pruneStale,
+  readDraft,
   removeDraft,
   toAccountDrafts,
   writeDraft,
   type DraftMeta,
   type StorageLike,
 } from './draftStore'
+
+const isDev = Boolean(import.meta.env?.DEV)
 
 /** What a message sheet knows about the draft it is composing. */
 export interface DraftContext {
@@ -162,10 +165,13 @@ export function useDraft(key: string, context?: DraftContext, options?: { surfac
   /** Saves locally and returns what was written (null when there is nothing to save). */
   const save = useCallback((value: string): DraftMeta | null => {
     const ctx = contextRef.current
-    if (storageKey === DRAFT_NONE) return null
-    if (!ctx || !conversationId) {
-      // No context to attach (a reply composed inside an existing thread): keep the
-      // previous bare-text draft so the Inbox badge behaves exactly as before.
+    if (storageKey === DRAFT_NONE) {
+      if (isDev) console.warn('[drafts] nothing to save — no product or conversation is open')
+      return null
+    }
+    if (!ctx) {
+      // No context to attach (should not happen: every sheet passes one). Keep the
+      // old bare-text behaviour rather than losing what was typed.
       try {
         if (value.trim()) store.setItem(DRAFT_PREFIX + storageKey, value)
         else store.removeItem(DRAFT_PREFIX + storageKey)
@@ -251,6 +257,47 @@ export function useDraft(key: string, context?: DraftContext, options?: { surfac
     }
   }, [storageKey, conversationId, surface])
 
+  /**
+   * Typed while signed out, then signed in? Move the product-keyed draft onto the
+   * conversation key so it shows up in the Inbox. The seller still sees nothing —
+   * this only changes where *your* draft is remembered.
+   */
+  useEffect(() => {
+    if (storageKey === DRAFT_NONE || storageKey.startsWith('product_')) return
+    const sellerId = context?.sellerId
+    const buyerId = context?.buyerId
+    if (!sellerId || !buyerId || !conversationId) return
+    const carried = textRef.current
+    if (!carried.trim()) return
+    if (readDraft(store, conversationId)) return
+    writeDraft(store, {
+      conversationId,
+      sellerId,
+      buyerId,
+      counterpartName: context?.counterpartName || 'Seller',
+      counterpartRole: context?.counterpartRole || 'seller',
+      productId: context?.productId,
+      productName: context?.productName,
+      productPrice: context?.productPrice,
+      productImage: context?.productImage,
+      text: carried,
+      at: Date.now(),
+    })
+    if (context?.productId) removeDraft(store, `product_${context.productId}`)
+    notifyDraftChange()
+  }, [storageKey, conversationId, context?.sellerId, context?.buyerId, context?.productId, store])
+
+  /**
+   * Flush right now. Wired to every "close the sheet" path so a draft typed in the
+   * last half-second can never be cancelled by the key switching to `none`.
+   */
+  const saveNow = useCallback(() => {
+    const value = textRef.current
+    const meta = saveRef.current(value)
+    const uid = auth.currentUser?.uid
+    if (meta && value.trim() && uid) void pushDraftToAccount(uid, meta)
+  }, [])
+
   const clearDraft = useCallback(() => {
     resolvedRef.current = true
     setText('')
@@ -260,7 +307,7 @@ export function useDraft(key: string, context?: DraftContext, options?: { surfac
     if (uid && conversationId) void pullDraftFromAccount(uid, conversationId)
   }, [store, conversationId])
 
-  return { text, setText, draft: text.trim().length > 0, clearDraft }
+  return { text, setText, draft: text.trim().length > 0, clearDraft, saveNow }
 }
 
 /**

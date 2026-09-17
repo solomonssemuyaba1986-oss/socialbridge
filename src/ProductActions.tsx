@@ -54,21 +54,24 @@ export default function ProductActions({
   const [photoUrl, setPhotoUrl] = useState('')
   const [photoUploading, setPhotoUploading] = useState(false)
   const photoFileRef = useRef<HTMLInputElement | null>(null)
-  /** One thread, one draft — keyed by the conversation this message would create. */
+  /** One thread, one draft — product-keyed until the uid is known, so nothing is lost. */
   const draftUid = auth.currentUser?.uid ?? ''
-  const messageDraftKey = messageProduct && draftUid
-    ? `convo_${getConversationId(messageProduct.sellerId, draftUid)}`
+  const messageDraftKey = messageProduct
+    ? (draftUid && messageProduct.sellerId
+        ? `convo_${getConversationId(messageProduct.sellerId, draftUid)}`
+        : `product_${messageProduct.id}`)
     : 'none'
   const {
     text: messageText,
     setText: setMessageText,
     draft: draftMsg,
     clearDraft: clearMsgDraft,
+    saveNow: saveMsgDraft,
   } = useDraft(
     messageDraftKey,
-    messageProduct && draftUid
+    messageProduct
       ? {
-          sellerId: messageProduct.sellerId,
+          sellerId: messageProduct.sellerId || '',
           buyerId: draftUid,
           counterpartName: messageProduct.businessName || 'Seller',
           counterpartRole: 'seller',
@@ -88,6 +91,8 @@ export default function ProductActions({
   }
 
   const closeMessageModal = () => {
+    // Flush before the key changes to 'none' — a last-millisecond draft must survive.
+    saveMsgDraft()
     setShowQuickReplies(false)
     setPhotoUrl('')
     onCloseMessage()

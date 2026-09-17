@@ -109,16 +109,28 @@ function BrowsePage() {
   const [quantity, setQuantity] = useState('1')
   const [deliveryArea, setDeliveryArea] = useState('')
   const [orderMessage, setOrderMessage] = useState('')
-  /** One thread, one draft: the key is the conversation this message would create. */
-  const messageDraftKey = messageProduct && userId && messageProduct.sellerId
-    ? `convo_${getConversationId(messageProduct.sellerId, userId)}`
+  /**
+   * One thread, one draft. When the uid isn't known yet (signed out, or the auth
+   * callback hasn't landed) the draft is keyed to the product instead — the old,
+   * always-saving behaviour — and it moves onto the conversation once you're in.
+   */
+  const messageDraftKey = messageProduct
+    ? (userId && messageProduct.sellerId
+        ? `convo_${getConversationId(messageProduct.sellerId, userId)}`
+        : `product_${messageProduct.id}`)
     : 'none'
-  const { text: messageText, setText: setMessageText, draft: draftMsg, clearDraft: clearMsgDraft } = useDraft(
+  const {
+    text: messageText,
+    setText: setMessageText,
+    draft: draftMsg,
+    clearDraft: clearMsgDraft,
+    saveNow: saveMsgDraft,
+  } = useDraft(
     messageDraftKey,
-    messageProduct && userId
+    messageProduct
       ? {
-          sellerId: messageProduct.sellerId,
-          buyerId: userId,
+          sellerId: messageProduct.sellerId || '',
+          buyerId: userId || '',
           counterpartName: messageProduct.businessName || 'Seller',
           counterpartRole: 'seller',
           productId: messageProduct.id,
@@ -413,6 +425,8 @@ function BrowsePage() {
   }
 
   const closeMessageModal = () => {
+    // Flush before the key changes to 'none' — a last-millisecond draft must survive.
+    saveMsgDraft()
     setMessageProduct(null)
     setShowQuickReplies(false)
   }

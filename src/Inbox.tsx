@@ -206,7 +206,10 @@ function Inbox() {
       ...sellerConversations.map(c => c.id),
     ])
     openDrafts.forEach(d => {
-      if (!d.sellerId || !d.buyerId || knownConversationIds.has(d.conversationId)) return
+      // Only conversation-keyed drafts can open a chat. A product-keyed draft (typed
+      // while signed out) is moved onto its conversation the moment you sign in.
+      if (!d.sellerId || !d.buyerId || d.conversationId.startsWith('product_')) return
+      if (knownConversationIds.has(d.conversationId)) return
       const iAmBuyer = d.counterpartRole === 'seller'
       list.push({
         key: `draft-${d.conversationId}`,
@@ -235,7 +238,7 @@ function Inbox() {
     ? threads.filter(t => {
         const name = (t.name || '').toLowerCase()
         const preview = (t.preview || '').toLowerCase()
-        const product = (t.guest?.productName || '').toLowerCase()
+        const product = (t.guest?.productName || t.draft?.productName || '').toLowerCase()
         const rawPhone = (t.guest?.senderPhone || '').replace(/[^\d+]/g, '')
         return name.includes(q)
           || preview.includes(q)
@@ -243,7 +246,7 @@ function Inbox() {
           || (qDigits.length > 0 && rawPhone.includes(qDigits))
       })
     : threads
-  const visible = filter === 'unread' ? searched.filter(t => t.unread || t.key === selectedKey) : searched
+  const visible = filter === 'unread' ? searched.filter(t => t.unread || !!t.draft || t.key === selectedKey) : searched
   const selected = threads.find(t => t.key === selectedKey) || null
 
   const openChat = (key: string) => {

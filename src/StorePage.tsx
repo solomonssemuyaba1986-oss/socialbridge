@@ -348,16 +348,24 @@ const messageDeepLinkId = searchParams.get('messageId')
 
   const [orderProduct, setOrderProduct] = useState<Product | null>(null)
   const [messageProduct, setMessageProduct] = useState<Product | null>(null)
-  /** One thread, one draft — keyed by the conversation this message would create. */
+  /** One thread, one draft — product-keyed until the uid is known, so nothing is lost. */
   const draftUid = auth.currentUser?.uid ?? ''
-  const messageDraftKey = messageProduct && draftUid && sellerId
-    ? `convo_${getConversationId(sellerId, draftUid)}`
+  const messageDraftKey = messageProduct
+    ? (draftUid && sellerId
+        ? `convo_${getConversationId(sellerId, draftUid)}`
+        : `product_${messageProduct.id}`)
     : 'none'
-  const { text: messageText, setText: setMessageText, draft: draftMsg, clearDraft: clearMsgDraft } = useDraft(
+  const {
+    text: messageText,
+    setText: setMessageText,
+    draft: draftMsg,
+    clearDraft: clearMsgDraft,
+    saveNow: saveMsgDraft,
+  } = useDraft(
     messageDraftKey,
-    messageProduct && draftUid && sellerId
+    messageProduct
       ? {
-          sellerId,
+          sellerId: sellerId || '',
           buyerId: draftUid,
           counterpartName: seller?.businessName || 'Seller',
           counterpartRole: 'seller',
@@ -1144,12 +1152,12 @@ const handleSignupForAction = async (provider: any) => {
                 returnTo={`/store/${slugParam}`}
                 productId={messageProduct?.id}
                 sellerSlug={slugParam}
-                onLeave={() => { setMessageProduct(null); setShowQuickReplies(false) }}
+                onLeave={() => { saveMsgDraft(); setMessageProduct(null); setShowQuickReplies(false) }}
               />
             )}
 
             {/* Cancel Button */}
-            <button onClick={() => { setMessageProduct(null); setShowQuickReplies(false) }}
+            <button onClick={() => { saveMsgDraft(); setMessageProduct(null); setShowQuickReplies(false) }}
               style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
               Cancel
             </button>

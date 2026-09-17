@@ -49,16 +49,27 @@ function BagPage() {
   const [orderQty, setOrderQty] = useState('1')
   const [deliveryArea, setDeliveryArea] = useState('')
   const [orderMessage, setOrderMessage] = useState('')
-  /** One thread, one draft — keyed by the conversation this message would create. */
+  /**
+   * One thread, one draft — keyed by the conversation this message would create;
+   * product-keyed when the uid isn't known yet, so nothing is ever dropped.
+   */
   const draftUid = auth.currentUser?.uid ?? ''
-  const messageDraftKey = messageTarget && draftUid && messageTarget.sellerId
-    ? `convo_${getConversationId(messageTarget.sellerId, draftUid)}`
+  const messageDraftKey = messageTarget
+    ? (draftUid && messageTarget.sellerId
+        ? `convo_${getConversationId(messageTarget.sellerId, draftUid)}`
+        : `product_${messageTarget.id}`)
     : 'none'
-  const { text: messageText, setText: setMessageText, draft: draftMsg, clearDraft: clearMsgDraft } = useDraft(
+  const {
+    text: messageText,
+    setText: setMessageText,
+    draft: draftMsg,
+    clearDraft: clearMsgDraft,
+    saveNow: saveMsgDraft,
+  } = useDraft(
     messageDraftKey,
-    messageTarget && draftUid && messageTarget.sellerId
+    messageTarget
       ? {
-          sellerId: messageTarget.sellerId,
+          sellerId: messageTarget.sellerId || '',
           buyerId: draftUid,
           counterpartName: messageTarget.businessName || 'Seller',
           counterpartRole: 'seller',
@@ -305,6 +316,8 @@ function BagPage() {
   }
 
   const closeMessageModal = () => {
+    // Flush before the key changes to 'none' — a last-millisecond draft must survive.
+    saveMsgDraft()
     setMessageTarget(null)
     setShowQuickReplies(false)
   }
