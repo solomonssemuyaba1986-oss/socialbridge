@@ -242,11 +242,11 @@ function buildReport(events) {
     if (e.props.zeroResult === true) inc(zeroResultQueries, q)
   })
 
-  // 4) Product performance: seen → opened → bagged → ordered → confirmed.
+  // 4) Product performance: seen → opened → bagged → ordered → confirmed → ♥.
   const products = {}
   const productRow = (id) => {
     if (!products[id]) {
-      products[id] = { productId: id, impressions: 0, views: 0, bagged: 0, ordered: 0, confirmed: 0, sellerId: '' }
+      products[id] = { productId: id, impressions: 0, views: 0, bagged: 0, ordered: 0, confirmed: 0, liked: 0, likedFromOrders: 0, sellerId: '' }
     }
     return products[id]
   }
@@ -260,6 +260,13 @@ function buildReport(events) {
     else if (e.name === 'bag_added') row.bagged += 1
     else if (e.name === 'order_placed') row.ordered += 1
     else if (e.name === 'order_status_changed' && e.props.to === 'fulfilled') row.confirmed += 1
+    // ♥ Votes observed in this window. The live tally is `products.likeCount`; this column is
+    // what happened *here* (net of un-likes), split by where the vote came from.
+    else if (e.name === 'product_liked') {
+      row.liked += 1
+      if (e.props.source === 'purchase') row.likedFromOrders += 1
+    }
+    else if (e.name === 'product_unliked') row.liked -= 1
   })
   const productRows = Object.values(products)
   const productRanking = [...productRows]
@@ -268,6 +275,12 @@ function buildReport(events) {
   const seenNotSold = productRows
     .filter((p) => p.impressions >= 5 && p.ordered === 0)
     .sort((a, b) => b.impressions - a.impressions)
+    .slice(0, TOP)
+  // Confirmed three or more times and still nobody loved it: the "did you love it? — no"
+  // answers land here, which is where a seller should change the price, photo or description.
+  const boughtNotLoved = productRows
+    .filter((p) => p.confirmed >= 3 && p.liked <= 0)
+    .sort((a, b) => b.confirmed - a.confirmed)
     .slice(0, TOP)
 
   // 5) Seller performance: how fast they answer, how fast they confirm, what fell over.
@@ -383,7 +396,7 @@ function buildReport(events) {
       top: topEntries(topQueries).map(([query, count]) => ({ query, count })),
       zeroResults: topEntries(zeroResultQueries).map(([query, count]) => ({ query, count })),
     },
-    products: { tracked: productRows.length, ranking: productRanking, seenNotSold },
+    products: { tracked: productRows.length, ranking: productRanking, seenNotSold, boughtNotLoved },
     sellers: sellerRanking,
     nearby: {
       sessions: uniqueVisitors(nearbyViews),
@@ -451,15 +464,22 @@ function render(report) {
   }
   add()
 
-  add(`PRODUCTS (${report.products.tracked} tracked — seen → opened → bagged → ordered → confirmed)`)
-  add(table(['productId', 'sellerId', 'seen', 'opened', 'bagged', 'ordered', 'confirmed'], report.products.ranking.map((p) => [
-    p.productId, p.sellerId || '—', p.impressions, p.views, p.bagged, p.ordered, p.confirmed,
+  add(`PRODUCTS (${report.products.tracked} tracked — seen → opened → bagged → ordered → confirmed, ♥ likes cast in this window)`)
+  add(table(['productId', 'sellerId', 'seen', 'opened', 'bagged', 'ordered', 'confirmed', '♥', '♥ from orders'], report.products.ranking.map((p) => [
+    p.productId, p.sellerId || '—', p.impressions, p.views, p.bagged, p.ordered, p.confirmed, p.liked, p.likedFromOrders,
   ])))
   if (report.products.seenNotSold.length > 0) {
     add()
     add('  seen a lot, never ordered (fix the price, photo or description)')
     add(table(['productId', 'sellerId', 'seen', 'opened', 'bagged'], report.products.seenNotSold.map((p) => [
       p.productId, p.sellerId || '—', p.impressions, p.views, p.bagged,
+    ])))
+  }
+  if (report.products.boughtNotLoved.length > 0) {
+    add()
+    add('  delivered three or more times and never loved — the "did you love it? — no" list')
+    add(table(['productId', 'sellerId', 'confirmed', '♥'], report.products.boughtNotLoved.map((p) => [
+      p.productId, p.sellerId || '—', p.confirmed, p.liked,
     ])))
   }
   add()

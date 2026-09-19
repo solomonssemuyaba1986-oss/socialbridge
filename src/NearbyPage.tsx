@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { collection, getDocs } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
@@ -19,7 +19,9 @@ import { green, productImages, seededShuffle, toMillis, type CardProduct } from 
 import { trackEvent } from './analytics'
 import SearchSuggest from './SearchSuggest'
 import { buildSuggestions, type Suggestion } from './useSuggestions'
-import { consumePendingAction } from './signInGate'
+import { consumePendingAction, requireSignIn } from './signInGate'
+import { useProductLikes } from './useProductLikes'
+import { notify } from './notifications'
 
 interface NearbySeller {
   id: string
@@ -158,6 +160,8 @@ function NearbyPage() {
   const [shuffleSeed, setShuffleSeed] = useState(() => Date.now())
   const rangeWrapRef = useRef<HTMLDivElement | null>(null)
   const { addToBag, removeFromBag, isInBag, count: bagCount } = useBag()
+  // ♥ Universal likes: the tally rides on each product, my own vote comes from one listener.
+  const { isLiked, likeCountFor, toggleLike } = useProductLikes()
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, u => setUserId(u?.uid || null))
@@ -416,6 +420,24 @@ function NearbyPage() {
     }
   }
 
+  /**
+   * ♥ One tap, one vote per account. The tally moves for everybody at once, and a second
+   * tap takes the vote back. A guest is sent to sign in and returned to this exact card.
+   */
+  const handleToggleLike = useCallback((p: DiscoveryProduct) => {
+    void toggleLike({
+      sellerId: p.sellerId,
+      productId: p.id,
+      currentCount: likeCountFor(p),
+      surface: 'nearby',
+    }).then(res => {
+      if (res.needsSignIn) {
+        requireSignIn(navigate, { action: 'like', returnTo: '/nearby', productId: p.id, sellerSlug: p.sellerSlug })
+      } else if (res.ownProduct) alert(notify.likeSelfBlock)
+      else if (res.failed) alert(notify.likeFailed)
+    })
+  }, [toggleLike, likeCountFor, navigate])
+
   const applyCustomRange = () => {
     const n = Math.round(Number(customRange))
     if (!isFinite(n) || n <= 0) return
@@ -565,8 +587,8 @@ function NearbyPage() {
   // Coming back from sign-in? Reopen the sheet they were blocked on.
   useEffect(() => {
     if (pool.items.length === 0) return
-    consumePendingAction(pool.items, { order: setOrderProduct, message: setMessageProduct })
-  }, [pool])
+    consumePendingAction(pool.items, { order: setOrderProduct, message: setMessageProduct, like: handleToggleLike })
+  }, [pool, handleToggleLike])
 
   const openProduct = (p: DiscoveryProduct) => {
     trackEvent('product_viewed', {
@@ -594,12 +616,15 @@ function NearbyPage() {
         bagged={bagCounts[p.id]?.baggedCount || 0}
         isMine={p.sellerId === userId}
         hasDraft={draftProductIds.has(p.id)}
+        liked={isLiked(p.id)}
+        likeCount={likeCountFor(p)}
         onOpen={() => openProduct(p)}
         onPreview={() => {
           const imgs = productImages(p)
           if (imgs.length > 0) setPreview({ images: imgs, index: 0 })
         }}
         onToggleBag={() => handleToggleBag(p)}
+        onToggleLike={() => handleToggleLike(p)}
         onMessage={() => setMessageProduct(p)}
         onOrder={() => setOrderProduct(p)}
       />

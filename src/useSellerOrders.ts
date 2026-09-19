@@ -6,6 +6,8 @@ import { auth, db } from './firebase'
 export interface SellerOrder {
   id: string
   buyerName: string
+  /** Who placed it — the seller needs it to reach them in the thread. */
+  buyerUid?: string
   productName: string
   productPrice: string
   quantity: number | string

@@ -9,6 +9,7 @@ import { uploadImageToCloudinary } from './uploadImage'
 import { trackEvent } from './analytics'
 import { toMillis } from './productCardUtils'
 import ProductPreview from './ProductPreview'
+import LovePrompt from './LovePrompt'
 
 const green = '#adff2f'
 
@@ -116,6 +117,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
         sellerName: sellerName || 'Seller',
         buyerName: buyerNameOrder,
         orderId: orderId || '',
+        productId,
         productName: productName || '',
         productPrice: productPrice || '',
         quantity,
@@ -339,14 +341,31 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
             }
             const m = c.kind === 'images' ? c.messages[0] : c.message
             if (m.type === 'order') {
+              // A delivered bubble is the seller's "✓ Confirm" reaching the buyer — the only
+              // place they learn the order is done — so the ♥ question belongs right here.
+              const delivered = m.orderStatus === 'fulfilled'
+              const askToLove = delivered && !meIsSeller && Boolean(m.productId) && Boolean(m.orderId)
               return (
                 <div key={m.id} style={{ display: 'flex', justifyContent: 'center', margin: '4px 0' }}>
                   <div style={{ background: '#12210d', border: `1px solid ${green}`, borderRadius: '12px', padding: '12px 16px', maxWidth: '90%', textAlign: 'center' }}>
-                    <div style={{ fontSize: 18 }}>📦</div>
-                    <div style={{ fontWeight: 800, fontSize: 13, color: green }}>Order Placed</div>
+                    <div style={{ fontSize: 18 }}>{delivered ? '✅' : '📦'}</div>
+                    <div style={{ fontWeight: 800, fontSize: 13, color: green }}>{delivered ? 'Delivered' : 'Order Placed'}</div>
                     <div style={{ fontSize: 12, color: '#fff', fontWeight: 700, marginTop: 4 }}>Ref: {m.orderId || 'RT-...'}</div>
                     <div style={{ fontSize: 12, color: '#aaa', marginTop: 2 }}>{m.productName} · UGX {m.productPrice} × {m.quantity}</div>
-                    <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>{sellerName || 'The seller'} will confirm in your Inbox</div>
+                    {delivered ? (
+                      askToLove ? (
+                        <LovePrompt
+                          sellerId={sellerId}
+                          productId={m.productId}
+                          productName={m.productName}
+                          orderId={m.orderId}
+                        />
+                      ) : (
+                        <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>Delivered 🎉</div>
+                      )
+                    ) : (
+                      <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>{sellerName || 'The seller'} will confirm in your Inbox</div>
+                    )}
                   </div>
                 </div>
               )

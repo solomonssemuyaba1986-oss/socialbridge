@@ -16,15 +16,38 @@ export interface CardProduct {
   outOfStock?: boolean
   orderCount?: number
   salesCount?: number
+  /** ♥ The universal like tally — lives on the product doc, the same for every visitor. */
+  likeCount?: number
 }
 
 export const green = '#adff2f'
 
-export function formatBagCount(n: number): string {
-  if (n < 1000) return String(n)
-  if (n < 10000) return (n / 1000).toFixed(1) + 'K'
-  if (n < 1000000) return Math.round(n / 1000) + 'K'
-  return (n / 1000000).toFixed(1) + 'M'
+/**
+ * 999 → "999" · 1,200 → "1.2K" · 10,000 → "10K" · 1,000,000 → "1.0M".
+ * A card never shows six digits: 999,500 rounds up to "1.0M" rather than "1000K".
+ * Used by the ♥ like pill, 🛍️ bagged and ✓ bought counters — one number format, everywhere.
+ */
+export function formatCount(n: number): string {
+  const value = Math.max(0, Math.floor(Number(n) || 0))
+  if (value < 1000) return String(value)
+  if (value < 10000) return (value / 1000).toFixed(1) + 'K'
+  if (value < 1000000) {
+    const thousands = Math.round(value / 1000)
+    return thousands < 1000 ? thousands + 'K' : (value / 1000000).toFixed(1) + 'M'
+  }
+  return (value / 1000000).toFixed(1) + 'M'
+}
+
+/** The old name for {@link formatCount} — kept so the existing card callers don't churn. */
+export const formatBagCount = formatCount
+
+/**
+ * ♥ The public like tally on a product: never negative, missing (or junk) tolerated — a
+ * product created before likes existed simply reads as zero.
+ */
+export function likeTally(product: { likeCount?: number } | null | undefined): number {
+  const raw = Number(product?.likeCount ?? 0)
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0
 }
 
 export function productImages(p: CardProduct): string[] {

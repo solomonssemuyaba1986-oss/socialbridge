@@ -11,7 +11,7 @@ import { trackEvent } from './analytics'
  * The action itself is kept in sessionStorage (survives the sign-in round trip,
  * including a full-page redirect sign-in) and is consumed exactly once.
  */
-export type PendingAction = 'order' | 'message' | 'inbox'
+export type PendingAction = 'order' | 'message' | 'inbox' | 'like'
 
 export interface PendingIntent {
   action: PendingAction
@@ -80,7 +80,7 @@ export function requireSignIn(navigate: NavigateFunction, intent: PendingIntent)
  */
 export function consumePendingAction<T extends { id: string }>(
   products: T[],
-  open: { order: (product: T) => void; message: (product: T) => void },
+  open: { order: (product: T) => void; message: (product: T) => void; like?: (product: T) => void },
 ): void {
   const pending = peekPendingIntent()
   if (!pending) return
@@ -92,7 +92,11 @@ export function consumePendingAction<T extends { id: string }>(
   const product = products.find(item => item.id === pending.productId)
   if (!product) return
   if (pending.action === 'order') open.order(product)
-  else open.message(product)
+  else if (pending.action === 'like') {
+    // A ♥ is not a sheet — the vote goes through the moment the page has the product.
+    if (!open.like) return
+    open.like(product)
+  } else open.message(product)
   trackEvent('signin_wall_passed', { action: pending.action, surface: pending.returnTo, method: 'resumed' })
   clearPendingIntent()
 }

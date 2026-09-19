@@ -26,6 +26,11 @@ export const notify = {
   messageProductRequired: 'Choose a product first, then send your question to the seller.',
   messageSellerNotFound: "Seller info isn't available right now. Please try again.",
 
+  // ---------- Likes (♥) ----------
+  likeFailed: "Couldn't save your like. Check your connection and try again.",
+  likeSignInRequired: 'Sign in to love this product — one like per account.',
+  likeSelfBlock: "You can't love your own product. Your buyers will.",
+
   // ---------- Auth ----------
   signUpSuccess: "You're signed in! Complete your action now.",
   signUpFailed: "Sign up didn't work. Make sure pop-ups are allowed in your browser, then try again.",

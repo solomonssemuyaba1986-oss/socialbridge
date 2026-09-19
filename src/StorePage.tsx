@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, type ChangeEvent } from 'react'
+import { useEffect, useState, useRef, useCallback, type ChangeEvent } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { collection, query, where, getDocs, addDoc, setDoc, doc } from 'firebase/firestore'
 import { db, auth } from './firebase'
@@ -8,13 +8,16 @@ import { CATEGORIES, getSubcategories } from './categories'
 import { notify } from './notifications'
 import { getConversationId, useConversation } from './useConversation.ts'
 import { useBag, getBagCounts, type BagCountData } from './useBag'
+import { useProductLikes } from './useProductLikes'
+import LikePill from './LikePill'
+import { formatCount } from './productCardUtils'
 import { useSellerStats, getSalesLabel, formatRating, renderStars, getBadgeStatusLabel } from './useSellerStats.ts'
 import QuickRepliesPanel from './QuickRepliesPanel'
 import FloatingBag from './FloatingBag'
 import StoreProblem from './StoreProblem'
 import SignInPrompt from './SignInPrompt'
 import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder.ts'
-import { consumePendingAction } from './signInGate'
+import { consumePendingAction, requireSignIn } from './signInGate'
 import { haversineKm } from './geo'
 import { formatDistance, isApproximatePin, type GeoSource, type Place } from './place'
 import { useBuyerLocation } from './useBuyerLocation'
@@ -62,20 +65,17 @@ interface Product {
   outOfStock?: boolean
   orderCount?: number
   salesCount?: number
+  /** ♥ The universal like tally — the same number for every visitor. */
+  likeCount?: number
 }
 
 const green = '#adff2f'
 
-function formatCount(n: number) {
-  if (n < 1000) return String(n)
-  if (n < 10000) return (n / 1000).toFixed(1) + 'K'
-  if (n < 1000000) return Math.round(n / 1000) + 'K'
-  return (n / 1000000).toFixed(1) + 'M'
-}
+// One number format for the whole card: 🛍️ bagged, ✓ bought and ♥ likes (see productCardUtils).
 const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'dzudmmuxg'
 const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'p2z65zrv'
 
-function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onRefresh, onPreview, inBag, bagged, sold, onToggleBag }: any) {
+function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onRefresh, onPreview, inBag, bagged, sold, liked, likeCount, onToggleLike, onToggleBag }: any) {
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(p.name)
   const [editPrice, setEditPrice] = useState(p.price)
@@ -262,7 +262,10 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onRefresh, onPr
           </>
         ) : (
           <>
-            <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: isOutOfStock ? '#666' : '#fff' }}>{p.name}</p>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 4 }}>
+              <p style={{ margin: 0, flex: 1, minWidth: 0, fontWeight: '700', fontSize: '14px', color: isOutOfStock ? '#666' : '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</p>
+              <LikePill liked={Boolean(liked)} count={likeCount || 0} onToggle={isOwner ? undefined : onToggleLike} />
+            </div>
             <p style={{ margin: '0 0 8px', color: '#555', fontSize: '12px' }}>{p.description}</p>
             <p style={{ margin: '0 0 12px', fontWeight: '800', color: isOutOfStock ? '#555' : green, fontSize: '15px' }}>UGX {p.price}</p>
 
@@ -325,6 +328,8 @@ function StorePage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { count: bagCount, addToBag, removeFromBag, isInBag } = useBag()
+  // ♥ Universal likes: the tally rides on each product, my own vote comes from one listener.
+  const { isLiked, likeCountFor, toggleLike } = useProductLikes()
   const productDeepLinkId = searchParams.get('productId')
 const messageDeepLinkId = searchParams.get('messageId')
   const [seller, setSeller] = useState<Seller | null>(null)
@@ -533,6 +538,29 @@ const messageDeepLinkId = searchParams.get('messageId')
     }
   }
 
+  /**
+   * ♥ One tap, one vote per account — the tally is the same number every visitor sees, and a
+   * second tap takes the vote back. A guest is sent to sign in and returned to this card.
+   */
+  const handleToggleLike = useCallback((p: Product) => {
+    void toggleLike({
+      sellerId,
+      productId: p.id,
+      currentCount: likeCountFor(p),
+      surface: 'store',
+    }).then(res => {
+      if (res.needsSignIn) {
+        requireSignIn(navigate, {
+          action: 'like',
+          returnTo: window.location.pathname + window.location.search,
+          productId: p.id,
+          sellerSlug: seller?.slug,
+        })
+      } else if (res.ownProduct) alert(notify.likeSelfBlock)
+      else if (res.failed) alert(notify.likeFailed)
+    })
+  }, [toggleLike, likeCountFor, navigate, sellerId, seller?.slug])
+
 const compressImage = (file: File): Promise<File> => {
   return new Promise((resolve) => {
     const canvas = document.createElement('canvas')
@@ -591,8 +619,8 @@ const handleImageUpload = async (file: File) => {
   // Coming back from sign-in? Reopen the sheet they were blocked on.
   useEffect(() => {
     if (products.length === 0) return
-    consumePendingAction(products, { order: setOrderProduct, message: setMessageProduct })
-  }, [products])
+    consumePendingAction(products, { order: setOrderProduct, message: setMessageProduct, like: handleToggleLike })
+  }, [products, handleToggleLike])
 
 const handleOrder = async () => {
   if (!auth.currentUser) {
@@ -633,6 +661,7 @@ const handleOrder = async () => {
       sellerName: seller?.businessName || 'Seller',
       buyerName,
       orderId,
+      productId: orderProduct.id,
       productName: orderProduct.name,
       productPrice: orderProduct.price,
       quantity,
@@ -1001,6 +1030,9 @@ const handleSignupForAction = async (provider: any) => {
                 inBag={isInBag(p.id)}
                 bagged={bagCounts[p.id]?.baggedCount || 0}
                 sold={p.salesCount || 0}
+                liked={isLiked(p.id)}
+                likeCount={likeCountFor(p)}
+                onToggleLike={() => handleToggleLike(p)}
                 onToggleBag={() => handleToggleBag(p)}
                 onOrder={() => setOrderProduct(p)}
                 onMessage={() => setMessageProduct(p)}

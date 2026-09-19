@@ -14,17 +14,12 @@ import { getConversationId, sendConversationMessage } from './useConversation'
 import { notify } from './notifications'
 import { consumePendingAction, requireSignIn } from './signInGate'
 import SignInPrompt from './SignInPrompt'
+// One number format for the whole app: ✓ bought (and ♥ likes) abbreviate to K/M.
+import { formatCount } from './productCardUtils'
 
 const green = '#adff2f'
 const SUPPORT_WHATSAPP = (import.meta.env.VITE_SUPPORT_WHATSAPP || '256703174968').trim()
 const SUPPORT_EMAIL = 'rachettcommerce@gmail.com'
-
-function formatCount(n: number) {
-  if (n < 1000) return String(n)
-  if (n < 10000) return (n / 1000).toFixed(1) + 'K'
-  if (n < 1000000) return Math.round(n / 1000) + 'K'
-  return (n / 1000000).toFixed(1) + 'M'
-}
 
 interface BagTarget {
   id: string
@@ -294,6 +289,7 @@ function BagPage() {
         sellerName: orderTarget.businessName,
         buyerName: buyerName.trim(),
         orderId,
+        productId: orderTarget.id,
         productName: orderTarget.name,
         productPrice: orderTarget.price,
         quantity: orderQty,

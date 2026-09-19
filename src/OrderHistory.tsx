@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSellerOrders, type SellerOrder } from './useSellerOrders.ts'
+import { postOrderDeliveredMessage } from './createBuyerOrder'
 import { updateDoc, doc, deleteDoc, increment } from 'firebase/firestore'
 import { db } from './firebase'
 import { trackEvent } from './analytics'
@@ -75,6 +76,20 @@ function OrderHistory() {
       } catch (err) {
         console.warn('Failed to bump product salesCount:', err)
       }
+    }
+    // The buyer finds out where they already track the order — and that bubble is where they
+    // are asked the one question that turns a delivery into a ♥. Confirming twice never asks twice.
+    if (!wasFulfilled && status === 'fulfilled' && order?.buyerUid) {
+      await postOrderDeliveredMessage({
+        sellerId: userId,
+        buyerId: order.buyerUid,
+        buyerName: order.buyerName,
+        orderId: order.orderId || orderId,
+        productId: order.productId,
+        productName: order.productName,
+        productPrice: order.productPrice,
+        quantity: String(order.quantity ?? '1'),
+      })
     }
   }
 

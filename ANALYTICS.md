@@ -104,6 +104,10 @@ the page needs it.
 | `product_previewed` | productId, imageIndex | ⏳ |
 | `product_shared` | productId, sellerId, channel, surface | ⏳ (no share button yet) |
 | `product_out_of_stock_seen` | productId, sellerId | ⏳ |
+| `product_liked` | productId, sellerId, surface, source | ✅ (♥ on Browse / Nearby / Store, and the post-purchase prompt) |
+| `product_unliked` | productId, sellerId, surface, source | ✅ (tapping a filled ♥ takes the vote back) |
+| `love_prompt_shown` | orderId, productId | ✅ (the delivered order bubble, buyer side) |
+| `love_prompt_answered` | orderId, productId, answer | ✅ (`yes` / `no` — a `no` is recorded here and nowhere else) |
 | `bag_opened` | size | ✅ |
 | `bag_added` | productId, sellerId, price, surface, bagSize | ✅ |
 | `bag_removed` | productId, sellerId, price, surface, bagSize | ✅ |
@@ -163,8 +167,10 @@ Also available as `npm run analytics:report` from the repo root. Sections:
 - **ACQUISITION** — first-touch channel → visitors → orders → conversion.
 - **SEARCH** — searches per surface, the top queries, and **queries that found
   nothing** (that list is your product roadmap).
-- **PRODUCTS** — seen → opened → bagged → ordered → confirmed per product, plus
-  "seen a lot, never ordered".
+- **PRODUCTS** — seen → opened → bagged → ordered → confirmed per product, plus the ♥
+  likes cast in the window (split into card taps and post-purchase votes), "seen a lot,
+  never ordered", and **"delivered 3+ times and never loved"** (where a "did you love
+  it? — no" ends up).
 - **SELLER PERFORMANCE** — visits, orders, confirmed, **average confirmation
   latency** and **average first-reply time** (minutes), out-of-stock rate,
   orders per visit.

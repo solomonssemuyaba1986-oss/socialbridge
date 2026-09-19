@@ -63,6 +63,11 @@ export const EVENT_PROPS = {
   product_shared: ['productId', 'sellerId', 'channel', 'surface'],
   product_out_of_stock_seen: ['productId', 'sellerId'],
 
+  // ♥ Likes — universal, one vote per account. `source` says whether the vote came from a
+  // card tap or the post-purchase "Did you love it?" prompt.
+  product_liked: ['productId', 'sellerId', 'surface', 'source'],
+  product_unliked: ['productId', 'sellerId', 'surface', 'source'],
+
   // ── Bag (the only "save" we have today) ──────────────────────────────────
   bag_opened: ['size'],
   bag_added: ['productId', 'sellerId', 'price', 'surface', 'bagSize'],
@@ -92,6 +97,11 @@ export const EVENT_PROPS = {
   // need an order-update rule only a seller has today):
   order_cancelled: ['orderId', 'by', 'reason'],
   order_completed: ['orderId', 'by', 'latencyMinutes'],
+
+  // The post-purchase ♥ question, asked on the delivered order bubble. `answer: 'no'` is the
+  // only place a "not loved" ever shows up — nothing public is written for it.
+  love_prompt_shown: ['orderId', 'productId'],
+  love_prompt_answered: ['orderId', 'productId', 'answer'],
 
   // ── Seller operations ────────────────────────────────────────────────────
   product_created: ['productId', 'category', 'hasImage', 'price'],

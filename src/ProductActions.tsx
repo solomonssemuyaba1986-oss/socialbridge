@@ -136,6 +136,7 @@ export default function ProductActions({
         sellerName: orderProduct.businessName,
         buyerName: buyerName.trim(),
         orderId,
+        productId: orderProduct.id,
         productName: orderProduct.name,
         productPrice: orderProduct.price,
         quantity,

@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { formatBagCount, green, productImages, type CardProduct } from './productCardUtils'
+import LikePill from './LikePill'
 import { useImpression } from './analytics/useImpression'
 
 type Props = {
@@ -11,6 +12,12 @@ type Props = {
   isMine?: boolean
   /** True when you have unsent words waiting for this seller — the card says so. */
   hasDraft?: boolean
+  /** ♥ Have *you* voted for it (the tally itself is global). */
+  liked?: boolean
+  /** ♥ The universal tally, shown far right of the name. */
+  likeCount?: number
+  /** Omit for your own product — nobody may love their own listing. */
+  onToggleLike?: () => void
   /** Which page this card is on — stamped on impressions and taps. */
   surface?: string
   onOpen: () => void
@@ -32,6 +39,9 @@ function ProductCard({
   bagged,
   isMine,
   hasDraft,
+  liked,
+  likeCount,
+  onToggleLike,
   surface = 'nearby',
   onOpen,
   onPreview,
@@ -144,7 +154,11 @@ function ProductCard({
         )}
 
         <div style={{ padding: '12px' }}>
-          <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: '#fff' }}>{p.name}</p>
+          {/* The name on the left, the ♥ pinned to the far right of the same line. */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 4 }}>
+            <p style={{ margin: 0, flex: 1, minWidth: 0, fontWeight: '700', fontSize: '14px', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</p>
+            <LikePill liked={Boolean(liked)} count={likeCount || 0} onToggle={isMine ? undefined : onToggleLike} />
+          </div>
           <p style={{ margin: '0 0 8px', color: '#555', fontSize: '12px' }}>{p.businessName}</p>
           <p style={{ margin: 0, fontWeight: '800', color: green, fontSize: '14px' }}>UGX {p.price}</p>
         </div>

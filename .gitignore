@@ -10,6 +10,8 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+# Compiled output of the dev check harnesses (_draft_check.cjs, _likes_check.cjs)
+_dsbuild
 *.local
 .env
 

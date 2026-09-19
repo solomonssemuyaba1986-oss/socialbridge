@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef, type ChangeEvent } from 'react'
+import { useEffect, useState, useMemo, useRef, useCallback, type ChangeEvent } from 'react'
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebase'
@@ -18,7 +18,9 @@ import { notify } from './notifications'
 import { consumePendingAction, requireSignIn } from './signInGate'
 import SignInPrompt from './SignInPrompt'
 import FloatingBag from './FloatingBag'
-import { toMillis } from './productCardUtils'
+import { formatCount, toMillis } from './productCardUtils'
+import { useProductLikes } from './useProductLikes'
+import LikePill from './LikePill'
 import { useProductFeed } from './useProductFeed'
 import StoreCard from './StoreCard'
 import Fuse from 'fuse.js'
@@ -40,6 +42,8 @@ interface Product {
   outOfStock?: boolean
   orderCount?: number
   salesCount?: number
+  /** ♥ The universal like tally — the same number for every visitor. */
+  likeCount?: number
   createdAt?: unknown
   updatedAt?: unknown
 }
@@ -101,6 +105,8 @@ function BrowsePage() {
   const [mySlug, setMySlug] = useState<string | null>(null)
   const [ownerFilter, setOwnerFilter] = useState<'all' | 'mine' | 'not-mine'>('all')
   const { addToBag, removeFromBag, isInBag, count: bagCount } = useBag()
+  // ♥ Universal likes: the tally rides on each product, my own vote comes from one listener.
+  const { isLiked, likeCountFor, toggleLike } = useProductLikes()
   const navigate = useNavigate()
   const [bagCounts, setBagCounts] = useState<Record<string, BagCountData>>({})
   const [stores, setStores] = useState<{ slug: string; businessName: string; logoUrl: string; bio: string; aliases: string[]; createdAtMs: number }[]>([])
@@ -276,12 +282,26 @@ function BrowsePage() {
     }
   }
 
-  const formatBagCount = (n: number) => {
-    if (n < 1000) return String(n)
-    if (n < 10000) return (n / 1000).toFixed(1) + 'K'
-    if (n < 1000000) return Math.round(n / 1000) + 'K'
-    return (n / 1000000).toFixed(1) + 'M'
-  }
+  /**
+   * ♥ One tap, one vote per account. The tally is one number everybody reads — Kenya, Uganda
+   * or Morocco — and a second tap takes the vote back. A guest is sent to sign in and
+   * returned to this exact card, at which point the vote goes through.
+   */
+  const handleToggleLike = useCallback((p: Product) => {
+    void toggleLike({
+      sellerId: p.sellerId,
+      productId: p.id,
+      currentCount: likeCountFor(p),
+      surface: 'browse',
+    }).then(res => {
+      if (res.needsSignIn) {
+        requireSignIn(navigate, { action: 'like', returnTo: '/browse', productId: p.id, sellerSlug: p.sellerSlug })
+      } else if (res.ownProduct) alert(notify.likeSelfBlock)
+      else if (res.failed) alert(notify.likeFailed)
+    })
+  }, [toggleLike, likeCountFor, navigate])
+
+  const formatBagCount = formatCount
 
   const handleCardClick = (p: Product) => {
     if (clickTimerRef.current !== null) {
@@ -361,8 +381,8 @@ function BrowsePage() {
   // Coming back from sign-in? Reopen the sheet they were blocked on.
   useEffect(() => {
     if (products.length === 0) return
-    consumePendingAction(products, { order: setOrderProduct, message: setMessageProduct })
-  }, [products])
+    consumePendingAction(products, { order: setOrderProduct, message: setMessageProduct, like: handleToggleLike })
+  }, [products, handleToggleLike])
 
   const handleOrder = async () => {
     if (!auth.currentUser) {
@@ -401,6 +421,7 @@ function BrowsePage() {
         sellerName: orderProduct.businessName,
         buyerName: buyerName.trim(),
         orderId,
+        productId: orderProduct.id,
         productName: orderProduct.name,
         productPrice: orderProduct.price,
         quantity,
@@ -977,7 +998,10 @@ function BrowsePage() {
                     )}
                     {renderCardImages(p, 190)}
                       <div style={{ padding: '12px' }}>
-                        <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: '#fff', lineHeight: '1.3' }}>{p.name}</p>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 4 }}>
+                          <p style={{ margin: 0, flex: 1, minWidth: 0, fontWeight: '700', fontSize: '14px', color: '#fff', lineHeight: '1.3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</p>
+                          <LikePill liked={isLiked(p.id)} count={likeCountFor(p)} onToggle={p.sellerId === (userId || '') ? undefined : () => handleToggleLike(p)} />
+                        </div>
                         <p style={{ margin: '0 0 8px', color: '#555', fontSize: '12px' }}>{p.businessName}</p>
                         <p style={{ margin: 0, fontWeight: '800', color: green, fontSize: '14px' }}>UGX {p.price}</p>
                       </div>
@@ -1016,7 +1040,10 @@ function BrowsePage() {
 
                     {renderCardImages(p, 160)}
                     <div style={{ padding: '12px' }}>
-                      <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '14px', color: '#fff' }}>{p.name}</p>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 4 }}>
+                        <p style={{ margin: 0, flex: 1, minWidth: 0, fontWeight: '700', fontSize: '14px', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</p>
+                        <LikePill liked={isLiked(p.id)} count={likeCountFor(p)} onToggle={p.sellerId === (userId || '') ? undefined : () => handleToggleLike(p)} />
+                      </div>
                       <p style={{ margin: '0 0 8px', color: '#555', fontSize: '12px' }}>{p.businessName}</p>
                       <p style={{ margin: 0, fontWeight: '800', color: green, fontSize: '14px' }}>UGX {p.price}</p>
                     </div>

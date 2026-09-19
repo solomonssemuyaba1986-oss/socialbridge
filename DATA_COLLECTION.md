@@ -33,7 +33,7 @@
 | Store | Contents |
 |---|---|
 | **Firebase Auth** | Seller + buyer + anonymous accounts |
-| **Firestore** | `sellers/{uid}` (+ `products`, `orders`, `messages`, `visits`, `stats`) · `users/{uid}` (+ `bag`) · `conversations/{id}` (+ `messages`) · `events` (**two shapes** — legacy single events, and `schemaVersion: 2` batches; see §13) · `bagCounts/{productId}` (+ `baggers`) · `feedback` · `recoveries` |
+| **Firestore** | `sellers/{uid}` (+ `products` — each with `likes/{uid}` ♥ votes —, `orders`, `messages`, `visits`, `stats`) · `users/{uid}` (+ `bag`, `likes`, `loveAnswers`) · `conversations/{id}` (+ `messages`) · `events` (**two shapes** — legacy single events, and `schemaVersion: 2` batches; see §13) · `bagCounts/{productId}` (+ `baggers`) · `feedback` · `recoveries` |
 | **Firebase Storage** | Nothing new: National ID capture is switched off ("coming soon"), so no new files are written. IDs uploaded before this change are still at `sellers/{uid}/private/national-id.{ext}` — readable **only** by that seller (`storage.rules:11-14`). |
 | **Cloudinary** | Store logos, product photos, chat photos |
 | **OTP server** (`server/index.js`) | Phone numbers + OTP codes — **RAM only**, deleted on expiry (2 min) or restart |
@@ -82,7 +82,7 @@ Written by `SetupStore.tsx:426-450` (create), `EditStore.tsx:234-258` (edit), `D
 
 ### 2.3 Subcollections under `sellers/{uid}/`
 
-**`products/{id}`** — `name`, `price` *(string)*, `description`, `imageUrl`, `images[]`, `colors[]`, `sizes[]`, `stock`, `published`, `outOfStock`, `category`, `subCategory`, `orderCount`, `salesCount`, `createdAt`, `updatedAt`.
+**`products/{id}`** — `name`, `price` *(string)*, `description`, `imageUrl`, `images[]`, `colors[]`, `sizes[]`, `stock`, `published`, `outOfStock`, `category`, `subCategory`, `orderCount`, `salesCount`, `likeCount`, `createdAt`, `updatedAt`.
 ⚠️ Inconsistently populated: `category`/`subCategory` only from `ProductsPage` + `StorePage` quick-add (`StorePage.tsx:570-572`); `images[]`/`colors`/`sizes`/`stock` only from `ProductsPage` (`ProductsPage.tsx:174-186`); `BulkUpload.tsx:98-104` writes just `name`, `price`, `description: ''`, `imageUrl`, `createdAt`.
 
 **`orders/{id}`** — see §3.4.
@@ -107,13 +107,15 @@ Written by `SetupStore.tsx:426-450` (create), `EditStore.tsx:234-258` (edit), `D
 ### 3.1 Signed-in buyer
 - **`users/{uid}`** — `displayName`, `email`, `lastSeen`, `signupAt` (`StorePage.tsx:708-713`), `role` (`'buyer' | 'seller'` — the onboarding choice, mirrored from the device so a buyer is never asked who they are again; `role.ts`), `quickReplies[]` (≤20 replies, ≤200 chars each — the buyer's own canned messages; `useQuickReplies.ts:6-8, 62`) and `drafts[]` (≤10 unsent messages: text + conversation/person/product context, so your Inbox can show a draft with no thread yet and a lost phone doesn't lose the question; `draftStore.toAccountDrafts`, `useDraft.pushDraftToAccount`). A draft is **never** readable by the other party — it lives on your own document, not on the thread.
 - **`users/{uid}/bag/{productId}`** — a frozen snapshot of purchase intent: `productId`, `productName`, `productPrice`, `imageUrl`, `images[]`, `sellerSlug`, `sellerId`, `businessName`, `addedAt` (ms), `quantity` (`useBag.ts:7-18, 195`).
+- **`users/{uid}/likes/{productId}`** — `{ sellerId, at }`: a mirror of **your own** ♥ votes only, so any page can draw every heart on it from one listener. The vote itself lives on the product (§5) — this is just the index of yours.
+- **`users/{uid}/loveAnswers/{orderId}`** — `{ answer: 'yes' | 'no', productId, sellerId, at }`: the post-delivery "Did you love it?" answer, kept so the buyer is never asked twice. A **`no` exists nowhere else** — nothing public is ever written for it.
 
 ### 3.2 Anonymous buyer
 Created by guest checkout so the order/chats behave like a signed-in buyer's (`ProductActions.tsx:163`). Their uid is a normal Firebase uid but `isAnonymous` is true, so the app treats them as a guest for UI purposes (`App.tsx:60-63`).
 
 ### 3.3 Guest buyer (no account at all)
 
-A guest can browse, search, view stores, use Nearby and keep a **local** bag (`rachett_bag` on their device, merged into their account when they sign in). **They cannot message or buy** — those sheets show a sign-in prompt (`SignInPrompt.tsx`) and return them to the same action afterwards (`signInGate.ts`).
+A guest can browse, search, view stores, use Nearby, keep a **local** bag (`rachett_bag` on their device, merged into their account when they sign in) **and see every ♥ tally** (the number is public). **They cannot message, buy, or vote** — those all show a sign-in prompt (`SignInPrompt.tsx`) and return them to the same action afterwards (`signInGate.ts`); a tapped ♥ is cast the moment they come back to the card.
 
 Because of that, these no longer happen:
 
@@ -130,7 +132,7 @@ Payment fields are declared but **never written**: `paymentMethod`, `transaction
 
 `conversations/{sellerId_buyerId}` — `sellerId`, `buyerId`, `sellerName`, `buyerName`, `lastMessage`, `lastMessageAt`, `lastMessageBy`, `lastMessageStatus` (`sent` / `seen` = **read receipts**), `unreadBySeller`, `unreadByBuyer`, `unreadBySellerCount`, `unreadByBuyerCount` (`useConversation.ts:52-79`).
 
-`conversations/{id}/messages/{id}` — `senderId`, `text`, `imageUrl`, `type` (`text` / `image` / `product` / `order`), `productId`, `productName`, `productPrice`, `productImage`, `orderId`, `quantity`, `status`, `createdAt` (`useConversation.ts:81-96, 162-172`).
+`conversations/{id}/messages/{id}` — `senderId`, `text`, `imageUrl`, `type` (`text` / `image` / `product` / `order`), `productId`, `productName`, `productPrice`, `productImage`, `orderId`, `quantity`, `status`, `orderStatus` (`fulfilled` marks the **delivery** bubble a seller's "✓ Confirm" posts — it is what shows the buyer the "Did you love it?" question), `createdAt` (`useConversation.ts:81-96, 162-172`; `createBuyerOrder.ts`).
 
 ⚠️ **Two chat systems coexist**: `sellers/{uid}/messages` (legacy/guest) and `conversations/*` (one thread per seller↔buyer pair). Any training pipeline must dedupe/merge them.
 
@@ -162,7 +164,11 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 | `bagCounts/{productId}` | `{ count, baggedCount }` | `useBag.ts:41-70` |
 | `bagCounts/{productId}/baggers/{uid}` | `{ at }` — one marker per user (distinct-people counting) | same |
 | `products.orderCount` | number — bumped on every order placed | `createBuyerOrder.ts:152-153` |
-| `products.salesCount` | number — bumped on fulfilment | `OrderHistory.tsx:62` |
+| `products.salesCount` | number — bumped on fulfilment | `OrderHistory.tsx` |
+| `products.likeCount` | number — the **public ♥ tally**, one number the whole world reads (a buyer in one country and a seller in another see the same figure) | `useProductLikes.ts` |
+| `sellers/{sellerId}/products/{productId}/likes/{uid}` | `{ at, source: 'tap' \| 'purchase', orderId? }` — **the document ID *is* the voter**, so one account = one vote and a second tap can only be an un-like (delete). Public to read (uids only, no names anywhere); `update` is denied so a vote can never be edited | same |
+| `users/{uid}/likes/{productId}` | `{ sellerId, at }` — a mirror of **my own** votes, so a page draws every ♥ from one listener instead of one read per card | same |
+| `users/{uid}/loveAnswers/{orderId}` | `{ answer: 'yes' \| 'no', productId, sellerId, at }` — asked once after delivery, never twice. A **`no` is stored here only**: nothing public is written for it, and the seller sees aggregates, never who answered no | `LovePrompt.tsx` |
 | `sellers/{uid}/visits/*` | per-visit channel | `StorePage.tsx:428` |
 | `feedback/{id}` | `role` (seller/buyer), `category`, `message`, `name`, `contact`, `page` (full URL), `submittedAt`, `userEmail`, `uid`, `createdAt` | `FeedbackPage.tsx:32-64` |
 | `recoveries/{id}` | `email`, `codeHash` (SHA-256), `expiresAt`, `verified`, `attempts`, `createdAt` — client access denied | `functions/index.js:27-107`, `firestore.rules:89-91` |
@@ -226,7 +232,7 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 
 ## 9. Data-quality gaps to fix before training
 
-1. **No reviews/ratings exist.** `avgRating` / `reviewCount` are read in `useSellerStats` but nothing ever writes a review → no preference signal, no trust signal.
+1. **No reviews/ratings exist.** `avgRating` / `reviewCount` are read in `useSellerStats` but nothing ever writes a review. The lightweight signal that *does* exist is the **♥ like** (`products.likeCount`, `useProductLikes.ts`): one vote per account, universal, and after a delivery the buyer is asked "did you love it?" **yes / no** on the order bubble. So there is now a preference signal — but still no stars, no text, and no way to know *why* someone loved or did not love a product.
 2. **`price` and `quantity` are strings** everywhere; there is no `currency` field (UGX appears only in UI copy). Must be normalised before any pricing model.
 3. **`userId: 'guest'`** collapsed every unauthenticated visitor into one entity in the **legacy** event documents. Events written from 16 Sep 2026 onward (`schemaVersion: 2`) carry a `sessionId`, a device `anonymousId`, the app version, language, timezone, screen size and the landing channel — so guests are now followable through a funnel. Old documents still can't be separated, and the report shows that split under DATA HEALTH.
 4. **Click-level only.** `product_viewed` fires on tap (not on render); the only richer interaction signal is the double-tap survey.
