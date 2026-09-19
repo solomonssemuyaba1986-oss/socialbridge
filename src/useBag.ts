@@ -123,14 +123,19 @@ export function useBag() {
 
           if (first) {
             first = false
-            // Upload any local-only items so they appear on other devices
+            // Upload any local-only items so they appear on other devices — **and count them
+            // now**: this is the moment a guest becomes an account, which is the only honest
+            // moment their bag can enter a public number (a number anybody could write to is a
+            // number anybody could fake). The once-per-account marker makes it exactly once, so
+            // bagging the same thing again — or on a second phone — never doubles it.
             const remoteIds = new Set(remote.map(i => i.productId))
             local.forEach(i => {
-              if (!remoteIds.has(i.productId)) {
-                setDoc(doc(db, 'users', user.uid, 'bag', i.productId), i).catch(err => {
-                  console.warn('Failed to upload bag item:', err)
-                })
-              }
+              if (remoteIds.has(i.productId)) return
+              setDoc(doc(db, 'users', user.uid, 'bag', i.productId), i).catch(err => {
+                console.warn('Failed to upload bag item:', err)
+              })
+              void incrementBagCount(i.productId, 1)
+              void incrementBaggedCount(i.productId, user.uid)
             })
           }
 

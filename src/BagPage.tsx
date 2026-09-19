@@ -413,6 +413,13 @@ function BagPage() {
             Clear All
           </button>
         </div>
+        {/* A guest's bag lives on their phone. Say so plainly — and say what signing in gives
+            them: the bag follows them, and it is the moment their interest gets counted. */}
+        {(!auth.currentUser || auth.currentUser.isAnonymous) && (
+          <p style={{ margin: '0 0 16px', color: '#888', fontSize: 13 }}>
+            📱 Saved on this phone. Sign in when you order and it comes with you.
+          </p>
+        )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {items.map(item => {
             const isMissing = !!missingProducts[item.productId]

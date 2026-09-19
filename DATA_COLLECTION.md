@@ -171,8 +171,10 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 
 | Data | Shape | Source |
 |---|---|---|
-| `bagCounts/{productId}` | `{ count, baggedCount }` | `useBag.ts:41-70` |
+| `bagCounts/{productId}` | `{ count, baggedCount }` | `useBag.ts` |
 | `bagCounts/{productId}/baggers/{uid}` | `{ at }` — one marker per user (distinct-people counting) | same |
+
+**Bags are free; the number is not.** Anybody may add to their bag without an account (it stays on their device), but `bagCounts` can only be written by a **signed-in** account (`firestore.rules`) — because a number the whole world sees must be a number nobody can fake. So a guest's add is never counted, and **a guest's bag is credited the moment they sign in** (the bag moves into their account then, and the `baggers` marker makes it exactly once, so bagging the same thing again never doubles it). Guests who never sign in are still visible in `events` as `bag_added` — real interest, just never public proof (`npm run analytics:report` splits the two crowds).
 | `products.orderCount` | number — bumped on every order placed | `createBuyerOrder.ts:152-153` |
 | `products.salesCount` | number — bumped on fulfilment | `OrderHistory.tsx` |
 | `products.likeCount` | number — the **public ♥ tally**, one number the whole world reads (a buyer in one country and a seller in another see the same figure) | `useProductLikes.ts` |

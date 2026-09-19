@@ -1205,7 +1205,7 @@ function BrowsePage() {
               {(bagCounts[surveyProduct.id]?.baggedCount || 0) > 0 || (surveyProduct.salesCount || 0) > 0 ? (
                 <div style={{ display: 'flex', gap: '14px', marginBottom: '12px', flexWrap: 'wrap' }}>
                   {(bagCounts[surveyProduct.id]?.baggedCount || 0) > 0 && (
-                    <span style={{ color: '#aaa', fontSize: '13px', fontWeight: '700' }}>🛍️ {formatBagCount(bagCounts[surveyProduct.id]?.baggedCount || 0)} bagged</span>
+                    <span style={{ color: '#aaa', fontSize: '13px', fontWeight: '700' }}>🛍️ {formatBagCount(bagCounts[surveyProduct.id]?.baggedCount || 0)} accounts bagged this</span>
                   )}
                   {(surveyProduct.salesCount || 0) > 0 && (
                     <span style={{ color: '#8fd14f', fontSize: '13px', fontWeight: '700' }}>✓ {formatBagCount(surveyProduct.salesCount || 0)} bought</span>

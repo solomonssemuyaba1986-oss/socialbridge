@@ -283,6 +283,18 @@ function buildReport(events) {
     .sort((a, b) => b.confirmed - a.confirmed)
     .slice(0, TOP)
 
+  // 4b) Bagged: who was counting? The 🛍️ number on a card can only ever show **accounts**
+  // (`bagCounts` requires a signed-in writer, and a number anybody could write to is a number
+  // anybody could fake). This is where the people who bagged *without* signing in show up —
+  // real interest, just never public proof.
+  const baggedByAccount = new Set()
+  const baggedByGuest = new Set()
+  byName('bag_added').forEach((e) => {
+    const signedIn = Boolean(e.userId) && e.userId !== 'guest'
+    ;(signedIn ? baggedByAccount : baggedByGuest).add(visitorOf(e))
+  })
+  const bagged = { accounts: baggedByAccount.size, guests: baggedByGuest.size }
+
   // 5) Seller performance: how fast they answer, how fast they confirm, what fell over.
   const sellers = {}
   const sellerRow = (id, slug) => {
@@ -397,6 +409,7 @@ function buildReport(events) {
       zeroResults: topEntries(zeroResultQueries).map(([query, count]) => ({ query, count })),
     },
     products: { tracked: productRows.length, ranking: productRanking, seenNotSold, boughtNotLoved },
+    bagged,
     sellers: sellerRanking,
     nearby: {
       sessions: uniqueVisitors(nearbyViews),
@@ -481,6 +494,20 @@ function render(report) {
     add(table(['productId', 'sellerId', 'confirmed', '♥'], report.products.boughtNotLoved.map((p) => [
       p.productId, p.sellerId || '—', p.confirmed, p.liked,
     ])))
+  }
+
+  // Bagged: the cards can only ever show accounts, so this separates the two crowds.
+  const bagTotal = report.bagged.accounts + report.bagged.guests
+  if (bagTotal > 0) {
+    add()
+    add('BAGGED — who was counting? (a card\'s 🛍️ number can only ever show accounts)')
+    add(table(['by', 'people'], [
+      ['signed in', report.bagged.accounts],
+      ['guests — never counted publicly', report.bagged.guests],
+    ]))
+    add(`  ${Math.round((report.bagged.guests / bagTotal) * 100)}% of bagging happens before signing in.`)
+    add('  Those people cannot buy without an account either — so the number on the card is a floor,')
+    add('  not the whole story.')
   }
   add()
 
