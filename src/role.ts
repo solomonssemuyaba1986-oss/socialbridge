@@ -4,11 +4,18 @@ import { auth, db } from './firebase'
 /**
  * What the person chose on the "What brings you here?" screen.
  *
- * Without this, a signed-in buyer has no home: `/` could only ever send them back
- * to onboarding, so every visit asked them who they were all over again.
+ * There are really **three** states, and the third one matters:
+ *  - `'seller'` — they want a shop (set up at `/setup`);
+ *  - `'buyer'` — they came to buy;
+ *  - **no record at all** — *just looking*. Browsing needs no account and no choice, and
+ *    somebody who never taps a card stays this way forever. Nothing is claimed about them.
  *
- * The device copy is what routing reads (works instantly, and for guests). The
- * Firestore copy rides along on `users/{uid}` so the choice follows them.
+ * ⚠️ The choice does **not** decide where anyone lands any more: a seller with a shop goes to
+ * their dashboard, a seller without one to the question, and **everybody else to the market**
+ * (`homeForRole`). So never gate the market behind this — the front door is open to everyone.
+ *
+ * The device copy is what routing reads (instant, and it works for guests). The Firestore copy
+ * rides along on `users/{uid}` so a seller's choice follows them to another phone.
  */
 export type Role = 'buyer' | 'seller'
 
@@ -34,6 +41,27 @@ export function setRole(role: Role): void {
   // Best-effort — routing uses the device copy, so a failed write is harmless.
   setDoc(doc(db, 'users', uid), { role }, { merge: true }).catch(err => {
     console.warn('Could not save role:', err)
+  })
+}
+
+/**
+ * Forget the choice — for "Just looking", and for escaping a half-made seller choice.
+ *
+ * Without this, someone who tapped *Seller*, wandered off before finishing and came back is
+ * sent to the question on `/` **every single time**. Clearing the record means `/` leaves them
+ * in the market like anybody else.
+ */
+export function clearRole(): void {
+  try {
+    localStorage.removeItem(ROLE_KEY)
+  } catch {
+    // ignore storage errors
+  }
+  const uid = auth.currentUser?.uid
+  if (!uid) return
+  // The device copy is what routing reads; this keeps the account record honest too.
+  setDoc(doc(db, 'users', uid), { role: null }, { merge: true }).catch(err => {
+    console.warn('Could not clear the saved role:', err)
   })
 }
 

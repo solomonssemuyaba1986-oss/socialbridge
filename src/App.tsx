@@ -115,7 +115,8 @@ function App() {
       <Routes>
       {/* Market-first: the PRODUCTS are the front door. A seller with a shop gets their
           dashboard, anyone who tapped "I'm a seller" but has no shop gets the one-time
-          question, and everybody else — buyer or guest — lands in the market. */}
+          question, and everybody else — buyer, guest, or someone "just looking" with no role
+          at all — lands in the market. */}
       <Route path="/" element={
         slug ? <Navigate to="/dashboard" /> :
         getRole() === 'seller' ? <Navigate to="/onboarding" /> :

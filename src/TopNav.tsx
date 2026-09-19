@@ -115,12 +115,18 @@ function TopNav({ variant = 'default' }: { variant?: 'default' | 'bag' }) {
                   📦 My Orders
                 </button>
               )}
-              {!isGuest && (isSeller ? (
-                <button onClick={() => navigate('/dashboard')} style={{ background: 'transparent', color: '#fff', border: '1px solid #333', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Manage Store</button>
-              ) : (
-                <button onClick={() => { setRole('seller'); navigate('/setup') }} style={{ background: green, color: '#000', border: 'none', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>🛍️ Become a seller</button>
-              ))}
             </>
+          )}
+
+          {/* Selling is open to anybody who is not a seller yet — **including a visitor who has
+              not signed in**: the shop form fills up first and only asks for an account at
+              "Create My Shop". Anonymous guests are left out on purpose, so a shop can never
+              end up owned by a throwaway account. */}
+          {isSeller && (
+            <button onClick={() => navigate('/dashboard')} style={{ background: 'transparent', color: '#fff', border: '1px solid #333', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Manage Store</button>
+          )}
+          {!isSeller && !isGuest && (
+            <button onClick={() => { setRole('seller'); navigate('/setup') }} style={{ background: green, color: '#000', border: 'none', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>🛍️ Sell on rachett</button>
           )}
         </div>
       </nav>

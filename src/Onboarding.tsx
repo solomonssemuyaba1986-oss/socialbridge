@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { setRole, MARKET_HOME } from './role'
+import { setRole, clearRole, MARKET_HOME } from './role'
 
 function Onboarding() {
   const navigate = useNavigate()
@@ -10,7 +10,7 @@ function Onboarding() {
       <h1 style={{ color: '#fff', fontSize: '32px', fontWeight: '800', marginBottom: '8px', textAlign: 'center' }}>What brings you here?</h1>
       <p style={{ color: '#888', marginBottom: '40px', fontSize: '15px' }}>We'll set up the right experience for you.</p>
 
-      <div className="rt-onboarding-cards" style={{ display: 'flex', gap: '16px', width: '100%', maxWidth: '560px', marginBottom: '32px' }}>
+      <div className="rt-onboarding-cards" style={{ display: 'flex', gap: '16px', width: '100%', maxWidth: '780px', marginBottom: '32px' }}>
         
         {/* Seller */}
         <div onClick={() => { setRole('seller'); navigate('/setup') }}
@@ -28,6 +28,16 @@ function Onboarding() {
           <p style={{ color: '#fff', fontWeight: '700', fontSize: '16px', margin: '0 0 8px' }}>I'm a Buyer</p>
           <p style={{ color: '#888', fontSize: '13px', margin: '0 0 16px' }}>I want to find and buy products from social media sellers safely.</p>
           <p style={{ color: '#888', fontSize: '12px', margin: 0 }}>👥 Browse hundreds of social sellers</p>
+        </div>
+
+        {/* Just looking — records NO role at all. Browsing the market needs no account and no
+            choice, and this is also the way out of a half-made seller choice (see clearRole). */}
+        <div onClick={() => { clearRole(); navigate(MARKET_HOME) }}
+          style={{ flex: 1, background: '#1a1a1a', border: '2px solid #333', borderRadius: '16px', padding: '24px', cursor: 'pointer' }}>
+          <div style={{ background: '#7c3aed', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', fontSize: '22px' }}>🔍</div>
+          <p style={{ color: '#fff', fontWeight: '700', fontSize: '16px', margin: '0 0 8px' }}>Just looking</p>
+          <p style={{ color: '#888', fontSize: '13px', margin: '0 0 16px' }}>Have a look around first. You can sell or buy any time — and signing up is not required to browse.</p>
+          <p style={{ color: '#888', fontSize: '12px', margin: 0 }}>👀 No account needed</p>
         </div>
 
       </div>
