@@ -27,6 +27,7 @@ import HelpPage from './HelpPage.tsx'
 import TermsPage from './TermsPage.tsx'
 import NearbyPage from './NearbyPage.tsx'
 import BuyerHome from './BuyerHome.tsx'
+import BuyerOrders from './BuyerOrders.tsx'
 import NotFound from './NotFound.tsx'
 import { getRole } from './role.ts'
 import { SellerLiveProvider } from './sellerLive.tsx'
@@ -118,6 +119,9 @@ function App() {
       } />
       {/* The buyer's home — mirror of the seller's Dashboard. Open to guests too. */}
       <Route path="/home" element={<BuyerHome />} />
+      {/* The buyer's own orders — every shop, one list. The seller's screen stays at /orders.
+          A real account only: an anonymous guest has no orders to show. */}
+      <Route path="/my-orders" element={signedIn && !isGuest ? <BuyerOrders /> : <Navigate to="/" />} />
       <Route path="/onboarding" element={<Onboarding />} />
       {/* Sign-in has its own route now that "/" is the market. */}
       <Route path="/signin" element={<SignIn />} />

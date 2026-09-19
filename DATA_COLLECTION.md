@@ -125,7 +125,7 @@ Because of that, these no longer happen:
 
 ### 3.4 Order document (`sellers/{sellerId}/orders/{id}`)
 
-`buyerName`, `buyerUid`, `buyerPhone` *(guests only — PII)*, `verified`, `productName`, `productPrice` *(string)*, `productId`, `quantity` *(string)*, `deliveryArea` *(free text)*, `status` (`pending` → `paid` / `awaiting_payment` → `fulfilled` / `out_of_stock` / `needs_details`), `read`, `sourcePlatform`, `orderId` (`RT-XXXXXX`), `createdAt` (`createBuyerOrder.ts:5-34`; `useSellerOrders.ts:6+`).
+`buyerName`, `buyerUid`, `buyerPhone` *(guests only — PII)*, `verified`, `productName`, `productPrice` *(string)*, `productId`, `productImage` *(a thumbnail for the buyer's own orders list; only on orders placed after Sep 2026)*, `quantity` *(string)*, `deliveryArea` *(free text)*, `status` (`pending` → `paid` / `awaiting_payment` → `fulfilled` / `out_of_stock` / `needs_details`), `read`, `sourcePlatform`, `orderId` (`RT-XXXXXX`), `createdAt` (`createBuyerOrder.ts:5-34`; `useSellerOrders.ts:6+`).
 Payment fields are declared but **never written**: `paymentMethod`, `transactionId`, `flwRef`, `paymentStatus`.
 
 ### 3.5 Conversations and messages
@@ -135,6 +135,14 @@ Payment fields are declared but **never written**: `paymentMethod`, `transaction
 `conversations/{id}/messages/{id}` — `senderId`, `text`, `imageUrl`, `type` (`text` / `image` / `product` / `order`), `productId`, `productName`, `productPrice`, `productImage`, `orderId`, `quantity`, `status`, `orderStatus` (`fulfilled` marks the **delivery** bubble a seller's "✓ Confirm" posts — it is what shows the buyer the "Did you love it?" question), `createdAt` (`useConversation.ts:81-96, 162-172`; `createBuyerOrder.ts`).
 
 ⚠️ **Two chat systems coexist**: `sellers/{uid}/messages` (legacy/guest) and `conversations/*` (one thread per seller↔buyer pair). Any training pipeline must dedupe/merge them.
+
+### 3.6 The buyer's own orders (`/my-orders`)
+
+Orders live under each **seller**, so a buyer's history is gathered with one query: `collectionGroup('orders')` where `buyerUid == me`, newest first (`useBuyerOrders.ts`; 20 per page with **Show older orders**). It is a **live listener**, so a seller confirming an order flips the buyer's row to "Delivered" while they are looking at it.
+
+Reading this needed **no rules change**: `firestore.rules:26-28` already allows a read when `resource.data.buyerUid == request.auth.uid`, and the query's own equality filter satisfies that rule. The page is deliberately **read-only** — a buyer cannot cancel or confirm an order, because order documents may only be updated by the seller (`firestore.rules:33-36`).
+
+Shop names and logos are joined client-side (one read per *distinct* shop, cached for the visit). Orders written before `buyerUid` / `productImage` existed simply never appear / show a placeholder — nothing is backfilled, and a "did you love it?" answer is kept per order in `users/{uid}/loveAnswers`.
 
 ---
 
@@ -341,15 +349,24 @@ Every row carries `_id` (document id) and `_path` (full document path) so it can
 | `backfill-locations.js` | Geocodes stores that only typed an area, so Nearby can sort them | `cd functions && node backfill-locations.js --write` |
 | `backfill-slugs.js` | **Finds stores missing a shop link — the cause of `/store/undefined` dead ends** — and fills the gaps; reports duplicate links (renames them only with `--fix-duplicates`) | `cd functions && node backfill-slugs.js --write` |
 
-### Indexes (needed by the Browse catalog feed)
+### Indexes (needed by the catalog feed and the buyer's orders list)
 
-`firestore.indexes.json` holds one **collection-group index on `products.createdAt` (DESC)** — the feed in `useProductFeed.ts` uses it to page the whole catalog in one query. Deploy it once:
+`firestore.indexes.json` holds two **collection-group indexes**:
+
+| Index | What it makes possible |
+|---|---|
+| `products.createdAt` (DESC) | The Browse feed (`useProductFeed.ts`) — pages the whole catalog in one query |
+| `orders.buyerUid` (ASC) + `orders.createdAt` (DESC) | The buyer's own orders list (`useBuyerOrders.ts`) — every order they placed, newest first, across all shops |
+
+Deploy them once:
 
 ```bash
 npm run deploy:indexes      # firebase deploy --only firestore:indexes
 ```
 
-Until it's deployed, Browse catches the query error and falls back to the old per-store reads (a batch of 10 stores a page), so the page still works — the console prints the reminder. Build takes a few minutes after the first deploy.
+Until the **products** index is deployed, Browse catches the query error and falls back to the old per-store reads (a batch of 10 stores a page), so the page still works — the console prints the reminder.
+
+The **orders** index has **no fallback**: without it the buyer's orders page shows a clear "one setting is still switched off" notice with a **Try again** button instead of an empty list, because an empty list would look like "you have never ordered anything" — a lie. Build takes a few minutes after the first deploy.
 
 ---
 

@@ -94,6 +94,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
         productName,
         productPrice,
         productId,
+        productImage: productImage || '',
         quantity,
         deliveryArea,
         status: 'pending',

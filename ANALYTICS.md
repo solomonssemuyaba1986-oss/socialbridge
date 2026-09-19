@@ -124,9 +124,10 @@ the page needs it.
 | `quick_reply_created` | count, length | ⏳ |
 | `image_uploaded` | kind, surface, failed | ✅ (chat photos) |
 | `order_placed` | orderId, productId, sellerId, price, quantity, bagSize, channel, surface | ✅ |
-| `order_viewed` | orderId, status | ✅ (seller) |
+| `order_viewed` | orderId, status | ✅ (seller screen, and the buyer's own list) |
 | `order_status_changed` | orderId, from, to, latencyMinutes, productId | ✅ (seller) |
 | `order_deleted` | orderId, status | ✅ (seller) |
+| `buyer_orders_viewed` | count | ✅ (the buyer's own orders list, `/my-orders`) |
 | `order_cancelled` | orderId, by, reason | ⏳ |
 | `order_completed` | orderId, by, latencyMinutes | ⏳ |
 | `product_created` | productId, category, hasImage, price | ⏳ |

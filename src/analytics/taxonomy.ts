@@ -91,6 +91,8 @@ export const EVENT_PROPS = {
   // ── Orders ───────────────────────────────────────────────────────────────
   order_placed: ['orderId', 'productId', 'sellerId', 'price', 'quantity', 'bagSize', 'channel', 'surface'],
   order_viewed: ['orderId', 'status'],
+  // The buyer's own orders list — how many orders they saw gathered in one place.
+  buyer_orders_viewed: ['count'],
   order_status_changed: ['orderId', 'from', 'to', 'latencyMinutes', 'productId'],
   order_deleted: ['orderId', 'status'],
   // Reserved for the buyer-side actions that don't exist yet (plan M5 — they

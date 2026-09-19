@@ -104,6 +104,11 @@ function TopNav({ variant = 'default' }: { variant?: 'default' | 'bag' }) {
                   </span>
                 )}
               </button>
+              {!isGuest && !isSeller && (
+                <button onClick={() => navigate('/my-orders')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', color: '#fff', border: '1px solid #333', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
+                  📦 My Orders
+                </button>
+              )}
               {!isGuest && (isSeller ? (
                 <button onClick={() => navigate('/dashboard')} style={{ background: 'transparent', color: '#fff', border: '1px solid #333', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Manage Store</button>
               ) : (

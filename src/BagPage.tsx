@@ -276,6 +276,7 @@ function BagPage() {
         productName: orderTarget.name,
         productPrice: orderTarget.price,
         productId: orderTarget.id,
+        productImage: orderTarget.imageUrl || '',
         quantity: orderQty,
         deliveryArea: deliveryArea.trim(),
         status: 'pending',

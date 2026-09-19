@@ -647,6 +647,7 @@ const handleOrder = async () => {
       productName: orderProduct.name,
       productPrice: orderProduct.price,
       productId: orderProduct.id,
+      productImage: orderProduct.imageUrl || '',
       quantity,
       deliveryArea,
       status: 'pending',

@@ -408,6 +408,7 @@ function BrowsePage() {
         productName: orderProduct.name,
         productPrice: orderProduct.price,
         productId: orderProduct.id,
+        productImage: orderProduct.imageUrl || '',
         quantity,
         deliveryArea: deliveryArea.trim(),
         status: 'pending',

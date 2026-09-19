@@ -52,6 +52,15 @@ function BuyerHome() {
     navigate('/inbox')
   }
 
+  /** Orders need a real account — a guest is asked once and returned straight here. */
+  const openOrders = () => {
+    if (isGuest) {
+      requireSignIn(navigate, { action: 'inbox', returnTo: '/my-orders' })
+      return
+    }
+    navigate('/my-orders')
+  }
+
   // Sellers who wander in here get pointed at their own panel instead.
   useEffect(() => {
     const uid = auth.currentUser?.uid
@@ -113,12 +122,12 @@ function BuyerHome() {
           </>
         )}
 
-        <button onClick={openInbox}
+        <button onClick={openOrders}
           style={{ width: '100%', padding: '14px 16px', background: '#1a1a1a', border: '1px solid #262626', borderRadius: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px', textAlign: 'left' }}>
           <span style={{ fontSize: '20px' }}>📦</span>
           <span style={{ flex: 1 }}>
-            <span style={{ display: 'block', color: '#fff', fontWeight: 700, fontSize: '14px' }}>Track an order</span>
-            <span style={{ display: 'block', color: '#777', fontSize: '12px', marginTop: '2px' }}>Every order you place keeps its own chat thread</span>
+            <span style={{ display: 'block', color: '#fff', fontWeight: 700, fontSize: '14px' }}>My Orders</span>
+            <span style={{ display: 'block', color: '#777', fontSize: '12px', marginTop: '2px' }}>See everything you've ordered — and whether it has arrived</span>
           </span>
           <span style={{ color: '#555' }}>→</span>
         </button>
