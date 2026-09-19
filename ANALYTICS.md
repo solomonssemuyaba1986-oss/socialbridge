@@ -63,7 +63,7 @@ bounded offline buffer (200, oldest dropped) and never break the UI.
 - **Opt-out** — `localStorage.rachett_analytics_off = '1'` silences every writer
   (see `setAnalyticsOptOut`). Nothing is queued or sent in that state.
 
-## The events (66)
+## The events (68)
 
 ✅ = wired in the app today · ⏳ = reserved name, add the call when the feature or
 the page needs it.
@@ -79,7 +79,9 @@ the page needs it.
 | `signup_completed` | method, role | ⏳ |
 | `signout` | role | ⏳ |
 | `role_selected` | role | ⏳ |
-| `store_created` | sellerId, slug, country | ⏳ |
+| `store_created` | sellerId, slug, country | ✅ |
+| `phone_verification_sent` | country, method | ✅ |
+| `phone_verified` | country, method | ✅ |
 | `browse_viewed` | category, storeCount | ✅ |
 | `feed_page_loaded` | page, count | ✅ |
 | `category_browsed` | category | ✅ |
@@ -168,6 +170,10 @@ Also available as `npm run analytics:report` from the repo root. Sections:
 - **FUNNEL** — unique visitors at each stage (store seen → product seen → opened →
   bagged → checkout → ordered → confirmed), with % of first and % of previous.
 - **ACQUISITION** — first-touch channel → visitors → orders → conversion.
+- **PHONE VERIFICATION** — the seller signup gate: codes requested → numbers verified, split by
+  method (`phone-signup` settles the account and the number with one code; `social-link` owes an
+  extra step) and by country. This is where people who never finished setup show up, so it is
+  the first place to look when signups dip.
 - **SEARCH** — searches per surface, the top queries, and **queries that found
   nothing** (that list is your product roadmap).
 - **PRODUCTS** — seen → opened → bagged → ordered → confirmed per product, plus the ♥

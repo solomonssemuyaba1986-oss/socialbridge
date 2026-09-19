@@ -52,7 +52,16 @@
 
 ### 2.2 `sellers/{uid}` — field dictionary
 
-Written by `SetupStore.tsx:426-450` (create), `EditStore.tsx:234-258` (edit), `Dashboard.tsx:78-82, 153-158` (recovery email + location backfill), `RecoveryModal.tsx:127-130` (phone recovery).
+Written by `SetupStore.tsx:434-466` (create), `EditStore.tsx:234-258` (edit), `Dashboard.tsx:78-82, 153-158` (recovery email + location backfill), `RecoveryModal.tsx:127-130` (phone recovery).
+
+> **Every live shop has a verified phone number (since 19 Sep 2026).** Setup checks the number
+> against its own country's length (`src/phone.ts` — Uganda 9 digits, Kenya 9, Egypt 10, …,
+> verified in Node by `_phone_check.cjs`) and then **refuses to create the shop** until a
+> Firebase SMS code for that exact number has been confirmed. Signing in with
+> Google/Apple/Facebook gets one extra step (verify your phone number, last); signing in with
+> the phone number settles both with the same code, so that path has no extra step. This is what
+> the 🟢 Real Seller badge rests on — and the number stays private: `showWhatsapp` is `false`,
+> so buyers never see it.
 
 | Field | Type / example | Notes / source |
 |---|---|---|
@@ -61,7 +70,7 @@ Written by `SetupStore.tsx:426-450` (create), `EditStore.tsx:234-258` (edit), `D
 | `slug` | string `"aisha-fabrics"` | the store link; **never changes on rename** |
 | `aliases` | string[] (≤8) | previous business names, for search recall (EditStore.tsx:250-251) |
 | `whatsapp` | string `"+256771234567"` | contact/payout number — **PII** |
-| `phoneVerified` | boolean | true only via phone auth or OTP recovery |
+| `phoneVerified` | boolean | **true on every shop created since 19 Sep 2026** — the setup gate will not save a store without a confirmed Firebase SMS code for this number. Only phone auth, a linked number, or OTP recovery can set it |
 | `email` | string | store contact email — **PII** |
 | `recoveryEmail` | string | account-recovery anchor — **PII** |
 | `recoveryEmailVerified` | boolean | |

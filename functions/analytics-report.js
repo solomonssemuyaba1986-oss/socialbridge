@@ -361,7 +361,33 @@ function buildReport(events) {
   wallShown.forEach((e) => inc(wallByAction, e.props.action))
   wallPassed.forEach((e) => inc(wallPassedByAction, e.props.action))
 
-  // 8) Daily shape.
+  // 8) Phone verification — the seller signup gate, and its classic drop-off: the SMS.
+  //    Split by method so the two funnels stay honest (phone sign-up settles both at once;
+  //    a social sign-in owes one extra step).
+  const codeSent = byName('phone_verification_sent')
+  const phoneVerifiedEvents = byName('phone_verified')
+  const sentByMethod = {}
+  const verifiedByMethod = {}
+  const sentByCountry = {}
+  codeSent.forEach((e) => { inc(sentByMethod, e.props.method); inc(sentByCountry, e.props.country) })
+  phoneVerifiedEvents.forEach((e) => inc(verifiedByMethod, e.props.method))
+  const sentPeople = uniqueVisitors(codeSent)
+  const verifiedPeople = uniqueVisitors(phoneVerifiedEvents)
+  const phoneVerification = {
+    codesSent: codeSent.length,
+    verified: phoneVerifiedEvents.length,
+    peopleAsked: sentPeople,
+    peopleVerified: verifiedPeople,
+    completedPct: sentPeople ? Math.round((verifiedPeople / sentPeople) * 100) : null,
+    byMethod: Object.keys({ ...sentByMethod, ...verifiedByMethod }).map((method) => ({
+      method,
+      sent: sentByMethod[method] || 0,
+      verified: verifiedByMethod[method] || 0,
+    })).sort((a, b) => b.sent - a.sent),
+    byCountry: topEntries(sentByCountry, 10).map(([country, sent]) => ({ country, sent })),
+  }
+
+  // 9) Daily shape.
   const perDay = {}
   scoped.forEach((e) => {
     const day = dayKey(e.at)
@@ -372,7 +398,7 @@ function buildReport(events) {
     if (e.name === 'order_status_changed' && e.props.to === 'fulfilled') perDay[day].confirmed += 1
   })
 
-  // 9) Health of the data itself — check this before trusting any number above.
+  // 10) Health of the data itself — check this before trusting any number above.
   const eventNames = {}
   const appVersions = {}
   let v1 = 0
@@ -431,6 +457,7 @@ function buildReport(events) {
         passed: wallPassedByAction[action] || 0,
       })),
     },
+    phoneVerification,
     daily: Object.values(perDay)
       .map((d) => ({ day: d.day, events: d.events, visitors: d.visitors.size, orders: d.orders, confirmed: d.confirmed }))
       .sort((a, b) => a.day.localeCompare(b.day)),
@@ -461,6 +488,27 @@ function render(report) {
 
   add('ACQUISITION (first-touch channel)')
   add(table(['source', 'visitors', 'orders', 'conversion'], report.acquisition.map((a) => [a.source, a.visitors, a.orders, a.conversion])))
+  add()
+
+  // The seller signup gate: a code was asked for → a number was proven. This is where the
+  // people who never finished setup show up.
+  const pv = report.phoneVerification
+  add('PHONE VERIFICATION (seller signup gate)')
+  if (pv.codesSent === 0) {
+    add('  no codes requested in this window')
+  } else {
+    add(`  codes requested: ${pv.codesSent}   numbers verified: ${pv.verified}   people: ${pv.peopleAsked} asked → ${pv.peopleVerified} verified (${pv.completedPct ?? 0}%)`)
+    add(table(['method', 'codes sent', 'verified', 'of sent'], pv.byMethod.map((m) => [
+      m.method,
+      m.sent,
+      m.verified,
+      pct(m.verified, m.sent),
+    ])))
+    if (pv.byCountry.length > 0) {
+      add('  where the numbers are')
+      add(table(['country', 'codes sent'], pv.byCountry.map((c) => [c.country, c.sent])))
+    }
+  }
   add()
 
   add('SEARCH')

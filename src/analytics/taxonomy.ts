@@ -30,6 +30,8 @@ export const EVENT_PROPS = {
   signout: ['role'],
   role_selected: ['role'],
   store_created: ['sellerId', 'slug', 'country'],
+  phone_verification_sent: ['country', 'method'],
+  phone_verified: ['country', 'method'],
 
   // ── Discovery ────────────────────────────────────────────────────────────
   browse_viewed: ['category', 'storeCount'],

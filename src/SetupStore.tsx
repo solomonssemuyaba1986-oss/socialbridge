@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { auth, db, googleProvider, facebookProvider, appleProvider, createRecaptchaVerifier } from './firebase'
-import { signInWithPopup, signInWithPhoneNumber, type ConfirmationResult, type AuthProvider } from 'firebase/auth'
+import { signInWithPopup, signInWithPhoneNumber, linkWithPhoneNumber, type ConfirmationResult, type AuthProvider } from 'firebase/auth'
 import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore'
 import { useNavigate } from 'react-router-dom'
 import { COUNTRIES } from './countries'
 import { COUNTRY_CODES, type CountryCode } from './countryCodes'
+import { formatFull, lengthHint, lengthRange, validatePhone } from './phone'
+import { trackEvent } from './analytics'
 import {
   placeLabel,
   resolveSellerLocation,
@@ -25,6 +27,12 @@ interface SetupFormErrors {
 
 /** Where we keep a seller's half-finished shop so a reload can never wipe it. */
 const SETUP_DRAFT_KEY = 'rachett_setup_draft'
+
+/**
+ * Where a seller goes when SMS simply will not arrive. Verifying the phone is a hard gate,
+ * so there has to be a human way out of it — patchy delivery must never be a dead end.
+ */
+const SUPPORT_WHATSAPP = (import.meta.env.VITE_SUPPORT_WHATSAPP || '256703174968').trim()
 
 interface SetupDraft {
   businessName?: string
@@ -107,18 +115,24 @@ function SetupStore() {
   // tap Create My Shop). Social sign-ins can earn the badge later.
   const [phoneVerified, setPhoneVerified] = useState(!!auth.currentUser?.phoneNumber)
 
-  // Country-aware phone helpers.
-  // Dial codes already include "+" (e.g. '+256', '+1-684'), so strip everything to
-  // digits and add exactly ONE "+" ourselves — and drop the local trunk zero
-  // (0771234567 → 771234567) the way people actually type Ugandan numbers.
-  const dialDigits = selectedCountry.dialCode.replace(/\D/g, '')
-  const localDigits = whatsapp.replace(/\D/g, '').replace(/^0+/, '')
-  const getFullWhatsapp = () => `+${dialDigits}${localDigits}`
-  const whatsappIsValid = /^\+[1-9]\d{7,14}$/.test(getFullWhatsapp())
+  // Country-aware phone helpers. The per-country length rules live in ./phone (pure, and
+  // verified in Node by `_phone_check.cjs`) — the check that used to live here only counted
+  // total digits, which is why "+256" plus 8 digits was accepted and no code ever arrived.
+  // Dial codes already include "+" (e.g. '+256', '+1-684'), so strip everything to digits and
+  // add exactly ONE "+" ourselves.
+  const dialCode = `+${selectedCountry.dialCode.replace(/\D/g, '')}`
+  const whatsappCheck = validatePhone(dialCode, whatsapp, selectedCountry.name)
+  const whatsappIsValid = whatsappCheck.ok
+  const phoneRange = lengthRange(dialCode)
+  const getFullWhatsapp = () => formatFull(dialCode, whatsappCheck.digits)
+  /** Past the longest valid length — show the error immediately, mid-typing. */
+  const phoneTooLong = whatsapp.replace(/\D/g, '').length > phoneRange.max
+  /** The whole point of the country rule: say the expected length before it's broken. */
+  const phoneHint = lengthHint(dialCode, selectedCountry.name)
 
-  // Two steps, account LAST so sellers see the whole shop before we ask them to
-  // sign in. Step 2 owns everything that's left (country, location, phone) and the
-  // Create button itself — nothing is hidden behind another screen.
+  // Two steps. Step 2 is "create your rachett shop" in this order: ① the account (Google ·
+  // Apple · Facebook · phone), ② country + location, ③ verify the phone number LAST, then
+  // ④ Create My Shop — and nothing is created before ③ has passed.
   const [step, setStep] = useState(() => {
     const saved = readSetupDraft().step
     return saved && saved >= 1 && saved <= 2 ? saved : 1
@@ -128,13 +142,40 @@ function SetupStore() {
   const [createdSlug, setCreatedSlug] = useState('')
   /** Tracked separately so the UI reacts the moment sign-in succeeds. */
   const [signedInUid, setSignedInUid] = useState<string | null>(auth.currentUser?.uid || null)
-  /** The account sheet — opened when they finish and tap Create (never before). */
-  const [showAccountSheet, setShowAccountSheet] = useState(false)
+  /** Which path produced the code, so the two funnels can be told apart in the report. */
+  const [verifyMethod, setVerifyMethod] = useState<'phone-signup' | 'social-link'>('phone-signup')
   const [signingIn, setSigningIn] = useState('')
   const [signInError, setSignInError] = useState('')
   const [smsCode, setSmsCode] = useState('')
   const [codeSent, setCodeSent] = useState(false)
+  const [phoneBlurred, setPhoneBlurred] = useState(false)
+  /** True once a code has been asked for — decides where an error belongs on screen. */
+  const [codeAttempted, setCodeAttempted] = useState(false)
   const confirmationRef = useRef<ConfirmationResult | null>(null)
+
+  /**
+   * Has Firebase proved *this* number for this account? A changed number is a different
+   * number, so it stops counting as verified until a new code is confirmed.
+   */
+  const provenNumber = auth.currentUser?.phoneNumber || ''
+  const phoneIsProven = phoneVerified || (!!provenNumber && provenNumber === getFullWhatsapp())
+  /**
+   * How the shop account gets made. Google/Apple/Facebook leave the phone unproven, so they
+   * get one extra step; signing in with the phone number settles it with the same code — no
+   * extra step, exactly as promised.
+   */
+  const phoneMode: 'signed-out' | 'verify' | 'done' = phoneIsProven ? 'done' : signedInUid ? 'verify' : 'signed-out'
+
+  /**
+   * Throw away a code we are no longer waiting for. Changing the number or the country must
+   * invalidate it — a code sent to the old number can never prove the new one.
+   */
+  const resetCodeStep = () => {
+    setCodeSent(false)
+    setSmsCode('')
+    setCodeAttempted(false)
+    confirmationRef.current = null
+  }
 
   /** Step 2 is the last step — it holds the Create button, so this only ever moves 1 → 2. */
   const goNext = (to: number) => {
@@ -241,7 +282,8 @@ function SetupStore() {
       newErrors.bio = 'Bio must be 500 characters or less'
     }
     if (!whatsappIsValid) {
-      newErrors.whatsapp = 'Enter a valid phone number with country code (e.g. +256771234567)'
+      // Say exactly what's wrong with THIS country's number, not a generic scolding.
+      newErrors.whatsapp = whatsappCheck.message || 'Enter a valid phone number with country code (e.g. +256771234567)'
     }
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sanitizeInput(email))) {
       newErrors.email = 'Enter a valid email address'
@@ -261,11 +303,18 @@ function SetupStore() {
   }
 
   const handleWhatsappChange = (val: string) => {
-    const digits = val.replace(/\D/g, '').slice(0, 14)
+    // Keep what they type — a leading 0 is normal here, and ./phone normalises it for the
+    // check, so "0771234567" is understood rather than rejected.
+    const digits = val.replace(/\D/g, '').slice(0, 15)
     setWhatsapp(digits)
     setErrors(e => ({ ...e, whatsapp: undefined }))
-    // A different number is a different number — it can't stay "verified".
-    if (digits !== whatsapp) setPhoneVerified(false)
+    setPhoneBlurred(false)
+    if (digits !== whatsapp) {
+      // A different number is a different number — it cannot stay "verified", and a code sent
+      // to the old one is no longer the code we are waiting for.
+      setPhoneVerified(false)
+      if (codeSent) resetCodeStep()
+    }
   }
 
   const handleWhatsappCountryChange = (c: CountryCode) => {
@@ -273,6 +322,7 @@ function SetupStore() {
     setShowWhatsappCountryDropdown(false)
     setWhatsappCountrySearch('')
     setPhoneVerified(false)
+    resetCodeStep()
     setErrors(e => ({ ...e, whatsapp: undefined }))
   }
 
@@ -316,7 +366,7 @@ function SetupStore() {
     ? COUNTRIES.filter(c => c.toLowerCase().includes(nationalitySearch.toLowerCase()))
     : COUNTRIES
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (opts?: { proven?: boolean }) => {
     // Anything missing sends them to the step that owns it — no invisible failures.
     const problems = validateForm()
     if (Object.keys(problems).length > 0) {
@@ -332,12 +382,30 @@ function SetupStore() {
     }
     const user = auth.currentUser
     if (!user) {
-      // Everything is filled in — NOW ask how to save it. Their effort is already on
-      // the table, which is the moment they're most likely to complete.
-      setShowAccountSheet(true)
+      // The account choice lives at the TOP of this step now — send them back to it rather
+      // than springing a sign-in sheet on them after they tap Create.
+      showSubmitError('Choose how to create your shop at the top of this step, then tap Create My Shop.')
       window.setTimeout(() => {
-        document.getElementById('account-sheet')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      }, 60)
+        document.getElementById('setup-field-account')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 80)
+      return
+    }
+    // Hard gate: a shop needs a phone number Firebase has actually proven. Buyers here don't
+    // know the seller — that proof is exactly what the 🟢 badge is promising them.
+    // Read it live: when this runs from inside an auth callback, the state above is a tick
+    // behind, while `auth.currentUser` is already up to date.
+    const liveUser = auth.currentUser
+    const liveNumber = liveUser?.phoneNumber || ''
+    const liveProven = !!opts?.proven || phoneVerified || (!!liveNumber && liveNumber === getFullWhatsapp())
+    if (!liveProven) {
+      showSubmitError(
+        whatsappIsValid
+          ? 'Verify your phone number — the code step is just below — then tap Create My Shop again.'
+          : 'Check your phone number, verify it with the code, then tap Create My Shop again.',
+      )
+      window.setTimeout(() => {
+        document.getElementById('setup-field-phone')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 80)
       return
     }
     setLoading(true)
@@ -397,8 +465,10 @@ function SetupStore() {
         geo: resolved.geo,
         place: resolved.place,
         geoSource: resolved.geoSource,
-        // A Firebase phone sign-in proves the number — don't rely on React state here.
-        phoneVerified: phoneVerified || !!user.phoneNumber,
+        // Proven for real: Firebase confirmed the code (a phone sign-in proves it in the same
+        // breath; a social account proves it at the verify step). Never again can a shop be
+        // saved with an unverified number — the gate above refuses.
+        phoneVerified: liveProven,
         showWhatsapp,
         recoveryEmail,
         recoveryEmailVerified: !isPhoneSignIn,
@@ -412,6 +482,7 @@ function SetupStore() {
       // the one next action (add a product), plus a WhatsApp share for their bio.
       clearSetupDraft()
       setCreatedSlug(slug)
+      trackEvent('store_created', { sellerId: user.uid, slug, country: nationality })
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to create store'
       const code = (error as { code?: string } | null)?.code
@@ -426,7 +497,7 @@ function SetupStore() {
     }
   }
 
-  const handleAuthSuccess = () => {
+  const handleAuthSuccess = (opts?: { proven?: boolean }) => {
     const finish = () => {
       const u = auth.currentUser
       if (!u) return
@@ -446,10 +517,16 @@ function SetupStore() {
         // Firebase already proved this number — no need to ask twice.
         setPhoneVerified(true)
       }
-      // They already filled everything and tapped Create — finish the job for them.
-      setShowAccountSheet(false)
       window.scrollTo(0, 0)
-      void handleSubmit()
+      if (opts?.proven || u.phoneNumber) {
+        // The number is proven, so the shop can be created — finish the job for them.
+        void handleSubmit({ proven: opts?.proven })
+      } else {
+        // A social account still owes us one step: verify the phone (it comes last).
+        window.setTimeout(() => {
+          document.getElementById('setup-field-phone')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }, 120)
+      }
     }
     if (auth.currentUser) finish()
     else setTimeout(finish, 300)
@@ -478,21 +555,48 @@ function SetupStore() {
   }
 
   /**
-   * Phone — the seller types the number once (above) and one code does double duty:
-   * it creates/logs into the account AND verifies the number.
+   * One place that records a proven number, whichever path got us here — so the event is
+   * never fired twice for a single verification.
+   */
+  const markPhoneVerified = (method: 'phone-signup' | 'social-link') => {
+    setPhoneVerified(true)
+    setCodeSent(false)
+    setSmsCode('')
+    trackEvent('phone_verified', { country: selectedCountry.name, method })
+  }
+
+  /**
+   * The code step — and the reason the flow has one number, not two.
+   *
+   * Signed out: `signInWithPhoneNumber` creates the account AND proves the number in the same
+   * code, so this path needs no extra step at all.
+   * Signed in with Google/Apple/Facebook: `linkWithPhoneNumber` attaches this number to the
+   * account they already chose, so the shop is saved under the account they picked.
+   *
+   * The country rule has to pass FIRST — that is the fix for "it silently accepted 8 digits".
    */
   const sendPhoneCode = async () => {
     if (!whatsappIsValid) {
-      setSignInError('Type your phone number above first — then tap this.')
+      // Show the per-country message and put them at the field, not a vague sign-in error.
+      setPhoneBlurred(true)
+      setErrors(e => ({ ...e, whatsapp: whatsappCheck.message }))
+      document.getElementById('setup-field-phone')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
     setSigningIn('Phone')
     setSignInError('')
+    setCodeAttempted(true)
     try {
       const verifier = createRecaptchaVerifier('setup-recaptcha')
-      const result = await signInWithPhoneNumber(auth, getFullWhatsapp(), verifier)
+      const current = auth.currentUser
+      const method: 'phone-signup' | 'social-link' = current ? 'social-link' : 'phone-signup'
+      const result = current
+        ? await linkWithPhoneNumber(current, getFullWhatsapp(), verifier)
+        : await signInWithPhoneNumber(auth, getFullWhatsapp(), verifier)
+      setVerifyMethod(method)
       confirmationRef.current = result
       setCodeSent(true)
+      trackEvent('phone_verification_sent', { country: selectedCountry.name, method })
     } catch (err) {
       const code = (err as { code?: string })?.code || ''
       console.error('Phone sign-in failed:', err)
@@ -500,8 +604,12 @@ function SetupStore() {
         code === 'auth/operation-not-allowed'
           ? "Phone sign-in isn't switched on yet — use Google, Facebook or Apple instead."
           : code === 'auth/invalid-phone-number'
-            ? 'That phone number looks wrong — check the country code and the number.'
-            : 'Could not send the code. Check your connection and try again.',
+            ? `That number doesn't look right — ${whatsappCheck.message || 'check the country code and the number.'}`
+            : code === 'auth/provider-already-linked'
+              ? 'This account is already verified with a different number. Keep that one, or switch account.'
+              : code === 'auth/credential-already-in-use' || code === 'auth/account-exists-with-different-credential'
+                ? 'That number already belongs to a rachett account. Verify a different number, or sign in with it instead.'
+                : 'Could not send the code. Check your connection and try again.',
       )
     } finally {
       setSigningIn('')
@@ -517,7 +625,10 @@ function SetupStore() {
     setSignInError('')
     try {
       await confirmationRef.current.confirm(smsCode)
-      handleAuthSuccess()
+      markPhoneVerified(verifyMethod)
+      // The number is proven, so the shop can be created now — `proven` covers the social
+      // link case, where `auth.currentUser.phoneNumber` may lag the promise by a tick.
+      handleAuthSuccess({ proven: true })
     } catch (err) {
       const code = (err as { code?: string })?.code || ''
       console.error('Phone code failed:', err)
@@ -535,8 +646,7 @@ function SetupStore() {
     }
     setSignedInUid(null)
     setPhoneVerified(false)
-    setCodeSent(false)
-    setSmsCode('')
+    resetCodeStep()
   }
 
   /**
@@ -547,7 +657,9 @@ function SetupStore() {
   if (!businessName.trim() || storeHandle.length < 3) missing.push({ label: 'Shop name & link', step: 1, anchor: 'setup-field-name' })
   if (!bio.trim()) missing.push({ label: 'What do you sell?', step: 1, anchor: 'setup-field-bio' })
   if (!nationality) missing.push({ label: 'Country', step: 2, anchor: 'setup-field-country' })
+  if (!signedInUid) missing.push({ label: 'How to create your shop (Google · Apple · Facebook · phone)', step: 2, anchor: 'setup-field-account' })
   if (!whatsappIsValid) missing.push({ label: 'Phone number', step: 2, anchor: 'setup-field-phone' })
+  else if (!phoneIsProven) missing.push({ label: 'Verify your phone number', step: 2, anchor: 'setup-field-phone' })
   const isFormReady = missing.length === 0
 
   // ── Celebration: a real payoff instead of a silent redirect ──────────────
@@ -597,14 +709,15 @@ function SetupStore() {
           </div>
         )}
 
-        {/* Step Progress — 2 steps, account last */}
+        {/* Step Progress — 2 steps. Step 2 is "create your rachett shop": account, then
+            country/location, then the phone is verified LAST, then the shop is created. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px' }}>
           {[1, 2].map(n => (
             <div key={n} style={{ flex: 1, height: '6px', borderRadius: '3px', background: step >= n ? '#1a1a1a' : '#e5e5e5' }} />
           ))}
         </div>
         <p style={{ fontSize: '13px', color: '#888', margin: '0 0 20px', fontWeight: '600' }}>
-          {step} of {totalSteps} — {step === 1 ? 'Your shop' : 'Finish'}
+          {step} of {totalSteps} — {step === 1 ? 'Your shop' : 'Create your rachett shop'}
         </p>
 
         {step === 1 && (
@@ -661,6 +774,55 @@ function SetupStore() {
 
         {step === 2 && (
           <>
+        {/* ① The account, at the TOP of the step — never a surprise at the end.
+            Google/Apple/Facebook get one extra step (verify the phone, last); signing in
+            with the phone number settles both with that one code. */}
+        {!signedInUid ? (
+          <div id="setup-field-account" style={{ marginBottom: '20px', padding: '14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
+            <h2 style={{ fontSize: '17px', fontWeight: '800', margin: '0 0 4px', color: '#1a1a1a' }}>Create your rachett shop</h2>
+            <p style={{ fontSize: '13px', color: '#666', margin: '0 0 12px', lineHeight: 1.5 }}>
+              Pick whichever is easiest. Every shop ends with a verified phone number — we ask for that on the last step.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button onClick={() => socialSignIn(googleProvider, 'Google')} disabled={!!signingIn}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '12px', background: '#fff', color: '#000', border: '1px solid #ddd', borderRadius: '8px', fontWeight: '700', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
+                <img src="https://www.google.com/favicon.ico" width="18" alt="" />
+                {signingIn === 'Google' ? 'Signing in…' : 'Continue with Google'}
+              </button>
+              <button onClick={() => socialSignIn(facebookProvider, 'Facebook')} disabled={!!signingIn}
+                style={{ width: '100%', padding: '12px', background: '#1877F2', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
+                {signingIn === 'Facebook' ? 'Signing in…' : 'Continue with Facebook'}
+              </button>
+              <button onClick={() => socialSignIn(appleProvider, 'Apple')} disabled={!!signingIn}
+                style={{ width: '100%', padding: '12px', background: '#000', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
+                {signingIn === 'Apple' ? 'Signing in…' : 'Continue with Apple'}
+              </button>
+              <button
+                onClick={() => document.getElementById('setup-field-phone')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                disabled={!!signingIn}
+                style={{ width: '100%', padding: '12px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
+                📱 Continue with phone number ↓
+              </button>
+            </div>
+            <p style={{ fontSize: '11px', color: '#888', margin: '10px 0 0', lineHeight: 1.5 }}>
+              Phone number is the quickest — one code creates your account and verifies the number together.
+            </p>
+            {signInError && !codeSent && !codeAttempted && (
+              <p style={{ color: '#c33', fontSize: '12px', margin: '10px 0 0' }}>{signInError}</p>
+            )}
+          </div>
+        ) : (
+          <div style={{ marginBottom: '18px', padding: '10px 12px', background: '#e8f5e9', border: '1px solid #c8e6c9', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+            <span style={{ color: '#2e7d32', fontSize: '13px', fontWeight: '700' }}>
+              ✓ Signed in{auth.currentUser?.email ? ` as ${auth.currentUser.email}` : auth.currentUser?.phoneNumber ? ` as ${auth.currentUser.phoneNumber}` : ''}
+            </span>
+            <button onClick={switchAccount}
+              style={{ background: 'transparent', border: 'none', color: '#2e7d32', cursor: 'pointer', fontSize: '12px', textDecoration: 'underline' }}>
+              Not you?
+            </button>
+          </div>
+        )}
+
         {/* Country — no assumptions; the seller picks it */}
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Country</label>
         <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>Where are you selling from?</p>
@@ -741,19 +903,27 @@ function SetupStore() {
 
         {step === 2 && (
           <>
-        <h2 style={{ fontSize: '19px', fontWeight: '800', margin: '0 0 6px', color: '#1a1a1a' }}>Your phone number</h2>
+        {/* ③ LAST — and the gate in front of Create My Shop. Prove the number, get the shop.
+            A social sign-up stops here; a phone sign-up has already proved it and skips on. */}
+        <h2 style={{ fontSize: '19px', fontWeight: '800', margin: '0 0 6px', color: '#1a1a1a' }}>
+          {phoneIsProven ? 'Your phone number' : 'Verify your phone number'}
+        </h2>
         <p style={{ fontSize: '14px', color: '#666', margin: '0 0 16px', lineHeight: 1.5 }}>
-          One number — so buyers can reach you and we know where to send your money.
+          {phoneIsProven
+            ? 'Verified — buyers can reach you, and we know where to send your money when you sell.'
+            : phoneMode === 'verify'
+              ? 'Last step. We text you a 6-digit code, you type it, and your shop is created. This is what the 🟢 verified badge means.'
+              : 'We text you a 6-digit code. Typing it creates your account and proves this number in one go — no extra step.'}
         </p>
 
-        {/* Phone number — ONE field. If they sign in with phone, the code sent here
-            verifies it; otherwise it's the payout/contact number. */}
-        {(!phoneVerified || !whatsappIsValid) && (
+        {/* One field, one code. Signed out, that code creates the account AND proves the
+            number; signed in with Google/Apple/Facebook, the same code attaches this number
+            to the account they picked. Either way, no shop until it is proven. */}
+        {!phoneIsProven && (
           <>
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Phone number <span style={{ color: '#888', fontWeight: '400', fontSize: '12px' }}>— needed</span></label>
-        <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>
-          Pick your country code, then type your number — e.g. <strong>771234567</strong> or <strong>0771234567</strong>.
-        </p>
+        {/* The rule for THIS country, said out loud before it can be broken. */}
+        <p style={{ fontSize: '12px', color: '#444', margin: '4px 0 8px', fontWeight: '600' }}>{phoneHint}</p>
         <p style={{ fontSize: '12px', color: '#666', margin: '0 0 8px', lineHeight: 1.5 }}>
           We use it to keep your shop safe, to identify you, and to send you money when you sell.
           It stays private — buyers never see it.
@@ -784,34 +954,79 @@ function SetupStore() {
           <input
             value={whatsapp}
             onChange={e => handleWhatsappChange(e.target.value)}
-            placeholder="your number"
-            maxLength={14}
+            onBlur={() => setPhoneBlurred(true)}
+            placeholder={`e.g. ${'7'.repeat(phoneRange.max)}`}
+            inputMode="tel"
+            autoComplete="tel"
+            maxLength={15}
             style={{ flex: 1, padding: '12px', border: 'none', outline: 'none', fontSize: '15px', background: '#fff' }}
           />
         </div>
 
         {errors.whatsapp && <p style={{ color: '#c33', fontSize: '12px', margin: '4px 0 8px' }}>{errors.whatsapp}</p>}
+        {/* Live, per-country validation — the fix for "it said nothing". The error shows the
+            moment the number passes the valid length (or they leave the field), never only
+            on submit. */}
+        {!errors.whatsapp && whatsapp.length > 0 && (phoneBlurred || phoneTooLong) && !whatsappIsValid && whatsappCheck.message && (
+          <p style={{ color: '#c33', fontSize: '12px', fontWeight: '600', margin: '4px 0 8px' }}>{whatsappCheck.message}</p>
+        )}
+        {!errors.whatsapp && whatsappIsValid && (
+          <p style={{ color: '#4a4', fontSize: '12px', margin: '4px 0 8px' }}>✓ {getFullWhatsapp()} looks right</p>
+        )}
+
+        {!codeSent ? (
+          <button onClick={sendPhoneCode} disabled={!!signingIn || !whatsappIsValid}
+            style={{ width: '100%', padding: '14px', background: (signingIn || !whatsappIsValid) ? '#ccc' : '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (signingIn || !whatsappIsValid) ? 'not-allowed' : 'pointer', fontSize: '15px', marginTop: '4px' }}>
+            {signingIn === 'Phone'
+              ? 'Sending code…'
+              : phoneMode === 'verify'
+                ? 'Text me a code to verify'
+                : `Text me a code to ${getFullWhatsapp()}`}
+          </button>
+        ) : (
+          <div style={{ marginTop: '4px' }}>
+            <p style={{ fontSize: '13px', color: '#333', margin: '0 0 6px' }}>
+              Enter the 6-digit code we sent to <strong>{getFullWhatsapp()}</strong>
+            </p>
+            <input value={smsCode} onChange={e => setSmsCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="123456" inputMode="numeric" autoComplete="one-time-code"
+              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', marginBottom: '8px', fontSize: '20px', textAlign: 'center', letterSpacing: '8px', boxSizing: 'border-box' }} />
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={confirmPhoneCode} disabled={!!signingIn || smsCode.length < 6}
+                style={{ flex: 1, padding: '12px', background: (signingIn || smsCode.length < 6) ? '#ccc' : '#4CAF50', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (signingIn || smsCode.length < 6) ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
+                {signingIn === 'Phone' ? 'Checking…' : 'Verify & create my shop'}
+              </button>
+              <button onClick={sendPhoneCode} disabled={!!signingIn}
+                style={{ padding: '12px 16px', background: 'transparent', color: '#666', border: '1px solid #ddd', borderRadius: '8px', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '13px' }}>
+                Resend
+              </button>
+            </div>
+          </div>
+        )}
+
+        {signInError && (codeSent || codeAttempted || !!signedInUid) && (
+          <p style={{ color: '#c33', fontSize: '12px', margin: '10px 0 0' }}>{signInError}</p>
+        )}
+
+        {/* A hard gate needs a human way out — SMS delivery in the region is not ours to fix. */}
+        <p style={{ fontSize: '12px', color: '#666', margin: '12px 0 0', lineHeight: 1.5 }}>
+          Code not arriving? Check the number, tap Resend — or{' '}
+          <a href={`https://wa.me/${SUPPORT_WHATSAPP}?text=${encodeURIComponent('Hi rachett — I am setting up my shop and the SMS code is not arriving.')}`}
+            target="_blank" rel="noreferrer" style={{ color: '#1a8f4a', fontWeight: '700' }}>
+            message us on WhatsApp
+          </a>{' '}
+          and we will get you set up.
+        </p>
+        {/* Firebase needs this invisible reCAPTCHA slot for phone sign-in */}
+        <div id="setup-recaptcha" />
 
           </>
         )}
 
-        {phoneVerified && (
+        {phoneIsProven && (
           <div style={{ marginBottom: '16px', padding: '10px 12px', background: '#e8f5e9', borderRadius: '8px', border: '1px solid #c8e6c9', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ color: '#2e7d32', fontSize: '16px' }}>✓</span>
             <span style={{ color: '#2e7d32', fontSize: '13px', fontWeight: '600' }}>Phone verified — {getFullWhatsapp()}</span>
-          </div>
-        )}
-
-        {/* Already signed in? Say so quietly — nothing else is asked. */}
-        {signedInUid && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '16px', padding: '10px 12px', background: '#e8f5e9', borderRadius: '8px', border: '1px solid #c8e6c9' }}>
-            <span style={{ color: '#2e7d32', fontSize: '13px', fontWeight: '700' }}>
-              ✓ Signed in{auth.currentUser?.email ? ` as ${auth.currentUser.email}` : auth.currentUser?.phoneNumber ? ` as ${auth.currentUser.phoneNumber}` : ''}
-            </span>
-            <button onClick={switchAccount}
-              style={{ background: 'transparent', border: 'none', color: '#2e7d32', cursor: 'pointer', fontSize: '12px', textDecoration: 'underline' }}>
-              Not you?
-            </button>
           </div>
         )}
 
@@ -846,68 +1061,25 @@ function SetupStore() {
             style={{ flex: 1, padding: '14px', background: '#f0f0f0', color: '#333', border: '1px solid #ddd', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}>
             ← Back
           </button>
-          <button onClick={handleSubmit} disabled={loading || !isFormReady}
+          <button onClick={() => handleSubmit()} disabled={loading || !isFormReady}
             style={{ flex: 2, padding: '14px', background: loading || !isFormReady ? '#ccc' : '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '600', cursor: loading || !isFormReady ? 'not-allowed' : 'pointer' }}>
             {loading ? 'Creating...' : 'Create My Shop'}
           </button>
         </div>
+        {/* A disabled button with no reason is a dead end — say what it's waiting for. */}
+        {!isFormReady && (
+          <p style={{ fontSize: '12px', color: '#9a3412', margin: '8px 0 0', textAlign: 'center' }}>
+            {!signedInUid
+              ? 'Create My Shop unlocks once your account is made — start at the top ↑'
+              : !whatsappIsValid
+                ? 'Add the phone number above ↑'
+                : 'Verify your phone number above ↑'}
+          </p>
+        )}
           </>
         )}
-        {/* The ask comes HERE — the moment they tapped Create, right under the button. */}
-        {step === 2 && showAccountSheet && !signedInUid && (
-          <div id="account-sheet" style={{ marginTop: '16px', padding: '16px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px' }}>
-            <p style={{ fontSize: '14px', color: '#9a3412', margin: '0 0 4px', fontWeight: '800' }}>
-              One last thing — how should we save your shop?
-            </p>
-            <p style={{ fontSize: '12px', color: '#9a3412', margin: '0 0 12px' }}>
-              Everything you filled in is safe. Pick whichever is easiest for you.
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <button onClick={() => socialSignIn(googleProvider, 'Google')} disabled={!!signingIn}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '12px', background: '#fff', color: '#000', border: '1px solid #ddd', borderRadius: '8px', fontWeight: '700', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
-                <img src="https://www.google.com/favicon.ico" width="18" alt="" />
-                {signingIn === 'Google' ? 'Signing in…' : 'Continue with Google'}
-              </button>
-              <button onClick={() => socialSignIn(facebookProvider, 'Facebook')} disabled={!!signingIn}
-                style={{ width: '100%', padding: '12px', background: '#1877F2', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
-                {signingIn === 'Facebook' ? 'Signing in…' : 'Continue with Facebook'}
-              </button>
-              <button onClick={() => socialSignIn(appleProvider, 'Apple')} disabled={!!signingIn}
-                style={{ width: '100%', padding: '12px', background: '#000', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
-                {signingIn === 'Apple' ? 'Signing in…' : 'Continue with Apple'}
-              </button>
-              <button onClick={sendPhoneCode} disabled={!!signingIn || !whatsappIsValid}
-                style={{ width: '100%', padding: '12px', background: (!whatsappIsValid || signingIn) ? '#e5c9a8' : '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (!whatsappIsValid || signingIn) ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
-                {signingIn === 'Phone' ? 'Sending code…' : `Text me a code to ${getFullWhatsapp()}`}
-              </button>
-            </div>
-
-            {codeSent && (
-              <div style={{ marginTop: '12px' }}>
-                <p style={{ fontSize: '13px', color: '#333', margin: '0 0 6px' }}>
-                  Enter the 6-digit code we sent to <strong>{getFullWhatsapp()}</strong>
-                </p>
-                <input value={smsCode} onChange={e => setSmsCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="123456" inputMode="numeric"
-                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', marginBottom: '8px', fontSize: '20px', textAlign: 'center', letterSpacing: '8px', boxSizing: 'border-box' }} />
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button onClick={confirmPhoneCode} disabled={!!signingIn || smsCode.length < 6}
-                    style={{ flex: 1, padding: '12px', background: (signingIn || smsCode.length < 6) ? '#ccc' : '#4CAF50', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (signingIn || smsCode.length < 6) ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
-                    {signingIn === 'Phone' ? 'Checking…' : 'Verify & finish'}
-                  </button>
-                  <button onClick={sendPhoneCode} disabled={!!signingIn}
-                    style={{ padding: '12px 16px', background: 'transparent', color: '#666', border: '1px solid #ddd', borderRadius: '8px', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '13px' }}>
-                    Resend
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {signInError && <p style={{ color: '#c33', fontSize: '12px', margin: '10px 0 0' }}>{signInError}</p>}
-            {/* Firebase needs this invisible reCAPTCHA slot for phone sign-in */}
-            <div id="setup-recaptcha" />
-          </div>
-        )}
+        {/* The account ask is at the TOP of this step now, and the code step is just above —
+            nothing here can ambush them after they tap Create. */}
 
         {/* Identity checks aren't live yet. Say so plainly instead of asking for a
             document nobody can review. */}
