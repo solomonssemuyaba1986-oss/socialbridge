@@ -13,11 +13,15 @@ const fs = require('fs')
 const path = require('path')
 const {
   buyerStatusLabel,
+  countNewOrders,
   isActiveBuyerOrder,
+  isOrderNew,
   matchesBuyerFilter,
   orderAge,
+  orderChangedMs,
   orderTotal,
   splitBuyerOrders,
+  wasUpdatedAfterPlacing,
 } = require(path.join(__dirname, '_dsbuild', 'buyerOrderUtils.cjs'))
 
 let checks = 0
@@ -97,6 +101,31 @@ check('ages read like a person wrote them', () => {
   // An order with no date shows no age at all — never "NaN ago".
   assert.strictEqual(orderAge(undefined, now), '')
   assert.strictEqual(orderAge(0, now), '')
+})
+
+check('the moment an order changed falls back to when it was placed', () => {
+  assert.strictEqual(orderChangedMs({ createdAt: 1000 }), 1000)
+  assert.strictEqual(orderChangedMs({ createdAt: 1000, updatedAt: 2000 }), 2000)
+  assert.strictEqual(orderChangedMs({}), 0)
+})
+
+check('a brand-new order was PLACED, not "updated"', () => {
+  assert.strictEqual(wasUpdatedAfterPlacing({ createdAt: 1000, updatedAt: 1000 }), false)
+  assert.strictEqual(wasUpdatedAfterPlacing({ createdAt: 1000 }), false)
+  // The seller confirming an hour later is a real update.
+  assert.strictEqual(wasUpdatedAfterPlacing({ createdAt: 1000, updatedAt: 1000 + 60 * 60000 }), true)
+  // Within the tolerance (the write's own second) it is still just "placed".
+  assert.strictEqual(wasUpdatedAfterPlacing({ createdAt: 1000, updatedAt: 1010 }), false)
+})
+
+check('"new since you last looked" needs a recorded visit first', () => {
+  const changed = { createdAt: 1000, updatedAt: 5000 }
+  // Never looked before (seenAt 0): nothing is called new — no dot on every row.
+  assert.strictEqual(isOrderNew(changed, 0), false)
+  assert.strictEqual(isOrderNew(changed, 4000), true)
+  assert.strictEqual(isOrderNew(changed, 6000), false)
+  assert.strictEqual(countNewOrders([changed, { createdAt: 7000, updatedAt: 7000 }], 6000), 1)
+  assert.strictEqual(countNewOrders([changed], 9000), 0)
 })
 
 check('the orders index exists, or the page can only ever show a notice', () => {

@@ -18,6 +18,8 @@ import { getMainCategories } from './categories'
 import { green, productImages, seededShuffle, toMillis, type CardProduct } from './productCardUtils'
 import { trackEvent } from './analytics'
 import SearchSuggest from './SearchSuggest'
+import SearchBar from './SearchBar'
+import { useRotatingPlaceholder } from './useRotatingPlaceholder'
 import { buildSuggestions, type Suggestion } from './useSuggestions'
 import { consumePendingAction, requireSignIn } from './signInGate'
 import { useProductLikes } from './useProductLikes'
@@ -136,6 +138,8 @@ function NearbyPage() {
 
   const [manualText, setManualText] = useState('')
   const [search, setSearch] = useState('')
+  /** True while the person is in the search box — the rolling hint must not move under them. */
+  const [searchFocused, setSearchFocused] = useState(false)
   /** Type-ahead: same honest source list as Browse (only real shops/products). */
   const [showSuggest, setShowSuggest] = useState(false)
   const [activeSuggest, setActiveSuggest] = useState(-1)
@@ -334,6 +338,39 @@ function NearbyPage() {
     () => popularRanked.filter(p => p.id !== hero?.id).slice(0, RAIL_LIMIT),
     [popularRanked, hero],
   )
+  /**
+   * The rolling hint: only what is **near you** — the products inside the chosen distance and
+   * the shops in range. (Browse is handed a different list: all of rachett.) Falls back to the
+   * page's whole catalogue when no area is set, so the hint is never empty.
+   */
+  const placeholderProducts = useMemo(() => (nearby.length > 0 ? nearby : matching).map(p => p.name), [nearby, matching])
+  const placeholderStores = useMemo(
+    () => (nearbySellers.length > 0 ? nearbySellers : allSellers).map(s => s.businessName),
+    [nearbySellers, allSellers],
+  )
+  const searchPlaceholder = useRotatingPlaceholder({
+    products: placeholderProducts,
+    stores: placeholderStores,
+    fallback: 'Search products near you — shoes, charger, dress…',
+    paused: searchFocused || search.trim().length > 0,
+  })
+
+  /**
+   * The one search path on Nearby. Enter used to do **nothing at all** unless a suggestion was
+   * highlighted with the arrow keys — which is the bug this fixes.
+   */
+  const runSearch = useCallback(() => {
+    setShowSuggest(false)
+    trackEvent('search_performed', {
+      query: search.trim(),
+      surface: 'nearby',
+      resultCount: matching.length,
+      zeroResult: matching.length === 0,
+      category: activeCategory,
+      sortBy: sort ?? 'discovery',
+    })
+  }, [search, matching.length, activeCategory, sort])
+
   const nearbyGrid = useMemo(
     () => nearby.filter(p => p.id !== hero?.id),
     [nearby, hero],
@@ -559,8 +596,13 @@ function NearbyPage() {
       setActiveSuggest(-1)
       return
     }
-    if (e.key === 'Enter' && showSuggest && activeSuggest >= 0 && suggestions[activeSuggest]) {
-      pickSuggestion(suggestions[activeSuggest])
+    if (e.key === 'Enter') {
+      // A highlighted suggestion wins; otherwise actually search (this used to do nothing).
+      if (showSuggest && activeSuggest >= 0 && suggestions[activeSuggest]) {
+        pickSuggestion(suggestions[activeSuggest])
+        return
+      }
+      runSearch()
     }
   }
 
@@ -683,12 +725,11 @@ function NearbyPage() {
           </div>
         )}
 
-        {/* Search bar */}
-        <div style={{ position: 'relative', marginBottom: '10px' }}>
-          <input
+        {/* Search bar — magnifier on the right; Enter searches too (it used to do nothing) */}
+        <div style={{ marginBottom: '10px' }}>
+          <SearchBar
             value={search}
-            onChange={e => {
-              const value = e.target.value
+            onChange={value => {
               setSearch(value)
               setActiveSuggest(-1)
               setShowSuggest(true)
@@ -696,22 +737,17 @@ function NearbyPage() {
               // earlier silently hides the results the buyer just asked for.
               if (value.trim() && activeCategory !== 'All') setActiveCategory('All')
             }}
+            placeholder={searchPlaceholder}
+            onSearch={runSearch}
             onKeyDown={onSearchKeyDown}
-            onFocus={() => setShowSuggest(true)}
-            onBlur={() => window.setTimeout(() => setShowSuggest(false), 120)}
-            autoComplete="off"
-            placeholder="Search products near you — shoes, charger, dress…"
-            style={{ width: '100%', padding: '14px 16px', borderRadius: '12px', border: '1px solid #333', background: '#111', color: '#fff', fontSize: '15px', boxSizing: 'border-box' }}
-          />
-          {showSuggest && search.trim().length > 0 && (
-            <SearchSuggest suggestions={suggestions} activeIndex={activeSuggest} onPick={pickSuggestion} />
-          )}
-          {search && (
-            <button onClick={() => setSearch('')}
-              style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: '#666', cursor: 'pointer', fontSize: '16px' }}>
-              ✕
-            </button>
-          )}
+            onFocus={() => { setSearchFocused(true); setShowSuggest(true) }}
+            onBlur={() => { setSearchFocused(false); window.setTimeout(() => setShowSuggest(false), 120) }}
+            emptyHint="Type something to search — the names hint at what's near you"
+          >
+            {showSuggest && search.trim().length > 0 && (
+              <SearchSuggest suggestions={suggestions} activeIndex={activeSuggest} onPick={pickSuggestion} />
+            )}
+          </SearchBar>
         </div>
 
         {/* Quick controls — left under the search bar; range stays on the right */}

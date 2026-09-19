@@ -21,6 +21,8 @@ import FloatingBag from './FloatingBag'
 import { formatCount, toMillis } from './productCardUtils'
 import { useProductLikes } from './useProductLikes'
 import LikePill from './LikePill'
+import SearchBar from './SearchBar'
+import { useRotatingPlaceholder } from './useRotatingPlaceholder'
 import { useProductFeed } from './useProductFeed'
 import StoreCard from './StoreCard'
 import Fuse from 'fuse.js'
@@ -110,6 +112,21 @@ function BrowsePage() {
   const navigate = useNavigate()
   const [bagCounts, setBagCounts] = useState<Record<string, BagCountData>>({})
   const [stores, setStores] = useState<{ slug: string; businessName: string; logoUrl: string; bio: string; aliases: string[]; createdAtMs: number }[]>([])
+  /** True while the person is in the search box — the rolling hint must not move under them. */
+  const [searchFocused, setSearchFocused] = useState(false)
+
+  /**
+   * The rolling hint: names from **all of rachett** — the catalog this page has loaded and the
+   * whole shops directory. (Nearby is handed a different list: only what is near the buyer.)
+   */
+  const placeholderProducts = useMemo(() => products.map(p => p.name), [products])
+  const placeholderStores = useMemo(() => stores.map(s => s.businessName), [stores])
+  const searchPlaceholder = useRotatingPlaceholder({
+    products: placeholderProducts,
+    stores: placeholderStores,
+    fallback: 'Search products, stores...',
+    paused: searchFocused || search.trim().length > 0,
+  })
   const [storeSort, setStoreSort] = useState<'newest' | 'az'>('newest')
   const [showAllStores, setShowAllStores] = useState(false)
   const [surveyProduct, setSurveyProduct] = useState<Product | null>(null)
@@ -580,6 +597,23 @@ function BrowsePage() {
     saveRecentSearch(term)
   }
 
+  /**
+   * The one search path: the 🔍 button, the phone's Search key and Enter all land here, so the
+   * recorded event can never drift from what the page actually did.
+   */
+  const runSearch = () => {
+    setShowSuggest(false)
+    saveRecentSearch(search)
+    trackEvent('search_performed', {
+      query: search.trim(),
+      surface: 'browse',
+      resultCount: filtered.length,
+      zeroResult: filtered.length === 0,
+      category: activeCategory,
+      sortBy,
+    })
+  }
+
   const handleSearchKeyDown = (e: { key: string; preventDefault?: () => void }) => {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       if (suggestions.length === 0) return
@@ -599,21 +633,12 @@ function BrowsePage() {
       return
     }
     if (e.key === 'Enter') {
-      // A highlighted suggestion wins; otherwise search as before.
+      // A highlighted suggestion wins; otherwise search.
       if (showSuggest && activeSuggest >= 0 && suggestions[activeSuggest]) {
         pickSuggestion(suggestions[activeSuggest])
         return
       }
-      setShowSuggest(false)
-      saveRecentSearch(search)
-      trackEvent('search_performed', {
-        query: search.trim(),
-        surface: 'browse',
-        resultCount: filtered.length,
-        zeroResult: filtered.length === 0,
-        category: activeCategory,
-        sortBy,
-      })
+      runSearch()
     }
   }
 
@@ -783,22 +808,22 @@ function BrowsePage() {
           Every store here is run by a real social media seller. Browse, order, and they'll reach out to complete your purchase.
         </p>
 
-        {/* Search */}
-        <div style={{ maxWidth: '500px', margin: '0 auto', position: 'relative' }}>
-          <span style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#555', fontSize: '16px' }}>🔍</span>
-          <input
-            placeholder="Search products, stores..."
+        {/* Search — one magnifier, on the right, and a hint that rolls with real rachett names */}
+        <div style={{ maxWidth: '500px', margin: '0 auto' }}>
+          <SearchBar
             value={search}
-            onChange={e => { setSearch(e.target.value); setActiveSuggest(-1); setShowSuggest(true) }}
+            onChange={value => { setSearch(value); setActiveSuggest(-1); setShowSuggest(true) }}
+            placeholder={searchPlaceholder}
+            onSearch={runSearch}
             onKeyDown={handleSearchKeyDown}
-            onFocus={() => setShowSuggest(true)}
-            onBlur={() => window.setTimeout(() => setShowSuggest(false), 120)}
-            autoComplete="off"
-            style={{ width: '100%', padding: '14px 16px 14px 44px', borderRadius: '10px', border: '1px solid #333', background: '#1a1a1a', color: '#fff', fontSize: '15px', boxSizing: 'border-box', outline: 'none' }}
-          />
-          {showSuggest && search.trim().length > 0 && (
-            <SearchSuggest suggestions={suggestions} activeIndex={activeSuggest} onPick={pickSuggestion} />
-          )}
+            onFocus={() => { setSearchFocused(true); setShowSuggest(true) }}
+            onBlur={() => { setSearchFocused(false); window.setTimeout(() => setShowSuggest(false), 120) }}
+            emptyHint="Type something to search — the names hint at what's here"
+          >
+            {showSuggest && search.trim().length > 0 && (
+              <SearchSuggest suggestions={suggestions} activeIndex={activeSuggest} onPick={pickSuggestion} />
+            )}
+          </SearchBar>
         </div>
         {/* Result count — always on screen while searching, even at zero */}
         {search.trim() && (

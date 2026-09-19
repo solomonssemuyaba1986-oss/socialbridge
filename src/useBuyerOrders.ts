@@ -36,6 +36,8 @@ export interface BuyerOrder {
   status?: string
   sourcePlatform?: string
   createdAt?: unknown
+  /** Stamped every time the seller changes the status — see `OrderHistory.updateOrderStatus`. */
+  updatedAt?: unknown
 }
 
 /** How many orders the first screen carries, and how many more each tap adds. */

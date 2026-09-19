@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSellerOrders, type SellerOrder } from './useSellerOrders.ts'
 import { postOrderDeliveredMessage } from './createBuyerOrder'
-import { updateDoc, doc, deleteDoc, increment } from 'firebase/firestore'
+import { updateDoc, doc, deleteDoc, increment, serverTimestamp } from 'firebase/firestore'
 import { db } from './firebase'
 import { trackEvent } from './analytics'
 import ConfirmDialog from './ConfirmDialog'
@@ -53,7 +53,9 @@ function OrderHistory() {
     const order = orders.find(o => o.id === orderId)
     const wasFulfilled = order?.status === 'fulfilled'
     try {
-      await updateDoc(doc(db, 'sellers', userId, 'orders', orderId), { status, read: true })
+      // `updatedAt` is what the buyer's own orders list reads: it turns "Placed 4h ago" into
+      // "Updated 2h ago" and lights the ● NEW dot for a buyer who has looked before.
+      await updateDoc(doc(db, 'sellers', userId, 'orders', orderId), { status, read: true, updatedAt: serverTimestamp() })
     } catch (err) {
       console.error('Failed to update order status:', err)
       return

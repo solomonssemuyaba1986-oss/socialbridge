@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { doc, getDoc } from 'firebase/firestore'
-import { db } from './firebase'
+import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { db, auth } from './firebase'
 import { useBuyerOrders, type BuyerOrder } from './useBuyerOrders'
 import {
   buyerStatusLabel,
+  countNewOrders,
+  isOrderNew,
   matchesBuyerFilter,
   orderAge,
   orderTotal,
+  wasUpdatedAfterPlacing,
   type BuyerOrderFilter,
   type OrderTone,
 } from './buyerOrderUtils'
@@ -37,6 +40,12 @@ export interface ShopInfo {
   name: string
   slug: string
   logo: string
+}
+
+/** Firestore timestamps → plain milliseconds, in the shape the order helpers expect. */
+function orderChangedTimes(order: BuyerOrder): { createdAt: number; updatedAt: number } {
+  const placedMs = toMillis(order.createdAt) ?? 0
+  return { createdAt: placedMs, updatedAt: toMillis(order.updatedAt) ?? placedMs }
 }
 
 interface NoticeProps {
@@ -78,6 +87,26 @@ function BuyerOrders() {
   const { isLiked, toggleLike } = useProductLikes()
   const [filter, setFilter] = useState<BuyerOrderFilter>('all')
   const [shops, setShops] = useState<Map<string, ShopInfo>>(new Map())
+  /**
+   * When this person last opened their orders. Read **first**, then moved forward — so the
+   * dots they see right now describe their previous visit instead of vanishing under them.
+   */
+  const [seenAt, setSeenAt] = useState(0)
+  const uid = auth.currentUser?.uid || ''
+
+  useEffect(() => {
+    if (!uid) return
+    let cancelled = false
+    getDoc(doc(db, 'users', uid))
+      .then(snap => {
+        if (cancelled) return
+        setSeenAt(Number(snap.data()?.ordersSeenAt) || 0)
+        // Next visit compares against now.
+        return setDoc(doc(db, 'users', uid), { ordersSeenAt: Date.now() }, { merge: true })
+      })
+      .catch(err => console.warn('Could not read when the orders were last seen:', err))
+    return () => { cancelled = true }
+  }, [uid])
 
   /** One read per *distinct* shop (usually a handful), remembered for the rest of the visit. */
   useEffect(() => {
@@ -112,6 +141,8 @@ function BuyerOrders() {
 
   const visible = useMemo(() => orders.filter(o => matchesBuyerFilter(o.status, filter)), [orders, filter])
   const stillComing = orders.filter(o => matchesBuyerFilter(o.status, 'active')).length
+  /** Orders that changed (or arrived) since this person last opened the page. */
+  const updatedCount = countNewOrders(orders.map(orderChangedTimes), seenAt)
 
   /**
    * Who gets asked "did you love it?". Only the newest delivered order — asking it on five
@@ -168,7 +199,7 @@ function BuyerOrders() {
             ? 'Loading your orders…'
             : orders.length === 0
               ? 'Everything you order will show up here.'
-              : `${orders.length} order${orders.length === 1 ? '' : 's'}${stillComing > 0 ? ` · ${stillComing} still coming` : ''}`}
+              : `${orders.length} order${orders.length === 1 ? '' : 's'}${stillComing > 0 ? ` · ${stillComing} still coming` : ''}${updatedCount > 0 ? ` · ${updatedCount} updated` : ''}`}
         </p>
 
         {error ? (
@@ -196,6 +227,7 @@ function BuyerOrders() {
             hasMore={hasMore && filter === 'all'}
             shops={shops}
             promptedOrderId={promptedOrderId}
+            seenAt={seenAt}
             isLiked={isLiked}
             isInBag={isInBag}
             onFilter={setFilter}
@@ -217,6 +249,8 @@ interface OrdersBodyProps {
   hasMore: boolean
   shops: Map<string, ShopInfo>
   promptedOrderId: string
+  /** When the person last looked — anything changed after this gets a ● NEW. */
+  seenAt: number
   isLiked: (productId: string) => boolean
   isInBag: (productId: string) => boolean
   onFilter: (filter: BuyerOrderFilter) => void
@@ -234,6 +268,7 @@ function OrdersBody({
   hasMore,
   shops,
   promptedOrderId,
+  seenAt,
   isLiked,
   isInBag,
   onFilter,
@@ -272,20 +307,26 @@ function OrdersBody({
         <p style={{ color: '#666', fontSize: 14 }}>Nothing in this list yet.</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {orders.map(order => (
-            <OrderRow
-              key={order.id}
-              order={order}
-              shop={shops.get(order.sellerId)}
-              liked={Boolean(order.productId && isLiked(order.productId))}
-              inBag={Boolean(order.productId && isInBag(order.productId))}
-              askLove={order.id === promptedOrderId}
-              onOpenShop={() => onOpenShop(order)}
-              onBuyAgain={() => onBuyAgain(order)}
-              onToggleLove={() => onToggleLove(order)}
-              onChat={onChat}
-            />
-          ))}
+          {orders.map(order => {
+            const times = orderChangedTimes(order)
+            return (
+              <OrderRow
+                key={order.id}
+                order={order}
+                shop={shops.get(order.sellerId)}
+                liked={Boolean(order.productId && isLiked(order.productId))}
+                inBag={Boolean(order.productId && isInBag(order.productId))}
+                askLove={order.id === promptedOrderId}
+                placedMs={times.createdAt}
+                changedMs={times.updatedAt}
+                isNew={isOrderNew(times, seenAt)}
+                onOpenShop={() => onOpenShop(order)}
+                onBuyAgain={() => onBuyAgain(order)}
+                onToggleLove={() => onToggleLove(order)}
+                onChat={onChat}
+              />
+            )
+          })}
         </div>
       )}
 
@@ -308,6 +349,11 @@ interface OrderRowProps {
   inBag: boolean
   /** The one delivered row that gets asked "did you love it?". */
   askLove: boolean
+  /** Milliseconds — when it was ordered, and when it last changed. */
+  placedMs: number
+  changedMs: number
+  /** Changed after this person last looked at the list. */
+  isNew: boolean
   onOpenShop: () => void
   onBuyAgain: () => void
   onToggleLove: () => void
@@ -321,6 +367,9 @@ function OrderRow({
   liked,
   inBag,
   askLove,
+  placedMs,
+  changedMs,
+  isNew,
   onOpenShop,
   onBuyAgain,
   onToggleLove,
@@ -328,7 +377,8 @@ function OrderRow({
 }: OrderRowProps) {
   const status = buyerStatusLabel(order.status)
   const tone = TONES[status.tone]
-  const age = orderAge(toMillis(order.createdAt) ?? null)
+  const age = orderAge(changedMs || null)
+  const updated = wasUpdatedAfterPlacing({ createdAt: placedMs, updatedAt: changedMs })
   const quantity = Number(order.quantity) || 1
   const total = orderTotal(order.productPrice, order.quantity)
   const delivered = order.status === 'fulfilled'
@@ -366,7 +416,10 @@ function OrderRow({
             {status.icon} {status.text}
           </span>
           {order.orderId && <p style={{ margin: '6px 0 0', color: '#555', fontSize: 11 }}>{order.orderId}</p>}
-          {age && <p style={{ margin: '2px 0 0', color: '#555', fontSize: 11 }}>{age}</p>}
+          {age && <p style={{ margin: '2px 0 0', color: '#555', fontSize: 11 }}>{updated ? `Updated ${age}` : `Placed ${age}`}</p>}
+          {isNew && (
+            <p style={{ margin: '4px 0 0', color: '#ff4458', fontSize: 10, fontWeight: 800, letterSpacing: '0.4px' }}>● NEW</p>
+          )}
         </div>
       </div>
 

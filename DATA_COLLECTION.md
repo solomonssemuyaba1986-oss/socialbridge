@@ -107,6 +107,7 @@ Written by `SetupStore.tsx:426-450` (create), `EditStore.tsx:234-258` (edit), `D
 ### 3.1 Signed-in buyer
 - **`users/{uid}`** — `displayName`, `email`, `lastSeen`, `signupAt` (`StorePage.tsx:708-713`), `role` (`'buyer' | 'seller'` — the onboarding choice, mirrored from the device so a buyer is never asked who they are again; `role.ts`), `quickReplies[]` (≤20 replies, ≤200 chars each — the buyer's own canned messages; `useQuickReplies.ts:6-8, 62`) and `drafts[]` (≤10 unsent messages: text + conversation/person/product context, so your Inbox can show a draft with no thread yet and a lost phone doesn't lose the question; `draftStore.toAccountDrafts`, `useDraft.pushDraftToAccount`). A draft is **never** readable by the other party — it lives on your own document, not on the thread.
 - **`users/{uid}/bag/{productId}`** — a frozen snapshot of purchase intent: `productId`, `productName`, `productPrice`, `imageUrl`, `images[]`, `sellerSlug`, `sellerId`, `businessName`, `addedAt` (ms), `quantity` (`useBag.ts:7-18, 195`).
+- **`users/{uid}.ordersSeenAt`** — a plain timestamp (ms) of when this person last opened their own orders list. It is only ever read then moved forward, so the ● NEW dots describe the *previous* visit rather than vanishing under their finger (`BuyerOrders.tsx`).
 - **`users/{uid}/likes/{productId}`** — `{ sellerId, at }`: a mirror of **your own** ♥ votes only, so any page can draw every heart on it from one listener. The vote itself lives on the product (§5) — this is just the index of yours.
 - **`users/{uid}/loveAnswers/{orderId}`** — `{ answer: 'yes' | 'no', productId, sellerId, at }`: the post-delivery "Did you love it?" answer, kept so the buyer is never asked twice. A **`no` exists nowhere else** — nothing public is ever written for it.
 
@@ -125,7 +126,7 @@ Because of that, these no longer happen:
 
 ### 3.4 Order document (`sellers/{sellerId}/orders/{id}`)
 
-`buyerName`, `buyerUid`, `buyerPhone` *(guests only — PII)*, `verified`, `productName`, `productPrice` *(string)*, `productId`, `productImage` *(a thumbnail for the buyer's own orders list; only on orders placed after Sep 2026)*, `quantity` *(string)*, `deliveryArea` *(free text)*, `status` (`pending` → `paid` / `awaiting_payment` → `fulfilled` / `out_of_stock` / `needs_details`), `read`, `sourcePlatform`, `orderId` (`RT-XXXXXX`), `createdAt` (`createBuyerOrder.ts:5-34`; `useSellerOrders.ts:6+`).
+`buyerName`, `buyerUid`, `buyerPhone` *(guests only — PII)*, `verified`, `productName`, `productPrice` *(string)*, `productId`, `productImage` *(a thumbnail for the buyer's own orders list; only on orders placed after Sep 2026)*, `quantity` *(string)*, `deliveryArea` *(free text)*, `status` (`pending` → `paid` / `awaiting_payment` → `fulfilled` / `out_of_stock` / `needs_details`), `read`, `sourcePlatform`, `orderId` (`RT-XXXXXX`), `createdAt`, `updatedAt` *(stamped by `OrderHistory.updateOrderStatus`; the buyer's own list uses it to say "Updated 2h ago" and to light the ● NEW dot)* (`createBuyerOrder.ts:5-40`; `useSellerOrders.ts`).
 Payment fields are declared but **never written**: `paymentMethod`, `transactionId`, `flwRef`, `paymentStatus`.
 
 ### 3.5 Conversations and messages

@@ -94,7 +94,7 @@ the page needs it.
 | `nearby_range_changed` | rangeKm, previousRangeKm, preset, resultCount | ✅ |
 | `nearby_area_set` | method, hadArea | ✅ |
 | `nearby_store_opened` | sellerId, slug, distanceKm | ⏳ |
-| `search_performed` | query, surface, resultCount, zeroResult, category, sortBy | ✅ (Browse, Nearby) |
+| `search_performed` | query, surface, resultCount, zeroResult, category, sortBy | ✅ (Browse + Nearby — fired by the 🔍 button, the phone's Search key, Enter, or a recent search) |
 | `search_suggestion_clicked` | query, suggestion, kind, surface | ✅ (Browse + Nearby type-ahead) |
 | `recent_search_clicked` | query, surface | ⏳ |
 | `search_cleared` | surface, hadQuery | ✅ |

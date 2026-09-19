@@ -72,3 +72,43 @@ export function matchesBuyerFilter(status: string | undefined, filter: BuyerOrde
   if (filter === 'active') return isActiveBuyerOrder(status)
   return true
 }
+
+/** The moment an order last changed: its status stamp, or when it was placed. */
+export function orderChangedMs(order: { createdAt?: number | null; updatedAt?: number | null }): number {
+  return Number(order.updatedAt) || Number(order.createdAt) || 0
+}
+
+/**
+ * True when the order changed **after** the person last looked at their orders.
+ *
+ * `seenAt` of 0 means we have never recorded a visit, so nothing is called new — the very
+ * first visit must not put a dot on every row.
+ */
+export function isOrderNew(
+  order: { createdAt?: number | null; updatedAt?: number | null },
+  seenAt: number,
+): boolean {
+  return seenAt > 0 && orderChangedMs(order) > seenAt
+}
+
+/** How many orders changed since the person last looked — the "· 2 updated" in the header. */
+export function countNewOrders(
+  orders: { createdAt?: number | null; updatedAt?: number | null }[],
+  seenAt: number,
+): number {
+  return orders.filter(order => isOrderNew(order, seenAt)).length
+}
+
+/**
+ * Did it change *after* it was placed? Then "Updated 2h ago" is the honest wording; otherwise
+ * "Placed 4h ago". A brand-new order has not been updated — it was placed. (The tolerance
+ * absorbs the second or two between creating the order and writing its own stamp.)
+ */
+export function wasUpdatedAfterPlacing(
+  order: { createdAt?: number | null; updatedAt?: number | null },
+  toleranceMs = 60000,
+): boolean {
+  const changed = Number(order.updatedAt) || 0
+  const placed = Number(order.createdAt) || 0
+  return changed > 0 && placed > 0 && changed - placed > toleranceMs
+}
