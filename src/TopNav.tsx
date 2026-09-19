@@ -4,7 +4,7 @@ import { auth, googleProvider, facebookProvider, appleProvider } from './firebas
 import {signInWithPopup } from 'firebase/auth'
 import { notify } from './notifications'
 import { useSellerLive } from './sellerLive'
-import { resolveLanding, setRole } from './role'
+import { resolveLanding, setRole, MARKET_HOME } from './role'
 import ContinueAs from './ContinueAs'
 
 function TopNav({ variant = 'default' }: { variant?: 'default' | 'bag' }) {
@@ -16,6 +16,8 @@ function TopNav({ variant = 'default' }: { variant?: 'default' | 'bag' }) {
   const green = '#adff2f'
   const isBag = variant === 'bag'
   const isHome = location.pathname === '/'
+  /** The market is home now — the logo is the way back to it from anywhere. */
+  const isMarketHome = location.pathname === MARKET_HOME
 
   // Live unread badge for the Inbox button (works for buyers & sellers)
   const { isSeller, unreadMessages, unreadSellerConvo, unreadBuyerConvo } = useSellerLive()
@@ -23,7 +25,7 @@ function TopNav({ variant = 'default' }: { variant?: 'default' | 'bag' }) {
 
   const handleBack = () => {
     if (window.history.length > 1) navigate(-1)
-    else navigate(isSeller ? '/dashboard' : '/home')
+    else navigate(isSeller ? '/dashboard' : MARKET_HOME)
   }
 
   const [showLoginModal, setShowLoginModal] = useState(false)
@@ -61,8 +63,12 @@ function TopNav({ variant = 'default' }: { variant?: 'default' | 'bag' }) {
     <>
       <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderBottom: '1px solid #111', background: '#0f0f0f', position: 'relative', zIndex: 100 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {isHome ? (
-            <div style={{ background: green, width: 28, height: 28, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12, color: '#000' }}>R</div>
+          {isHome || isMarketHome ? (
+            // The logo used to be a dead end; now it is how you get back to the market.
+            <button onClick={() => navigate(MARKET_HOME)} aria-label="Go to the market" title="rachett market"
+              style={{ background: green, width: 28, height: 28, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12, color: '#000', border: 'none', cursor: 'pointer', padding: 0 }}>
+              R
+            </button>
           ) : (
             <button onClick={handleBack} aria-label="Go back" title="Back"
               style={{ width: 44, height: 44, borderRadius: 12, background: '#1a1a1a', border: '1px solid #333', color: '#fff', cursor: 'pointer', fontSize: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, padding: 0 }}>

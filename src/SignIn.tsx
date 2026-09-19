@@ -9,7 +9,7 @@ import { rememberUser } from './userMemory'
 import { COUNTRY_CODES, type CountryCode } from './countryCodes'
 import RecoveryModal from './RecoveryModal'
 import ContinueAs from './ContinueAs'
-import { resolveLanding, setRole } from './role'
+import { resolveLanding, setRole, MARKET_HOME } from './role'
 
 interface SavedUser {
   displayName: string | null
@@ -482,7 +482,7 @@ function SignIn() {
             </div>
 
             {/* Guest Button — the market is open without an account */}
-            <button onClick={() => { if (ensureTerms()) { setRole('buyer'); navigate('/home') } }}
+            <button onClick={() => { if (ensureTerms()) { setRole('buyer'); navigate(MARKET_HOME) } }}
               style={{
                 width: '100%', padding: '16px 32px', background: 'transparent', color: '#aaa',
                 border: '1px solid #444', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px',

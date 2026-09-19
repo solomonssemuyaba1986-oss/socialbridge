@@ -37,19 +37,26 @@ export function setRole(role: Role): void {
   })
 }
 
-/** Sellers live in their dashboard; buyers live in their home; nobody has chosen yet → ask once. */
+/** Sellers live in their dashboard; buyers live in the market; nobody has chosen yet → ask once. */
 export function homeForRole(role: Role | null, hasShop: boolean): string {
   if (hasShop) return '/dashboard'
-  return role === 'buyer' ? '/home' : '/onboarding'
+  return role === 'seller' ? '/onboarding' : MARKET_HOME
 }
 
 /**
+ * 🛍️ Where the market lives.
+ *
+ * Today that's Browse — **products first, no menu, no questions**. When the real discovery
+ * page is built this is the one line that changes, and everyone lands there.
+ */
+export const MARKET_HOME = '/browse'
+
+/**
  * Where should this account land right now? A store wins (that makes someone a
- * seller whatever they tapped earlier); then their choice; otherwise the one-time
- * "what brings you here?" screen.
+ * seller whatever they tapped earlier); then their choice; otherwise the market.
  */
 export async function resolveLanding(uid: string | null): Promise<string> {
-  if (!uid) return '/home'
+  if (!uid) return MARKET_HOME
   let hasShop = false
   try {
     const snap = await getDoc(doc(db, 'sellers', uid))

@@ -28,8 +28,9 @@ import TermsPage from './TermsPage.tsx'
 import NearbyPage from './NearbyPage.tsx'
 import BuyerHome from './BuyerHome.tsx'
 import BuyerOrders from './BuyerOrders.tsx'
+import FeedbackNudge from './FeedbackNudge.tsx'
 import NotFound from './NotFound.tsx'
-import { getRole } from './role.ts'
+import { getRole, MARKET_HOME } from './role.ts'
 import { SellerLiveProvider } from './sellerLive.tsx'
 import NetworkGuard from './NetworkGuard.tsx'
 
@@ -108,14 +109,17 @@ function App() {
   return (
     <SellerLiveProvider>
       <NetworkGuard />
+      {/* "What didn't you like?" — asks once, after the app has actually been used. */}
+      <FeedbackNudge />
       {location.pathname !== '/terms' && <TopNav variant={location.pathname === '/bag' ? 'bag' : 'default'} />}
       <Routes>
-      {/* Market-first: everyone without a shop lands on the buyer home — logged-out
-          visitors included. Sign-in is asked for only when they buy or message. */}
+      {/* Market-first: the PRODUCTS are the front door. A seller with a shop gets their
+          dashboard, anyone who tapped "I'm a seller" but has no shop gets the one-time
+          question, and everybody else — buyer or guest — lands in the market. */}
       <Route path="/" element={
         slug ? <Navigate to="/dashboard" /> :
         getRole() === 'seller' ? <Navigate to="/onboarding" /> :
-        <Navigate to="/home" />
+        <Navigate to={MARKET_HOME} />
       } />
       {/* The buyer's home — mirror of the seller's Dashboard. Open to guests too. */}
       <Route path="/home" element={<BuyerHome />} />

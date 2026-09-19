@@ -1,18 +1,13 @@
 import { useState } from 'react'
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
-import { db, auth } from './firebase'
 import { useNavigate } from 'react-router-dom'
+import { FEEDBACK_CATEGORIES, submitFeedback, type FeedbackCategory } from './feedback'
 
 const green = '#adff2f'
-
-const FORMSPREE_ID = (import.meta.env.VITE_FORMSPREE_ID || '').trim()
-
-const FEEDBACK_TYPES = ['Feature Request', 'Bug Report', 'Change Request', 'Other']
 
 function FeedbackPage() {
   const navigate = useNavigate()
   const [role, setRole] = useState<'seller' | 'buyer'>('buyer')
-  const [category, setCategory] = useState(FEEDBACK_TYPES[0])
+  const [category, setCategory] = useState<FeedbackCategory>('Change Request')
   const [message, setMessage] = useState('')
   const [name, setName] = useState('')
   const [contact, setContact] = useState('')
@@ -29,51 +24,13 @@ function FeedbackPage() {
     setSending(true)
     setError('')
 
-    const payload = {
-      role,
-      category,
-      message: text,
-      name: name.trim(),
-      contact: contact.trim(),
-      page: window.location.href,
-      submittedAt: new Date().toISOString(),
-      userEmail: auth.currentUser?.email || '',
-    }
-
-    let emailed = false
-    if (FORMSPREE_ID) {
-      try {
-        const res = await fetch(`https://formspree.io/f/${FORMSPREE_ID}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify(payload),
-        })
-        emailed = res.ok
-      } catch (err) {
-        console.error('Formspree error:', err)
-      }
-    }
-
-    let saved = false
-    if (auth.currentUser) {
-      try {
-        await addDoc(collection(db, 'feedback'), {
-          ...payload,
-          uid: auth.currentUser.uid,
-          createdAt: serverTimestamp(),
-        })
-        saved = true
-      } catch (err) {
-        console.error('Feedback save error:', err)
-      }
-    }
+    // One shared destination for the full form and the after-use card (`src/feedback.ts`):
+    // Firestore always, plus an email when Formspree is configured.
+    const ok = await submitFeedback({ role, category, message: text, name, contact, source: 'page' })
 
     setSending(false)
-    if (emailed || saved) {
-      setSent(true)
-    } else {
-      setError('Sorry, we could not send your feedback right now. Please try again later.')
-    }
+    if (ok) setSent(true)
+    else setError('Sorry, we could not send your feedback right now. Please try again later.')
   }
 
   if (sent) {
@@ -98,9 +55,9 @@ function FeedbackPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '20px' }}>
       <div style={{ maxWidth: '480px', margin: '0 auto' }}>
-        <h1 style={{ margin: '0 0 4px', fontSize: '24px', fontWeight: '800' }}>💡 Send Feedback</h1>
+        <h1 style={{ margin: '0 0 4px', fontSize: '24px', fontWeight: '800' }}>What didn't you like?</h1>
         <p style={{ color: '#888', fontSize: '14px', margin: '0 0 24px' }}>
-          what annoys you? A feature you want, a change you need, or a bug you found — tell us anything. We build it right away
+          The nice things are pleasant to hear, but this is what we can actually fix. One sentence is enough — it goes to a person, not a dashboard.
         </p>
 
         <label style={{ display: 'block', color: '#aaa', fontSize: '13px', fontWeight: '600', marginBottom: '8px' }}>
@@ -116,13 +73,13 @@ function FeedbackPage() {
         </div>
 
         <label style={{ display: 'block', color: '#aaa', fontSize: '13px', fontWeight: '600', marginBottom: '8px' }}>
-          What is this about?
+          What kind of thing is it?
         </label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '20px' }}>
-          {FEEDBACK_TYPES.map(t => (
-            <button key={t} onClick={() => setCategory(t)}
-              style={{ padding: '8px 14px', background: category === t ? '#1a2a1a' : '#1a1a1a', color: category === t ? green : '#aaa', border: category === t ? `1px solid ${green}` : '1px solid #333', borderRadius: '20px', cursor: 'pointer', fontWeight: '600', fontSize: '12px' }}>
-              {t}
+          {FEEDBACK_CATEGORIES.map(c => (
+            <button key={c.value} onClick={() => setCategory(c.value)}
+              style={{ padding: '8px 14px', background: category === c.value ? '#1a2a1a' : '#1a1a1a', color: category === c.value ? green : '#aaa', border: category === c.value ? `1px solid ${green}` : '1px solid #333', borderRadius: '20px', cursor: 'pointer', fontWeight: '600', fontSize: '12px' }}>
+              {c.label}
             </button>
           ))}
         </div>
@@ -130,7 +87,7 @@ function FeedbackPage() {
         <label style={{ display: 'block', color: '#aaa', fontSize: '13px', fontWeight: '600', marginBottom: '8px' }}>
           Your feedback
         </label>
-        <textarea placeholder="Write anything — a sentence, a feature you'd love, something that's not working..." value={message} onChange={e => setMessage(e.target.value)}
+        <textarea placeholder="What got in your way? A sentence is enough..." value={message} onChange={e => setMessage(e.target.value)}
           style={{ width: '100%', minHeight: '140px', padding: '12px', borderRadius: '10px', border: '1px solid #333', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical', marginBottom: '16px' }} />
 
         <input placeholder="Your name (optional)" value={name} onChange={e => setName(e.target.value)}
@@ -142,7 +99,7 @@ function FeedbackPage() {
 
         <button onClick={submit} disabled={sending}
           style={{ width: '100%', padding: '14px', background: sending ? '#333' : green, color: '#000', border: 'none', borderRadius: '10px', fontWeight: '800', cursor: sending ? 'not-allowed' : 'pointer', fontSize: '15px' }}>
-          {sending ? 'Sending...' : 'Send Feedback'}
+          {sending ? 'Sending...' : 'Send'}
         </button>
       </div>
     </div>

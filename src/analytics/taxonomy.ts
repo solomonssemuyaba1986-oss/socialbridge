@@ -115,7 +115,10 @@ export const EVENT_PROPS = {
   store_link_copied: ['sellerId', 'surface'],
   store_shared: ['sellerId', 'channel', 'surface'],
   qr_viewed: ['sellerId'],
-  feedback_submitted: ['category', 'role'],
+  feedback_submitted: ['category', 'role', 'source'],
+  // The after-use ask: shown, dismissed, and whether it earned an answer.
+  feedback_prompt_shown: ['actions'],
+  feedback_prompt_dismissed: ['actions'],
 
   // ── Health ───────────────────────────────────────────────────────────────
   error_shown: ['kind', 'message'],

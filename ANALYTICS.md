@@ -139,7 +139,9 @@ the page needs it.
 | `store_link_copied` | sellerId, surface | ⏳ |
 | `store_shared` | sellerId, channel, surface | ⏳ |
 | `qr_viewed` | sellerId | ⏳ |
-| `feedback_submitted` | category, role | ⏳ |
+| `feedback_submitted` | category, role, source | ✅ (the form, and now the after-use ask) |
+| `feedback_prompt_shown` | actions | ✅ (how much they'd used it when the question appeared) |
+| `feedback_prompt_dismissed` | actions | ✅ ("Later" — the answer rate is measurable) |
 | `error_shown` | kind, message | ⏳ |
 
 ### Two names that must stay reserved for now

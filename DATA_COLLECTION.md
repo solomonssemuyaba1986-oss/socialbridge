@@ -108,6 +108,7 @@ Written by `SetupStore.tsx:426-450` (create), `EditStore.tsx:234-258` (edit), `D
 - **`users/{uid}`** — `displayName`, `email`, `lastSeen`, `signupAt` (`StorePage.tsx:708-713`), `role` (`'buyer' | 'seller'` — the onboarding choice, mirrored from the device so a buyer is never asked who they are again; `role.ts`), `quickReplies[]` (≤20 replies, ≤200 chars each — the buyer's own canned messages; `useQuickReplies.ts:6-8, 62`) and `drafts[]` (≤10 unsent messages: text + conversation/person/product context, so your Inbox can show a draft with no thread yet and a lost phone doesn't lose the question; `draftStore.toAccountDrafts`, `useDraft.pushDraftToAccount`). A draft is **never** readable by the other party — it lives on your own document, not on the thread.
 - **`users/{uid}/bag/{productId}`** — a frozen snapshot of purchase intent: `productId`, `productName`, `productPrice`, `imageUrl`, `images[]`, `sellerSlug`, `sellerId`, `businessName`, `addedAt` (ms), `quantity` (`useBag.ts:7-18, 195`).
 - **`users/{uid}.ordersSeenAt`** — a plain timestamp (ms) of when this person last opened their own orders list. It is only ever read then moved forward, so the ● NEW dots describe the *previous* visit rather than vanishing under their finger (`BuyerOrders.tsx`).
+- **`users/{uid}.feedbackAskedAt` / `feedbackDoneAt`** — when we last asked "what didn't you like?", and when they answered. Only used so the ask never follows someone onto a second device (`feedback.ts`).
 - **`users/{uid}/likes/{productId}`** — `{ sellerId, at }`: a mirror of **your own** ♥ votes only, so any page can draw every heart on it from one listener. The vote itself lives on the product (§5) — this is just the index of yours.
 - **`users/{uid}/loveAnswers/{orderId}`** — `{ answer: 'yes' | 'no', productId, sellerId, at }`: the post-delivery "Did you love it?" answer, kept so the buyer is never asked twice. A **`no` exists nowhere else** — nothing public is ever written for it.
 
@@ -179,7 +180,7 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 | `users/{uid}/likes/{productId}` | `{ sellerId, at }` — a mirror of **my own** votes, so a page draws every ♥ from one listener instead of one read per card | same |
 | `users/{uid}/loveAnswers/{orderId}` | `{ answer: 'yes' \| 'no', productId, sellerId, at }` — asked once after delivery, never twice. A **`no` is stored here only**: nothing public is written for it, and the seller sees aggregates, never who answered no | `LovePrompt.tsx` |
 | `sellers/{uid}/visits/*` | per-visit channel | `StorePage.tsx:428` |
-| `feedback/{id}` | `role` (seller/buyer), `category`, `message`, `name`, `contact`, `page` (full URL), `submittedAt`, `userEmail`, `uid`, `createdAt` | `FeedbackPage.tsx:32-64` |
+| `feedback/{id}` | `role` (seller/buyer), `category`, `message`, `name`, `contact`, `page` (full URL), `source` (`page` = the full form, `prompt` = the after-use card), `submittedAt`, `userEmail`, `uid`, `createdAt` | `feedback.ts` (used by `FeedbackPage.tsx` + `FeedbackNudge.tsx`) |
 | `recoveries/{id}` | `email`, `codeHash` (SHA-256), `expiresAt`, `verified`, `attempts`, `createdAt` — client access denied | `functions/index.js:27-107`, `firestore.rules:89-91` |
 
 ---
@@ -195,6 +196,8 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 | `rachett_last_user` | Last signed-in identity for "Continue as": displayName, **email**, photoURL, uid, providerId | `userMemory.ts:3-28` |
 | `rachett_quick_replies_guest` | Guest quick replies | `useQuickReplies.ts:6` |
 | `rachett_role` | The buyer/seller choice made on the onboarding screen — stops us asking twice (`role.ts`) | `role.ts` |
+| `rachett_feedback` | When the "what didn't you like?" ask was last shown, and when they answered (ms). "Later" = a week; answered = three months of quiet. Mirrored onto `users/{uid}` so a second phone doesn't ask again | `feedbackRules.ts` |
+| `rachett_feedback_visit` (session) | The distinct pages seen this visit — that is what "they have actually used it" means (3+ pages before the ask is deserved) | `feedbackRules.ts` |
 | `rachett_nearby_sort` | The Nearby quick control the buyer prefers (`closest` / `newest` / `popular`) — remembered so the page opens the way they like it (`NearbyPage.tsx`) | `NearbyPage.tsx` |
 | `rachett_pending_action` (session) | The Buy/Message a guest was blocked on, so signing in returns them to it; expires after 15 min (`signInGate.ts`) | `signInGate.ts` |
 | `rachett_draft_*` | Unsent message drafts — the text plus the conversation, person and product context (`draftStore.ts` / `useDraft.ts`). Keyed `rachett_draft_convo_<conversationId>` once signed in; keyed `rachett_draft_product_<productId>` when there is no uid yet (signed out, or before auth restores) and **migrated onto the conversation key the moment the uid is known** — so typing is never lost either way. Signed-in users also get a copy on `users/{uid}.drafts` so a lost phone doesn't lose the question. Cleared on send or discard; stale ones dropped after 30 days. | `draftStore.ts` |
@@ -349,6 +352,7 @@ Every row carries `_id` (document id) and `_path` (full document path) so it can
 | `export-training-data.js` | Exports the ML datasets above as JSONL | `npm run export:training` |
 | `backfill-locations.js` | Geocodes stores that only typed an area, so Nearby can sort them | `cd functions && node backfill-locations.js --write` |
 | `backfill-slugs.js` | **Finds stores missing a shop link — the cause of `/store/undefined` dead ends** — and fills the gaps; reports duplicate links (renames them only with `--fix-duplicates`) | `cd functions && node backfill-slugs.js --write` |
+| `feedback-report.js` | Reads back what people said **they didn't like** — by kind, by role, by which screen they were on, and whether it came from the after-use ask or the form. `feedback/` is client-unreadable, so this is the only way to read it | `npm run feedback:report` |
 
 ### Indexes (needed by the catalog feed and the buyer's orders list)
 

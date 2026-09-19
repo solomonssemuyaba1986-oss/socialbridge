@@ -6,6 +6,8 @@ type Props = {
   onChange: (value: string) => void
   /** The grey name that rolls while the box is empty (see `useRotatingPlaceholder`). */
   placeholder: string
+  /** Spoken name for the box — the visible hint is decorative and hidden from screen readers. */
+  label?: string
   /** Runs on the 🔍 button, on Enter, and on the form's own submit — one path, no drift. */
   onSearch: () => void
   /** Arrow keys / Escape still belong to the page's suggestion list. */
@@ -32,6 +34,7 @@ export default function SearchBar({
   value,
   onChange,
   placeholder,
+  label = 'Search products and shops',
   onSearch,
   onKeyDown,
   onFocus,
@@ -75,7 +78,7 @@ export default function SearchBar({
           // The phone's action key becomes a magnifier labelled "Search" (not "Next").
           enterKeyHint="search"
           value={value}
-          placeholder={placeholder}
+          aria-label={label}
           onChange={e => onChange(e.target.value)}
           onKeyDown={onKeyDown}
           onFocus={onFocus}
@@ -93,6 +96,22 @@ export default function SearchBar({
             outline: 'none',
           }}
         />
+
+        {/*
+          The rolling hint is drawn here rather than in the input's own placeholder: the
+          browser's built-in one cannot be bold-italic and cannot be animated. It is
+          `aria-hidden` (the input carries the real label), ignores the pointer, and is cut
+          off before it can run under the ✕ / 🔍 buttons.
+        */}
+        {value.length === 0 && (
+          <span aria-hidden="true"
+            style={{ position: 'absolute', left: 16, right: 96, top: 0, bottom: 0, display: 'flex', alignItems: 'center', pointerEvents: 'none', overflow: 'hidden' }}>
+            <span key={placeholder} className="rt-search-hint"
+              style={{ fontStyle: 'italic', fontWeight: 700, fontSize: 15, color: '#8a8a8a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+              {placeholder}
+            </span>
+          </span>
+        )}
 
         {value.length > 0 && (
           <button
