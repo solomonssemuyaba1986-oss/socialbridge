@@ -16,12 +16,16 @@ import { requireSignIn } from './signInGate'
 import SignInPrompt from './SignInPrompt'
 import QuickRepliesPanel from './QuickRepliesPanel'
 import { green, type CardProduct } from './productCardUtils'
+import { variantLabel, type Variant } from './productSheetUtils'
 
 type Props = {
   orderProduct: CardProduct | null
   messageProduct: CardProduct | null
   onCloseOrder: () => void
   onCloseMessage: () => void
+  /** What the buyer picked in the details sheet — shown back to them and carried onto the order. */
+  orderVariant?: Variant
+  messageVariant?: Variant
   /** Which page opened these modals — stamped on order/message events. */
   surface?: string
 }
@@ -36,6 +40,8 @@ export default function ProductActions({
   messageProduct,
   onCloseOrder,
   onCloseMessage,
+  orderVariant,
+  messageVariant,
   surface = 'nearby',
 }: Props) {
   const navigate = useNavigate()
@@ -126,6 +132,9 @@ export default function ProductActions({
         productImage: orderProduct.imageUrl || '',
         quantity,
         deliveryArea: deliveryArea.trim(),
+        // From the details sheet: the seller must never have to guess which colour/size to pack.
+        ...(orderVariant?.color ? { color: orderVariant.color } : {}),
+        ...(orderVariant?.size ? { size: orderVariant.size } : {}),
         status: 'pending',
         read: false,
         sourcePlatform,
@@ -141,6 +150,8 @@ export default function ProductActions({
         productName: orderProduct.name,
         productPrice: orderProduct.price,
         quantity,
+        color: orderVariant?.color,
+        size: orderVariant?.size,
       })
       await incrementProductOrderCount(orderProduct.sellerId, orderProduct.id, orderProduct.orderCount || 0)
       trackEvent('order_placed', {
@@ -200,6 +211,8 @@ export default function ProductActions({
           productName: messageProduct.name,
           productPrice: messageProduct.price,
           productImage: messageProduct.imageUrl,
+          color: messageVariant?.color,
+          size: messageVariant?.size,
         },
       )
       trackEvent('message_sent', {
@@ -269,6 +282,9 @@ export default function ProductActions({
                 </h3>
                 <p style={{ margin: '0 0 24px', color: green, fontSize: '14px', fontWeight: '700', textAlign: 'left' }}>
                   UGX {orderProduct.price} each
+                  {variantLabel(orderVariant?.color, orderVariant?.size) && (
+                    <span style={{ color: '#ddd' }}> · {variantLabel(orderVariant?.color, orderVariant?.size)}</span>
+                  )}
                 </p>
                 {orderProduct.imageUrl && (
                   <img src={orderProduct.imageUrl} alt={orderProduct.name}
@@ -321,6 +337,11 @@ export default function ProductActions({
                 style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '6px', marginBottom: '8px' }} />
               <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '13px', color: '#fff', textAlign: 'left' }}>{messageProduct.name}</p>
               <p style={{ margin: 0, color: green, fontSize: '13px', fontWeight: '700', textAlign: 'left' }}>UGX {messageProduct.price}</p>
+              {variantLabel(messageVariant?.color, messageVariant?.size) && (
+                <p style={{ margin: '2px 0 0', color: '#ddd', fontSize: '13px', fontWeight: '700', textAlign: 'left' }}>
+                  {variantLabel(messageVariant?.color, messageVariant?.size)}
+                </p>
+              )}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: showQuickReplies ? '12px' : '16px' }}>

@@ -19,6 +19,9 @@ export interface SellerOrder {
   createdAt: { toDate?: () => Date } | null
   read?: boolean
   productId?: string
+  /** The colour/size the buyer chose in the details sheet, when they chose one. */
+  color?: string
+  size?: string
 }
 
 export function isUnread(order: SellerOrder): boolean {

@@ -16,6 +16,7 @@ import {
 } from './buyerOrderUtils'
 import { green, toMillis } from './productCardUtils'
 import { useBag } from './useBag'
+import { variantLabel } from './productSheetUtils'
 import { useProductLikes } from './useProductLikes'
 import LikePill from './LikePill'
 import LovePrompt from './LovePrompt'
@@ -398,6 +399,7 @@ function OrderRow({
           </p>
           <p style={{ margin: '3px 0 0', color: green, fontWeight: 800, fontSize: 13 }}>
             UGX {order.productPrice || '—'}{quantity > 1 ? ` × ${quantity}` : ''}
+            {variantLabel(order.color, order.size) && <span style={{ color: '#ddd' }}> · {variantLabel(order.color, order.size)}</span>}
           </p>
           {quantity > 1 && total > 0 && (
             <p style={{ margin: '2px 0 0', color: '#777', fontSize: 12 }}>Total UGX {total.toLocaleString()}</p>

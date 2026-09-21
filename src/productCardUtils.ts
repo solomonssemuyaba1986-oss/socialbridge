@@ -16,6 +16,14 @@ export interface CardProduct {
   outOfStock?: boolean
   orderCount?: number
   salesCount?: number
+  /**
+   * Options the seller listed (ProductsPage writes these; older and bulk-uploaded products
+   * have none — see `listVariants`, which normalises whatever is actually on the doc).
+   */
+  colors?: string[]
+  sizes?: string[]
+  /** Free text more often than not: "3", "in stock", "". `stockLine` decides what's worth saying. */
+  stock?: string | number
   /** ♥ The universal like tally — lives on the product doc, the same for every visitor. */
   likeCount?: number
 }

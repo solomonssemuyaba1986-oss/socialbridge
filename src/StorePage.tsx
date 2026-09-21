@@ -12,6 +12,8 @@ import { useProductLikes } from './useProductLikes'
 import LikePill from './LikePill'
 import { formatCount } from './productCardUtils'
 import { avatarColor, initialOf } from './avatar'
+import ProductSheet from './ProductSheet'
+import { variantLabel, type Variant } from './productSheetUtils'
 import { useSellerStats, getSalesLabel, formatRating, renderStars, getBadgeStatusLabel } from './useSellerStats.ts'
 import QuickRepliesPanel from './QuickRepliesPanel'
 import FloatingBag from './FloatingBag'
@@ -66,6 +68,10 @@ interface Product {
   outOfStock?: boolean
   orderCount?: number
   salesCount?: number
+  /** Options the seller listed — set in ProductsPage; older listings have none. */
+  colors?: string[]
+  sizes?: string[]
+  stock?: string | number
   /** ♥ The universal like tally — the same number for every visitor. */
   likeCount?: number
 }
@@ -76,7 +82,7 @@ const green = '#adff2f'
 const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'dzudmmuxg'
 const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'p2z65zrv'
 
-function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onRefresh, onPreview, inBag, bagged, sold, liked, likeCount, onToggleLike, onToggleBag }: any) {
+function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onDetails, onRefresh, onPreview, inBag, bagged, sold, liked, likeCount, onToggleLike, onToggleBag }: any) {
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(p.name)
   const [editPrice, setEditPrice] = useState(p.price)
@@ -268,7 +274,14 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onRefresh, onPr
               <LikePill liked={Boolean(liked)} count={likeCount || 0} onToggle={isOwner ? undefined : onToggleLike} />
             </div>
             <p style={{ margin: '0 0 8px', color: '#555', fontSize: '12px' }}>{p.description}</p>
-            <p style={{ margin: '0 0 12px', fontWeight: '800', color: isOutOfStock ? '#555' : green, fontSize: '15px' }}>UGX {p.price}</p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
+              <p style={{ margin: 0, fontWeight: '800', color: isOutOfStock ? '#555' : green, fontSize: '15px' }}>UGX {p.price}</p>
+              <button onClick={(e) => { e.stopPropagation(); onDetails() }}
+                aria-label={`See details for ${p.name}`}
+                style={{ flexShrink: 0, padding: '4px 10px', background: '#222', color: '#ddd', border: '1px solid #333', borderRadius: '999px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', lineHeight: 1.5 }}>
+                ⓘ Details
+              </button>
+            </div>
 
             {isOwner && (
               <>
@@ -328,7 +341,7 @@ function StorePage() {
   const unusableSlug = !slugParam || ['undefined', 'null'].includes(slugParam.toLowerCase())
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const { count: bagCount, addToBag, removeFromBag, isInBag } = useBag()
+  const { count: bagCount, addToBag, removeFromBag, isInBag, updateBagVariant } = useBag()
   // ♥ Universal likes: the tally rides on each product, my own vote comes from one listener.
   const { isLiked, likeCountFor, toggleLike } = useProductLikes()
   const productDeepLinkId = searchParams.get('productId')
@@ -341,6 +354,10 @@ const messageDeepLinkId = searchParams.get('messageId')
   const [loading, setLoading] = useState(true)
   const [sellerId, setSellerId] = useState<string>('')
   const [orderSuccess, setOrderSuccess] = useState(false)
+  /** The details sheet: the card's ⓘ, and the colour/size chosen inside it. */
+  const [detailsProduct, setDetailsProduct] = useState<Product | null>(null)
+  const [orderVariant, setOrderVariant] = useState<Variant>({})
+  const [messageVariant, setMessageVariant] = useState<Variant>({})
   const [uploading, setUploading] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string>('')
   const [confirmLogout, setConfirmLogout] = useState(false)
@@ -521,7 +538,7 @@ const messageDeepLinkId = searchParams.get('messageId')
     getBagCounts(ids).then(setBagCounts).catch(() => {})
   }, [products])
 
-  const handleToggleBag = (p: Product) => {
+  const handleToggleBag = (p: Product, variant?: Variant) => {
     if (isInBag(p.id)) {
       removeFromBag(p.id)
       trackEvent('bag_removed', { productId: p.id, sellerId, price: p.price, surface: 'store', bagSize: Math.max(0, bagCount - 1) })
@@ -530,7 +547,7 @@ const messageDeepLinkId = searchParams.get('messageId')
         [p.id]: { count: Math.max(0, (prev[p.id]?.count || 0) - 1), baggedCount: prev[p.id]?.baggedCount || 0 },
       }))
     } else {
-      addToBag({ productId: p.id, productName: p.name, productPrice: p.price, imageUrl: p.imageUrl, images: p.images?.length ? p.images : (p.imageUrl ? [p.imageUrl] : []), sellerSlug: seller?.slug || '', sellerId, businessName: seller?.businessName || '' })
+      addToBag({ productId: p.id, productName: p.name, productPrice: p.price, imageUrl: p.imageUrl, images: p.images?.length ? p.images : (p.imageUrl ? [p.imageUrl] : []), sellerSlug: seller?.slug || '', sellerId, businessName: seller?.businessName || '', color: variant?.color, size: variant?.size })
       trackEvent('bag_added', { productId: p.id, sellerId, price: p.price, surface: 'store', bagSize: bagCount + 1 })
       setBagCounts(prev => ({
         ...prev,
@@ -543,6 +560,18 @@ const messageDeepLinkId = searchParams.get('messageId')
    * ♥ One tap, one vote per account — the tally is the same number every visitor sees, and a
    * second tap takes the vote back. A guest is sent to sign in and returned to this card.
    */
+  /**
+   * From the details sheet: remember the chosen colour/size on the bag line, or bag it fresh
+   * with that choice. A tap in the sheet never removes something from the bag.
+   */
+  const handleSheetBag = (p: Product, variant: Variant) => {
+    if (isInBag(p.id)) {
+      updateBagVariant(p.id, variant)
+      return
+    }
+    handleToggleBag(p, variant)
+  }
+
   const handleToggleLike = useCallback((p: Product) => {
     void toggleLike({
       sellerId,
@@ -651,6 +680,9 @@ const handleOrder = async () => {
       productImage: orderProduct.imageUrl || '',
       quantity,
       deliveryArea,
+      // From the details sheet, so the seller knows which colour/size to pack.
+      ...(orderVariant.color ? { color: orderVariant.color } : {}),
+      ...(orderVariant.size ? { size: orderVariant.size } : {}),
       status: 'pending',
       read: false,
       sourcePlatform,
@@ -667,6 +699,8 @@ const handleOrder = async () => {
       productName: orderProduct.name,
       productPrice: orderProduct.price,
       quantity,
+      color: orderVariant.color,
+      size: orderVariant.size,
     })
 
     await incrementProductOrderCount(sellerId, orderProduct.id, orderProduct.orderCount || 0)
@@ -690,6 +724,7 @@ const handleOrder = async () => {
       setQuantity('1')
       setDeliveryArea('')
       setMessage('')
+      setOrderVariant({})
       setOrderProduct(null)
       setOrderSuccess(false)
     }, 3000)
@@ -1045,8 +1080,9 @@ const handleSignupForAction = async (provider: any) => {
                 likeCount={likeCountFor(p)}
                 onToggleLike={() => handleToggleLike(p)}
                 onToggleBag={() => handleToggleBag(p)}
-                onOrder={() => setOrderProduct(p)}
-                onMessage={() => setMessageProduct(p)}
+                onOrder={() => { setOrderVariant({}); setOrderProduct(p) }}
+                onMessage={() => { setMessageVariant({}); setMessageProduct(p) }}
+                onDetails={() => setDetailsProduct(p)}
                 onRefresh={() => fetchProducts(sellerId)}
                 onPreview={(imgs: string[], start: number) => setPreview({ images: imgs, startIndex: start })}
               />
@@ -1105,6 +1141,9 @@ const handleSignupForAction = async (provider: any) => {
                 </h3>
                 <p style={{ margin: '0 0 24px', color: green, fontSize: '14px', fontWeight: '700', textAlign: 'left' }}>
                   UGX {orderProduct.price} each
+                {variantLabel(orderVariant.color, orderVariant.size) && (
+                  <span style={{ color: '#ddd' }}> · {variantLabel(orderVariant.color, orderVariant.size)}</span>
+                )}
                 </p>
                 <input placeholder="Your name" value={buyerName} onChange={e => setBuyerName(e.target.value)}
                   style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
@@ -1159,6 +1198,11 @@ const handleSignupForAction = async (provider: any) => {
             )}
 
               <p style={{ margin: 0, color: green, fontSize: '13px', fontWeight: '700', textAlign: 'left' }}>UGX {messageProduct.price}</p>
+              {variantLabel(messageVariant.color, messageVariant.size) && (
+                <p style={{ margin: '2px 0 0', color: '#ddd', fontSize: '13px', fontWeight: '700', textAlign: 'left' }}>
+                  {variantLabel(messageVariant.color, messageVariant.size)}
+                </p>
+              )}
             </div>
 
             {/* If user is signed in, show normal message input */}
@@ -1263,6 +1307,29 @@ const handleSignupForAction = async (provider: any) => {
         }}
         onClose={() => setConfirmLogout(false)}
       />
+
+      {/* The details sheet — the whole product and Buy, without leaving the shop. */}
+      {detailsProduct && (
+        <ProductSheet
+          key={detailsProduct.id}
+          product={{
+            ...detailsProduct,
+            sellerId: sellerId || '',
+            sellerSlug: seller?.slug || slugParam,
+            businessName: seller?.businessName || '',
+          }}
+          surface="store"
+          liked={isLiked(detailsProduct.id)}
+          likeCount={likeCountFor(detailsProduct)}
+          onToggleLike={() => handleToggleLike(detailsProduct)}
+          isMine={isOwner}
+          inBag={isInBag(detailsProduct.id)}
+          onClose={() => setDetailsProduct(null)}
+          onBuy={(variant) => { setOrderVariant(variant); setOrderProduct(detailsProduct); setDetailsProduct(null) }}
+          onMessage={(variant) => { setMessageVariant(variant); setMessageProduct(detailsProduct); setDetailsProduct(null) }}
+          onToggleBag={(variant) => handleSheetBag(detailsProduct, variant)}
+        />
+      )}
 
       {preview && (
         <ProductPreview

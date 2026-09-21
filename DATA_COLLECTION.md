@@ -136,7 +136,7 @@ Because of that, these no longer happen:
 
 ### 3.4 Order document (`sellers/{sellerId}/orders/{id}`)
 
-`buyerName`, `buyerUid`, `buyerPhone` *(guests only — PII)*, `verified`, `productName`, `productPrice` *(string)*, `productId`, `productImage` *(a thumbnail for the buyer's own orders list; only on orders placed after Sep 2026)*, `quantity` *(string)*, `deliveryArea` *(free text)*, `status` (`pending` → `paid` / `awaiting_payment` → `fulfilled` / `out_of_stock` / `needs_details`), `read`, `sourcePlatform`, `orderId` (`RT-XXXXXX`), `createdAt`, `updatedAt` *(stamped by `OrderHistory.updateOrderStatus`; the buyer's own list uses it to say "Updated 2h ago" and to light the ● NEW dot)* (`createBuyerOrder.ts:5-40`; `useSellerOrders.ts`).
+`buyerName`, `buyerUid`, `buyerPhone` *(guests only — PII)*, `verified`, `productName`, `productPrice` *(string)*, `productId`, `productImage` *(a thumbnail for the buyer's own orders list; only on orders placed after Sep 2026)*, `quantity` *(string)*, `deliveryArea` *(free text)*, `color` + `size` *(what the buyer picked in the details sheet — `ProductSheet`; absent on older orders and on products that never listed any options, and `color`/`size` are the seller's own words)*, `status` (`pending` → `paid` / `awaiting_payment` → `fulfilled` / `out_of_stock` / `needs_details`), `read`, `sourcePlatform`, `orderId` (`RT-XXXXXX`), `createdAt`, `updatedAt` *(stamped by `OrderHistory.updateOrderStatus`; the buyer's own list uses it to say "Updated 2h ago" and to light the ● NEW dot)* (`createBuyerOrder.ts:5-40`; `useSellerOrders.ts`).
 Payment fields are declared but **never written**: `paymentMethod`, `transactionId`, `flwRef`, `paymentStatus`.
 
 ### 3.5 Conversations and messages
@@ -201,7 +201,7 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 | Key | Contents | Source |
 |---|---|---|
 | `rachett_setup_draft` | Half-finished store form (name, link, bio, country, location, phone, step) | `SetupStore.tsx:29` |
-| `rachett_bag` | Bag items (full product snapshot) | `useBag.ts:20` |
+| `rachett_bag` | Bag items (full product snapshot + the chosen colour/size from the details sheet) | `useBag.ts:20` |
 | `rachett_buyer_area` | `{ lat, lng, place, label, source }` — **buyer's area, deliberately device-only** | `place.ts:165-175` |
 | `rachett_verified_guest` | **Legacy** — written by the removed guest OTP flow; old devices may still hold it, nothing reads or writes it now | — |
 | `rachett_last_user` | Last signed-in identity for "Continue as": displayName, **email**, photoURL, uid, providerId | `userMemory.ts:3-28` |

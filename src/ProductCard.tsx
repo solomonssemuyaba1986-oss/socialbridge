@@ -22,6 +22,8 @@ type Props = {
   surface?: string
   onOpen: () => void
   onPreview: () => void
+  /** Opens the details sheet — colour, size, all the photos, and Buy, without a page load. */
+  onDetails: () => void
   onToggleBag: () => void
   onMessage: () => void
   onOrder: () => void
@@ -45,6 +47,7 @@ function ProductCard({
   surface = 'nearby',
   onOpen,
   onPreview,
+  onDetails,
   onToggleBag,
   onMessage,
   onOrder,
@@ -160,7 +163,18 @@ function ProductCard({
             <LikePill liked={Boolean(liked)} count={likeCount || 0} onToggle={isMine ? undefined : onToggleLike} />
           </div>
           <p style={{ margin: '0 0 8px', color: '#555', fontSize: '12px' }}>{p.businessName}</p>
-          <p style={{ margin: 0, fontWeight: '800', color: green, fontSize: '14px' }}>UGX {p.price}</p>
+          {/* Price on the left, Details on the right — one tap to the whole product, and
+              the page never leaves. */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <p style={{ margin: 0, fontWeight: '800', color: green, fontSize: '14px' }}>UGX {p.price}</p>
+            <button
+              onClick={(e) => { e.stopPropagation(); onDetails() }}
+              aria-label={`See details for ${p.name}`}
+              style={{ flexShrink: 0, padding: '4px 10px', background: '#222', color: '#ddd', border: '1px solid #333', borderRadius: '999px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', lineHeight: 1.5 }}
+            >
+              ⓘ Details
+            </button>
+          </div>
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 import { collection, doc, setDoc, updateDoc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from './firebase'
 import { getConversationId } from './useConversation'
+import { orderBubbleText, variantLabel } from './productSheetUtils'
 
 export type BuyerOrderFields = {
   buyerName: string
@@ -25,6 +26,12 @@ export type BuyerOrderFields = {
   productId?: string
   /** A thumbnail for the buyer's own orders list. Older orders have none. */
   productImage?: string
+  /**
+   * What the buyer chose in the details sheet (`ProductSheet`). Optional because most listings
+   * have no colours or sizes to choose from, and old orders predate the sheet entirely.
+   */
+  color?: string
+  size?: string
 }
 
 /** One Firestore write — buyers are not allowed to patch orders after create (see firestore.rules). */
@@ -101,9 +108,12 @@ export async function createOrderConversation(opts: {
   quantity: string
   /** Which product — the delivered bubble needs it to offer the ♥. */
   productId?: string
+  /** What they picked in the details sheet, so the thread says "Black / M" and not just "1 ×". */
+  color?: string
+  size?: string
 }) {
   try {
-    const text = `📦 Order placed — Ref: ${opts.orderId}`
+    const text = orderBubbleText(opts.orderId, variantLabel(opts.color, opts.size))
     const conversationId = await bumpConversationHeader({ ...opts, senderId: opts.buyerId, lastMessage: text })
 
     await addDoc(collection(db, 'conversations', conversationId, 'messages'), {
@@ -115,6 +125,7 @@ export async function createOrderConversation(opts: {
       productName: opts.productName,
       productPrice: opts.productPrice,
       quantity: opts.quantity,
+      ...(variantLabel(opts.color, opts.size) ? { variant: variantLabel(opts.color, opts.size) } : {}),
       status: 'sent',
       createdAt: serverTimestamp(),
     })

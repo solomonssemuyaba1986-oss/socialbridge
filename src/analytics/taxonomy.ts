@@ -75,6 +75,12 @@ export const EVENT_PROPS = {
   product_liked: ['productId', 'sellerId', 'surface', 'source'],
   product_unliked: ['productId', 'sellerId', 'surface', 'source'],
 
+  // The details sheet: the whole product (photos, colour, size) and Buy, without a page load.
+  // `closed` is the honest half — `action: 'none'` is someone who looked and left, and
+  // `dwellMs` is how long it held them. Compare sheet → order latency with store → order.
+  product_sheet_opened: ['productId', 'sellerId', 'surface', 'hasVariants'],
+  product_sheet_closed: ['productId', 'surface', 'dwellMs', 'action'],
+
   // ── Bag (the only "save" we have today) ──────────────────────────────────
   bag_opened: ['size'],
   bag_added: ['productId', 'sellerId', 'price', 'surface', 'bagSize'],

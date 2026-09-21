@@ -32,6 +32,10 @@ export interface BuyerOrder {
   productImage?: string
   quantity?: number | string
   deliveryArea?: string
+  /** The colour/size chosen in the details sheet — absent on older orders, and on products
+   *  that never listed any options. */
+  color?: string
+  size?: string
   orderId?: string
   status?: string
   sourcePlatform?: string

@@ -7,6 +7,7 @@ import { db } from './firebase'
 import { trackEvent } from './analytics'
 import ConfirmDialog from './ConfirmDialog'
 import Sidebar from './Sidebar'
+import { variantLabel } from './productSheetUtils'
 
 const green = '#adff2f'
 
@@ -204,7 +205,10 @@ function OrderHistory() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '15px' }}>{o.buyerName}</p>
-                          <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>{o.productName} × {o.quantity}</p>
+                          <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>
+                            {o.productName} × {o.quantity}
+                            {variantLabel(o.color, o.size) && <span style={{ color: '#ddd', fontWeight: 700 }}> · {variantLabel(o.color, o.size)}</span>}
+                          </p>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
                             <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', borderRadius: '999px', background: '#111', border: '1px solid #222', fontSize: '14px' }}>
                               {pm.icon}

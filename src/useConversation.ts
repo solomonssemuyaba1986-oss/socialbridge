@@ -4,6 +4,7 @@ import {
   query, orderBy, onSnapshot, serverTimestamp
 } from 'firebase/firestore'
 import { db, auth } from './firebase'
+import { variantLabel } from './productSheetUtils'
 
 export function getConversationId(sellerId: string, buyerId: string) {
   return [sellerId, buyerId].sort().join('_')
@@ -37,6 +38,9 @@ export async function sendConversationMessage(
     productName?: string
     productPrice?: string
     productImage?: string
+    /** From the details sheet — the colour/size the buyer was looking at when they wrote. */
+    color?: string
+    size?: string
   }
 ) {
   if (!sellerId || !buyerId || sellerId === buyerId) return // never allow self-messaging
@@ -46,7 +50,10 @@ export async function sendConversationMessage(
   const isProduct = !!opts?.productId || !!opts?.productName
   let lastMessage: string
   if (isImage) lastMessage = '📷 Photo'
-  else if (isProduct) lastMessage = `🛍️ ${opts!.productName || 'Product'}`
+  else if (isProduct) {
+    const variant = variantLabel(opts?.color, opts?.size)
+    lastMessage = `🛍️ ${opts!.productName || 'Product'}${variant ? ` · ${variant}` : ''}`
+  }
   else lastMessage = text
 
   const convoRef = doc(db, 'conversations', conversationId)
@@ -92,6 +99,8 @@ export async function sendConversationMessage(
     if (opts!.productName) messageFields.productName = opts!.productName
     if (opts!.productPrice) messageFields.productPrice = opts!.productPrice
     if (opts!.productImage) messageFields.productImage = opts!.productImage
+    const variant = variantLabel(opts!.color, opts!.size)
+    if (variant) messageFields.variant = variant
   }
   await addDoc(collection(db, 'conversations', conversationId, 'messages'), messageFields)
 }

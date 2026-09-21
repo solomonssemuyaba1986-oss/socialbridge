@@ -352,7 +352,10 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
                     <div style={{ fontSize: 18 }}>{delivered ? '✅' : '📦'}</div>
                     <div style={{ fontWeight: 800, fontSize: 13, color: green }}>{delivered ? 'Delivered' : 'Order Placed'}</div>
                     <div style={{ fontSize: 12, color: '#fff', fontWeight: 700, marginTop: 4 }}>Ref: {m.orderId || 'RT-...'}</div>
-                    <div style={{ fontSize: 12, color: '#aaa', marginTop: 2 }}>{m.productName} · UGX {m.productPrice} × {m.quantity}</div>
+                    <div style={{ fontSize: 12, color: '#aaa', marginTop: 2 }}>
+                      {m.productName} · UGX {m.productPrice} × {m.quantity}
+                      {m.variant && <span style={{ color: '#ddd', fontWeight: 700 }}> · {m.variant}</span>}
+                    </div>
                     {delivered ? (
                       askToLove ? (
                         <LovePrompt
@@ -412,7 +415,10 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
                       <img src={img} alt={m.productName || 'product'} style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
                     )}
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ color: '#fff', fontWeight: 700, fontSize: 13 }}>🛍️ {m.productName || 'Product'}</div>
+                      <div style={{ color: '#fff', fontWeight: 700, fontSize: 13 }}>
+                        🛍️ {m.productName || 'Product'}
+                        {m.variant && <span style={{ color: green, fontWeight: 800 }}> · {m.variant}</span>}
+                      </div>
                       {m.productPrice && <div style={{ color: green, fontWeight: 800, fontSize: 13, marginTop: 2 }}>UGX {m.productPrice}</div>}
                     </div>
                   </div>

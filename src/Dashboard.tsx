@@ -7,6 +7,7 @@ import { useSellerOrders } from './useSellerOrders'
 import { notify } from './notifications'
 import LoadingScreen from './LoadingScreen'
 import Sidebar from './Sidebar'
+import { variantLabel } from './productSheetUtils'
 import { getStoreAgeLabel } from './useSellerStats'
 import { resolveSellerLocation, type GeoSource, type Place } from './place'
 
@@ -398,7 +399,10 @@ function Dashboard() {
     <div className="rt-order-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
       <div>
         <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '15px', color: '#fff' }}>{o.buyerName}</p>
-        <p style={{ margin: '0 0 4px', color: '#888', fontSize: '13px' }}>{o.productName} × {o.quantity}</p>
+        <p style={{ margin: '0 0 4px', color: '#888', fontSize: '13px' }}>
+          {o.productName} × {o.quantity}
+          {variantLabel(o.color, o.size) && <span style={{ color: '#ddd', fontWeight: 700 }}> · {variantLabel(o.color, o.size)}</span>}
+        </p>
         <p style={{ margin: '0 0 4px', color: green, fontSize: '13px', fontWeight: '700' }}>UGX {o.productPrice}</p>
         {o.deliveryArea && <p style={{ margin: '0 0 4px', color: '#666', fontSize: '12px' }}>📍 {o.deliveryArea}</p>}
         {o.orderId && <p style={{ margin: 0, color: '#444', fontSize: '12px' }}>#{o.orderId}</p>}

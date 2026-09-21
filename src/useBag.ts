@@ -15,6 +15,13 @@ export interface BagItem {
   businessName: string
   addedAt: number
   quantity: number
+  /**
+   * What the buyer picked in the details sheet. The bag stays keyed by product — one product,
+   * one line — so this is the *chosen* variant, updated in place when they change it
+   * (`updateBagVariant`), and carried into the order when they order from the bag.
+   */
+  color?: string
+  size?: string
 }
 
 const STORAGE_KEY = 'rachett_bag'
@@ -205,6 +212,28 @@ export function useBag() {
     })
   }, [])
 
+  /**
+   * The details sheet: change the colour/size of something already in the bag. Same product,
+   * same line (see `BagItem.color`) — deliberately not a second bag line, which would need the
+   * whole bag, its counters and its order flow to be keyed differently.
+   */
+  const updateBagVariant = useCallback((productId: string, variant: { color?: string; size?: string }) => {
+    setItems(prev => {
+      const target = prev.find(i => i.productId === productId)
+      if (!target) return prev
+      const color = (variant.color || '').trim()
+      const size = (variant.size || '').trim()
+      if ((target.color || '') === color && (target.size || '') === size) return prev
+      const uid = uidRef.current
+      if (uid) {
+        updateDoc(doc(db, 'users', uid, 'bag', productId), { color, size }).catch(err => {
+          console.warn('Failed to sync bag variant:', err)
+        })
+      }
+      return prev.map(i => (i.productId === productId ? { ...i, color, size } : i))
+    })
+  }, [])
+
   const removeFromBag = useCallback((productId: string) => {
     setItems(prev => {
       const next = prev.filter(i => i.productId !== productId)
@@ -251,5 +280,5 @@ export function useBag() {
     setItems([])
   }, [items])
 
-  return { items, addToBag, removeFromBag, isInBag, setQuantity, clearBag, count: items.length }
+  return { items, addToBag, removeFromBag, isInBag, setQuantity, updateBagVariant, clearBag, count: items.length }
 }

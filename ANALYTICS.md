@@ -109,6 +109,8 @@ the page needs it.
 | `product_out_of_stock_seen` | productId, sellerId | ⏳ |
 | `product_liked` | productId, sellerId, surface, source | ✅ (♥ on Browse / Nearby / Store, and the post-purchase prompt) |
 | `product_unliked` | productId, sellerId, surface, source | ✅ (tapping a filled ♥ takes the vote back) |
+| `product_sheet_opened` | productId, sellerId, surface, hasVariants | ✅ (the ⓘ Details sheet on the product card — Browse, Nearby, the storefront) |
+| `product_sheet_closed` | productId, surface, dwellMs, action | ✅ (`action` = buy · bag · message · gallery · store · none — `none` is looked-and-left) |
 | `love_prompt_shown` | orderId, productId | ✅ (the delivered order bubble, buyer side) |
 | `love_prompt_answered` | orderId, productId, answer | ✅ (`yes` / `no` — a `no` is recorded here and nowhere else) |
 | `bag_opened` | size | ✅ |

@@ -9,6 +9,8 @@ import { formatDistance, isApproximatePin, placeLabel, type GeoSource, type Plac
 import { useBuyerLocation } from './useBuyerLocation'
 import { useBag, getBagCounts, type BagCountData } from './useBag'
 import ProductCard from './ProductCard'
+import ProductSheet from './ProductSheet'
+import type { Variant } from './productSheetUtils'
 import { useAllDrafts } from './useDraft'
 import ProductCardSkeleton from './ProductCardSkeleton'
 import { avatarColor, initialOf } from './avatar'
@@ -157,6 +159,10 @@ function NearbyPage() {
   const [bagCounts, setBagCounts] = useState<Record<string, BagCountData>>({})
   const [orderProduct, setOrderProduct] = useState<CardProduct | null>(null)
   const [messageProduct, setMessageProduct] = useState<CardProduct | null>(null)
+  /** The details sheet: the card's ⓘ, and the colour/size chosen inside it. */
+  const [detailsProduct, setDetailsProduct] = useState<CardProduct | null>(null)
+  const [orderVariant, setOrderVariant] = useState<Variant>({})
+  const [messageVariant, setMessageVariant] = useState<Variant>({})
   const [preview, setPreview] = useState<{ images: string[]; index: number } | null>(null)
   // Unsent messages — a card you already wrote about says so.
   const { drafts: myDrafts } = useAllDrafts()
@@ -164,7 +170,7 @@ function NearbyPage() {
   const [userId, setUserId] = useState<string | null>(auth.currentUser?.uid || null)
   const [shuffleSeed, setShuffleSeed] = useState(() => Date.now())
   const rangeWrapRef = useRef<HTMLDivElement | null>(null)
-  const { addToBag, removeFromBag, isInBag, count: bagCount } = useBag()
+  const { addToBag, removeFromBag, isInBag, updateBagVariant, count: bagCount } = useBag()
   // ♥ Universal likes: the tally rides on each product, my own vote comes from one listener.
   const { isLiked, likeCountFor, toggleLike } = useProductLikes()
 
@@ -431,7 +437,7 @@ function NearbyPage() {
     getBagCounts(displayedIds).then(setBagCounts).catch(() => {})
   }, [displayedIds])
 
-  const handleToggleBag = (p: DiscoveryProduct) => {
+  const handleToggleBag = (p: DiscoveryProduct, variant?: Variant) => {
     if (isInBag(p.id)) {
       removeFromBag(p.id)
       trackEvent('bag_removed', { productId: p.id, sellerId: p.sellerId, price: p.price, surface: 'nearby', bagSize: Math.max(0, bagCount - 1) })
@@ -449,6 +455,8 @@ function NearbyPage() {
         sellerSlug: p.sellerSlug,
         sellerId: p.sellerId,
         businessName: p.businessName,
+        color: variant?.color,
+        size: variant?.size,
       })
       trackEvent('bag_added', { productId: p.id, sellerId: p.sellerId, price: p.price, surface: 'nearby', bagSize: bagCount + 1 })
       setBagCounts(prev => ({
@@ -456,6 +464,18 @@ function NearbyPage() {
         [p.id]: { count: (prev[p.id]?.count || 0) + 1, baggedCount: (prev[p.id]?.baggedCount || 0) + 1 },
       }))
     }
+  }
+
+  /**
+   * From the details sheet: bag it with the chosen colour/size, or — if it is already bagged —
+   * just remember the new choice. A tap in the sheet never removes something from the bag.
+   */
+  const handleSheetBag = (p: DiscoveryProduct, variant: Variant) => {
+    if (isInBag(p.id)) {
+      updateBagVariant(p.id, variant)
+      return
+    }
+    handleToggleBag(p, variant)
   }
 
   /**
@@ -630,7 +650,7 @@ function NearbyPage() {
   // Coming back from sign-in? Reopen the sheet they were blocked on.
   useEffect(() => {
     if (pool.items.length === 0) return
-    consumePendingAction(pool.items, { order: setOrderProduct, message: setMessageProduct, like: handleToggleLike })
+    consumePendingAction(pool.items, { order: (p) => { setOrderVariant({}); setOrderProduct(p) }, message: (p) => { setMessageVariant({}); setMessageProduct(p) }, like: handleToggleLike })
   }, [pool, handleToggleLike])
 
   const openProduct = (p: DiscoveryProduct) => {
@@ -668,8 +688,9 @@ function NearbyPage() {
         }}
         onToggleBag={() => handleToggleBag(p)}
         onToggleLike={() => handleToggleLike(p)}
-        onMessage={() => setMessageProduct(p)}
-        onOrder={() => setOrderProduct(p)}
+        onDetails={() => setDetailsProduct(p)}
+        onMessage={() => { setMessageVariant({}); setMessageProduct(p) }}
+        onOrder={() => { setOrderVariant({}); setOrderProduct(p) }}
       />
     )
   }
@@ -1071,9 +1092,30 @@ function NearbyPage() {
         {error && <p style={{ color: '#ff4444', fontSize: '13px', marginTop: '12px' }}>{error}</p>}
       </div>
 
+      {/* The details sheet — the whole product and Buy, without a page load. */}
+      {detailsProduct && (
+        <ProductSheet
+          key={detailsProduct.id}
+          product={detailsProduct}
+          surface="nearby"
+          liked={isLiked(detailsProduct.id)}
+          likeCount={likeCountFor(detailsProduct)}
+          onToggleLike={() => handleToggleLike(detailsProduct)}
+          isMine={detailsProduct.sellerId === userId}
+          inBag={isInBag(detailsProduct.id)}
+          onClose={() => setDetailsProduct(null)}
+          onBuy={(variant) => { setOrderVariant(variant); setOrderProduct(detailsProduct); setDetailsProduct(null) }}
+          onMessage={(variant) => { setMessageVariant(variant); setMessageProduct(detailsProduct); setDetailsProduct(null) }}
+          onToggleBag={(variant) => handleSheetBag(detailsProduct, variant)}
+          onOpenStore={() => { const p = detailsProduct; setDetailsProduct(null); openProduct(p) }}
+        />
+      )}
+
       <ProductActions
         orderProduct={orderProduct}
         messageProduct={messageProduct}
+        orderVariant={orderVariant}
+        messageVariant={messageVariant}
         onCloseOrder={() => setOrderProduct(null)}
         onCloseMessage={() => setMessageProduct(null)}
       />

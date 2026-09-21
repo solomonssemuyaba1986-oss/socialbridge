@@ -12,6 +12,8 @@ import QuickRepliesPanel from './QuickRepliesPanel'
 import { getMainCategories } from './categories'
 import LoadingScreen from './LoadingScreen'
 import { avatarColor, initialOf } from './avatar'
+import ProductSheet from './ProductSheet'
+import { variantLabel, type Variant } from './productSheetUtils'
 import { useDraft } from './useDraft'
 import { uploadImageToCloudinary } from './uploadImage'
 import { getConversationId, sendConversationMessage } from './useConversation'
@@ -107,7 +109,7 @@ function BrowsePage() {
   const [userId, setUserId] = useState<string | null>(null)
   const [mySlug, setMySlug] = useState<string | null>(null)
   const [ownerFilter, setOwnerFilter] = useState<'all' | 'mine' | 'not-mine'>('all')
-  const { addToBag, removeFromBag, isInBag, count: bagCount } = useBag()
+  const { addToBag, removeFromBag, isInBag, updateBagVariant, count: bagCount } = useBag()
   // ♥ Universal likes: the tally rides on each product, my own vote comes from one listener.
   const { isLiked, likeCountFor, toggleLike } = useProductLikes()
   const navigate = useNavigate()
@@ -138,6 +140,10 @@ function BrowsePage() {
   const [buyerName, setBuyerName] = useState('')
   const [quantity, setQuantity] = useState('1')
   const [deliveryArea, setDeliveryArea] = useState('')
+  /** The details sheet: which product is open, and the colour/size picked in it. */
+  const [detailsProduct, setDetailsProduct] = useState<Product | null>(null)
+  const [orderVariant, setOrderVariant] = useState<Variant>({})
+  const [messageVariant, setMessageVariant] = useState<Variant>({})
   const [orderMessage, setOrderMessage] = useState('')
   /**
    * One thread, one draft. When the uid isn't known yet (signed out, or the auth
@@ -282,7 +288,7 @@ function BrowsePage() {
     setSearch(s.label)
   }
 
-  const handleToggleBag = (p: Product) => {
+  const handleToggleBag = (p: Product, variant?: Variant) => {
     if (isInBag(p.id)) {
       removeFromBag(p.id)
       trackEvent('bag_removed', { productId: p.id, sellerId: p.sellerId, price: p.price, surface: 'browse', bagSize: Math.max(0, bagCount - 1) })
@@ -291,13 +297,26 @@ function BrowsePage() {
         [p.id]: { count: Math.max(0, (prev[p.id]?.count || 0) - 1), baggedCount: prev[p.id]?.baggedCount || 0 },
       }))
     } else {
-      addToBag({ productId: p.id, productName: p.name, productPrice: p.price, imageUrl: p.imageUrl, images: p.images?.length ? p.images : (p.imageUrl ? [p.imageUrl] : []), sellerSlug: p.sellerSlug, sellerId: p.sellerId, businessName: p.businessName })
+      addToBag({ productId: p.id, productName: p.name, productPrice: p.price, imageUrl: p.imageUrl, images: p.images?.length ? p.images : (p.imageUrl ? [p.imageUrl] : []), sellerSlug: p.sellerSlug, sellerId: p.sellerId, businessName: p.businessName, color: variant?.color, size: variant?.size })
       trackEvent('bag_added', { productId: p.id, sellerId: p.sellerId, price: p.price, surface: 'browse', bagSize: bagCount + 1 })
       setBagCounts(prev => ({
         ...prev,
         [p.id]: { count: (prev[p.id]?.count || 0) + 1, baggedCount: (prev[p.id]?.baggedCount || 0) + 1 },
       }))
     }
+  }
+
+  /**
+   * From the details sheet. Already bagged → just remember the new colour/size (a second tap
+   * in the sheet must never throw away something the buyer deliberately kept). Not bagged yet →
+   * the normal add, carrying the variant.
+   */
+  const handleSheetBag = (p: Product, variant: Variant) => {
+    if (isInBag(p.id)) {
+      updateBagVariant(p.id, variant)
+      return
+    }
+    handleToggleBag(p, variant)
   }
 
   /**
@@ -429,6 +448,10 @@ function BrowsePage() {
         productImage: orderProduct.imageUrl || '',
         quantity,
         deliveryArea: deliveryArea.trim(),
+        // What they picked in the details sheet, carried onto the order so the seller never
+        // has to guess which colour or size to pack.
+        ...(orderVariant.color ? { color: orderVariant.color } : {}),
+        ...(orderVariant.size ? { size: orderVariant.size } : {}),
         status: 'pending',
         read: false,
         sourcePlatform,
@@ -444,6 +467,8 @@ function BrowsePage() {
         productName: orderProduct.name,
         productPrice: orderProduct.price,
         quantity,
+        color: orderVariant.color,
+        size: orderVariant.size,
       })
       await incrementProductOrderCount(orderProduct.sellerId, orderProduct.id, orderProduct.orderCount || 0)
       trackEvent('order_placed', {
@@ -461,6 +486,7 @@ function BrowsePage() {
         setQuantity('1')
         setDeliveryArea('')
         setOrderMessage('')
+        setOrderVariant({})
         setOrderProduct(null)
         setOrderSuccess(false)
       }, 2500)
@@ -501,7 +527,9 @@ function BrowsePage() {
           productId: messageProduct.id,
           productName: messageProduct.name,
           productPrice: messageProduct.price,
-          productImage: messageProduct.imageUrl
+          productImage: messageProduct.imageUrl,
+          color: messageVariant.color,
+          size: messageVariant.size,
         }
       )
       trackEvent('message_sent', {
@@ -1043,7 +1071,14 @@ function BrowsePage() {
                           <LikePill liked={isLiked(p.id)} count={likeCountFor(p)} onToggle={p.sellerId === (userId || '') ? undefined : () => handleToggleLike(p)} />
                         </div>
                         <p style={{ margin: '0 0 8px', color: '#555', fontSize: '12px' }}>{p.businessName}</p>
-                        <p style={{ margin: 0, fontWeight: '800', color: green, fontSize: '14px' }}>UGX {p.price}</p>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                          <p style={{ margin: 0, fontWeight: '800', color: green, fontSize: '14px' }}>UGX {p.price}</p>
+                          <button onClick={(e) => { e.stopPropagation(); setDetailsProduct(p) }}
+                            aria-label={`See details for ${p.name}`}
+                            style={{ flexShrink: 0, padding: '4px 10px', background: '#222', color: '#ddd', border: '1px solid #333', borderRadius: '999px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', lineHeight: 1.5 }}>
+                            ⓘ Details
+                          </button>
+                        </div>
                       </div>
                       {p.outOfStock && (
                         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '700', fontSize: '12px', textAlign: 'center', padding: '8px' }}>
@@ -1085,7 +1120,14 @@ function BrowsePage() {
                         <LikePill liked={isLiked(p.id)} count={likeCountFor(p)} onToggle={p.sellerId === (userId || '') ? undefined : () => handleToggleLike(p)} />
                       </div>
                       <p style={{ margin: '0 0 8px', color: '#555', fontSize: '12px' }}>{p.businessName}</p>
-                      <p style={{ margin: 0, fontWeight: '800', color: green, fontSize: '14px' }}>UGX {p.price}</p>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <p style={{ margin: 0, fontWeight: '800', color: green, fontSize: '14px' }}>UGX {p.price}</p>
+                        <button onClick={(e) => { e.stopPropagation(); setDetailsProduct(p) }}
+                          aria-label={`See details for ${p.name}`}
+                          style={{ flexShrink: 0, padding: '4px 10px', background: '#222', color: '#ddd', border: '1px solid #333', borderRadius: '999px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', lineHeight: 1.5 }}>
+                          ⓘ Details
+                        </button>
+                      </div>
                     </div>
                   </div>
                   {!p.outOfStock && (
@@ -1097,11 +1139,11 @@ function BrowsePage() {
                       </div>
                     ) : (
                       <div style={{ display: 'flex', gap: '6px', padding: '0 12px 12px' }}>
-                        <button onClick={(e) => { e.stopPropagation(); setMessageProduct(p) }}
+                        <button onClick={(e) => { e.stopPropagation(); setMessageVariant({}); setMessageProduct(p) }}
                           style={{ flex: 1, padding: '8px', background: '#222', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' }}>
                           💬 Message
                         </button>
-                        <button onClick={(e) => { e.stopPropagation(); setOrderProduct(p) }}
+                        <button onClick={(e) => { e.stopPropagation(); setOrderVariant({}); setOrderProduct(p) }}
                           style={{ flex: 1, padding: '8px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' }}>
                           Buy Now
                         </button>
@@ -1259,6 +1301,26 @@ function BrowsePage() {
       })()}
 
       {/* Order Modal */}
+      {/* The details sheet: the whole product — photos, colour, size — and Buy, without a
+          page load. The page keeps owning the order and message forms below. */}
+      {detailsProduct && (
+        <ProductSheet
+          key={detailsProduct.id}
+          product={detailsProduct}
+          surface="browse"
+          liked={isLiked(detailsProduct.id)}
+          likeCount={likeCountFor(detailsProduct)}
+          onToggleLike={() => handleToggleLike(detailsProduct)}
+          isMine={detailsProduct.sellerId === (userId || '')}
+          inBag={isInBag(detailsProduct.id)}
+          onClose={() => setDetailsProduct(null)}
+          onBuy={(variant) => { setOrderVariant(variant); setOrderProduct(detailsProduct); setDetailsProduct(null) }}
+          onMessage={(variant) => { setMessageVariant(variant); setMessageProduct(detailsProduct); setDetailsProduct(null) }}
+          onToggleBag={(variant) => handleSheetBag(detailsProduct, variant)}
+          onOpenStore={() => { const slug = detailsProduct.sellerSlug; setDetailsProduct(null); navigate(`/store/${slug}`) }}
+        />
+      )}
+
       {orderProduct && (
         <div onClick={() => { setOrderProduct(null); setOrderSuccess(false) }}
           style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
@@ -1287,6 +1349,9 @@ function BrowsePage() {
                 </h3>
                 <p style={{ margin: '0 0 24px', color: green, fontSize: '14px', fontWeight: '700', textAlign: 'left' }}>
                   UGX {orderProduct.price} each
+                  {variantLabel(orderVariant.color, orderVariant.size) && (
+                    <span style={{ color: '#ddd' }}> · {variantLabel(orderVariant.color, orderVariant.size)}</span>
+                  )}
                 </p>
                 <input placeholder="Your name" value={buyerName} onChange={e => setBuyerName(e.target.value)}
                   style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
@@ -1324,6 +1389,11 @@ function BrowsePage() {
                 style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '6px', marginBottom: '8px' }} />
               <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '13px', color: '#fff', textAlign: 'left' }}>{messageProduct.name}</p>
               <p style={{ margin: 0, color: green, fontSize: '13px', fontWeight: '700', textAlign: 'left' }}>UGX {messageProduct.price}</p>
+              {variantLabel(messageVariant.color, messageVariant.size) && (
+                <p style={{ margin: '2px 0 0', color: '#ddd', fontSize: '13px', fontWeight: '700', textAlign: 'left' }}>
+                  {variantLabel(messageVariant.color, messageVariant.size)}
+                </p>
+              )}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: showQuickReplies ? '12px' : '16px' }}>

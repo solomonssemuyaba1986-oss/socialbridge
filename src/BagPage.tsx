@@ -16,6 +16,7 @@ import { consumePendingAction, requireSignIn } from './signInGate'
 import SignInPrompt from './SignInPrompt'
 // One number format for the whole app: ✓ bought (and ♥ likes) abbreviate to K/M.
 import { formatCount } from './productCardUtils'
+import { variantLabel } from './productSheetUtils'
 
 const green = '#adff2f'
 const SUPPORT_WHATSAPP = (import.meta.env.VITE_SUPPORT_WHATSAPP || '256703174968').trim()
@@ -269,6 +270,8 @@ function BagPage() {
     }
     if (!buyerName.trim() || !deliveryArea.trim() || !orderTarget) return
     const sourcePlatform = detectSource()
+    // The chosen colour/size lives on the bag line, not on the live product.
+    const bagItem = items.find(i => i.productId === orderTarget.id)
     try {
       const { orderId } = await createBuyerOrder(orderTarget.sellerId, {
         buyerName: buyerName.trim(),
@@ -279,6 +282,9 @@ function BagPage() {
         productImage: orderTarget.imageUrl || '',
         quantity: orderQty,
         deliveryArea: deliveryArea.trim(),
+        // What they picked in the details sheet, remembered on the bag line and carried here.
+        ...(bagItem?.color ? { color: bagItem.color } : {}),
+        ...(bagItem?.size ? { size: bagItem.size } : {}),
         status: 'pending',
         read: false,
         sourcePlatform,
@@ -294,6 +300,8 @@ function BagPage() {
         productName: orderTarget.name,
         productPrice: orderTarget.price,
         quantity: orderQty,
+        color: bagItem?.color,
+        size: bagItem?.size,
       })
       await incrementProductOrderCount(orderTarget.sellerId, orderTarget.id, orderTarget.orderCount || 0)
       trackEvent('order_placed', {
@@ -445,6 +453,11 @@ function BagPage() {
                   ) : (
                     <>
                       <p style={{ margin: 0, fontWeight: '800', fontSize: '14px', color: green }}>UGX {lv.price}</p>
+                      {variantLabel(item.color, item.size) && (
+                        <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#ddd', fontWeight: 700 }}>
+                          🎨 {variantLabel(item.color, item.size)}
+                        </p>
+                      )}
                       {(salesMap[item.productId] || 0) > 0 && (
                         <p style={{ display: 'inline-block', margin: '6px 0 0', padding: '3px 10px', background: green, color: '#000', borderRadius: '999px', fontSize: '12px', fontWeight: '800', lineHeight: 1.4 }}>
                           ✓ {formatCount(salesMap[item.productId] || 0)} bought
