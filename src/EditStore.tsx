@@ -6,6 +6,7 @@ import { COUNTRIES } from './countries'
 import { COUNTRY_CODES, type CountryCode } from './countryCodes'
 import { notify } from './notifications'
 import ConfirmDialog from './ConfirmDialog'
+import StoreLogoPicker from './StoreLogoPicker'
 import {
   placeLabel,
   resolveSellerLocation,
@@ -31,7 +32,6 @@ function EditStore() {
   const [tiktok, setTiktok] = useState('')
   const [showWhatsapp, setShowWhatsapp] = useState(true)
   const [logoUrl, setLogoUrl] = useState('')
-  const [logoFile, setLogoFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
   const [confirmSignOut, setConfirmSignOut] = useState(false)
 
@@ -91,12 +91,6 @@ function EditStore() {
     load()
   }, [navigate])
 
-  const handleFile = (f?: File | null) => {
-    if (!f) { setLogoFile(null); setLogoUrl(''); return }
-    setLogoFile(f)
-    setLogoUrl(URL.createObjectURL(f))
-  }
-
   // -- Geolocation --
   const handleUseMyLocation = () => {
     if (!navigator.geolocation) {
@@ -138,47 +132,9 @@ function EditStore() {
     if (!user) { navigate('/'); return }
     setLoading(true)
     try {
-      let finalLogoUrl = logoUrl || ''
-      if (logoFile) {
-        try {
-          const resizeImage = (file: File, maxWidth = 1024, quality = 0.8): Promise<Blob> => {
-            return new Promise((resolve, reject) => {
-              const img = new Image()
-              img.onload = () => {
-                try {
-                  const scale = Math.min(1, maxWidth / img.width)
-                  const w = Math.round(img.width * scale)
-                  const h = Math.round(img.height * scale)
-                  const canvas = document.createElement('canvas')
-                  canvas.width = w
-                  canvas.height = h
-                  const ctx = canvas.getContext('2d')!
-                  ctx.drawImage(img, 0, 0, w, h)
-                  canvas.toBlob((blob) => {
-                    if (blob) resolve(blob)
-                    else reject(new Error('Image resize failed'))
-                  }, 'image/jpeg', quality)
-                } catch (err) {
-                  reject(err)
-                }
-              }
-              img.onerror = (e) => reject(e)
-              img.src = URL.createObjectURL(file)
-            })
-          }
-
-          const processedBlob = await resizeImage(logoFile, 1024, 0.8)
-          const processedFile = new File([processedBlob], 'logo.jpg', { type: 'image/jpeg' })
-          const formData = new FormData()
-          formData.append('file', processedFile)
-          formData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'p2z65zrv')
-          const res = await fetch(`https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'dzudmmuxg'}/image/upload`, { method: 'POST', body: formData })
-          const cloudData = await res.json()
-          finalLogoUrl = cloudData.secure_url
-        } catch (err) {
-          console.error('Logo upload failed', err)
-        }
-      }
+      // The photo is cropped and uploaded the moment it is picked (StoreLogoPicker), so
+      // there is nothing left to process here — just the URL the seller already saw.
+      const finalLogoUrl = logoUrl.trim()
 
       const fullNumber = getStoredFullNumber()
       // Typed an area but never dropped a pin? Geocode it so the store can still
@@ -337,15 +293,16 @@ function EditStore() {
           </p>
         </div>
 
-        <label>Logo (optional)</label>
-        <div style={{ marginBottom: 8 }}>
-          <input type="file" accept="image/*" onChange={e => { if (e.target.files && e.target.files[0]) handleFile(e.target.files[0]) }} />
+        <label>Shop photo (optional)</label>
+        <div style={{ marginBottom: 12 }}>
+          <StoreLogoPicker
+            businessName={businessName}
+            value={logoUrl}
+            source="edit"
+            onChange={setLogoUrl}
+            compact
+          />
         </div>
-        {logoUrl && (
-          <div style={{ marginBottom: 8 }}>
-            <img src={logoUrl} alt="logo" style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 8 }} />
-          </div>
-        )}
 
         <button onClick={handleSave} disabled={loading} style={{ padding: 10 }}>
           {loading ? 'Saving...' : 'Save'}

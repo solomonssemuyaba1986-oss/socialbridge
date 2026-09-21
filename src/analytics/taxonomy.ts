@@ -29,7 +29,7 @@ export const EVENT_PROPS = {
   signup_completed: ['method', 'role'],
   signout: ['role'],
   role_selected: ['role'],
-  store_created: ['sellerId', 'slug', 'country'],
+  store_created: ['sellerId', 'slug', 'country', 'hasLogo', 'logoSource'],
   phone_verification_sent: ['country', 'method'],
   phone_verified: ['country', 'method'],
 
@@ -42,6 +42,11 @@ export const EVENT_PROPS = {
   shuffle_tapped: [],
   store_visited: ['sellerId', 'slug', 'productCount', 'channel'],
   store_edited: ['sellerId', 'fields'],
+  // The shop's face. Fired on every logo upload (setup or Edit Store) so we can later ask
+  // the one question this feature exists to answer: do shops that look like shops stay?
+  // `failed` is true when the upload itself failed — a seller who *tried* is not the same
+  // as a seller who never saw the button.
+  store_logo_added: ['source', 'surface', 'failed'],
 
   // ── Nearby (its own surface, never mixed into Browse) ────────────────────
   nearby_viewed: ['areaSet', 'rangeKm', 'sortMode', 'sellerCount'],

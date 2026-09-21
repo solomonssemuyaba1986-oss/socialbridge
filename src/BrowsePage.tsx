@@ -11,6 +11,7 @@ import { createBuyerOrder, incrementProductOrderCount, createOrderConversation }
 import QuickRepliesPanel from './QuickRepliesPanel'
 import { getMainCategories } from './categories'
 import LoadingScreen from './LoadingScreen'
+import { avatarColor, initialOf } from './avatar'
 import { useDraft } from './useDraft'
 import { uploadImageToCloudinary } from './uploadImage'
 import { getConversationId, sendConversationMessage } from './useConversation'
@@ -888,9 +889,22 @@ function BrowsePage() {
                     ✏️ This seller is now called <strong>{store.businessName}</strong>
                   </div>
                 )}
-                <div style={{ backgroundImage: `url(${store.logoUrl || 'https://placehold.co/300x180/111111/555555'})`, backgroundSize: 'cover', backgroundPosition: 'center', height: '110px' }} />
                 <div style={{ padding: '12px' }}>
-                  <p style={{ margin: '0 0 6px', fontWeight: '800', color: '#fff', fontSize: '14px' }}>{store.businessName}</p>
+                  {/* A logo is square; stretched across a 110px banner it looked smeared.
+                      Here it is what it is — a small avatar — and a shop with no photo yet
+                      wears its own letter on a colour from its name (`avatar.ts`) rather
+                      than a grey placeholder. Same pattern as StoreCard, so a shop looks
+                      the same wherever it is listed. */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                    {store.logoUrl ? (
+                      <img src={store.logoUrl} alt="" style={{ width: 40, height: 40, minWidth: 40, borderRadius: 10, objectFit: 'cover', background: '#111' }} />
+                    ) : (
+                      <div aria-hidden="true" style={{ width: 40, height: 40, minWidth: 40, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 17, ...avatarColor(store.businessName) }}>
+                        {initialOf(store.businessName)}
+                      </div>
+                    )}
+                    <p style={{ margin: 0, fontWeight: '800', color: '#fff', fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{store.businessName}</p>
+                  </div>
                   {store.bio && <p style={{ margin: '0 0 6px', color: '#888', fontSize: '12px', lineHeight: 1.4 }}>{store.bio}</p>}
                   <p style={{ margin: 0, color: '#888', fontSize: '12px' }}>{store.productCount} product{store.productCount === 1 ? '' : 's'}{store.outOfStockCount > 0 ? ` • ${store.outOfStockCount} unavailable` : ''}</p>
                 </div>

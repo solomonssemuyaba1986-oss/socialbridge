@@ -11,6 +11,7 @@ import { useBag, getBagCounts, type BagCountData } from './useBag'
 import { useProductLikes } from './useProductLikes'
 import LikePill from './LikePill'
 import { formatCount } from './productCardUtils'
+import { avatarColor, initialOf } from './avatar'
 import { useSellerStats, getSalesLabel, formatRating, renderStars, getBadgeStatusLabel } from './useSellerStats.ts'
 import QuickRepliesPanel from './QuickRepliesPanel'
 import FloatingBag from './FloatingBag'
@@ -803,8 +804,17 @@ const handleSignupForAction = async (provider: any) => {
 
       {/* Header */}
       <div style={{ padding: '48px 20px 32px', textAlign: 'center', borderBottom: '1px solid #1a1a1a' }}>
-        <img src={seller.logoUrl || 'https://placehold.co/100'} alt="logo"
-          style={{ width: '90px', height: '90px', borderRadius: '50%', objectFit: 'cover', marginBottom: '16px', border: `3px solid ${green}` }} />
+        {seller.logoUrl ? (
+          <img src={seller.logoUrl} alt={`${seller.businessName || 'Shop'} logo`}
+            style={{ width: '90px', height: '90px', borderRadius: '50%', objectFit: 'cover', marginBottom: '16px', border: `3px solid ${green}` }} />
+        ) : (
+          /* No photo yet — the shop still gets a face: its own letter on a colour taken
+             from its name (`avatar.ts`), never a grey placeholder box. */
+          <div aria-hidden="true"
+            style={{ width: 90, height: 90, borderRadius: '50%', margin: '0 auto 16px', border: `3px solid ${green}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 36, ...avatarColor(seller.businessName) }}>
+            {initialOf(seller.businessName)}
+          </div>
+        )}
         <h1 style={{ margin: '0 0 8px', fontSize: '26px', fontWeight: '800', color: '#fff', letterSpacing: '-0.5px' }}>
           {seller.businessName}
         </h1>

@@ -11,6 +11,7 @@ import { useBag, getBagCounts, type BagCountData } from './useBag'
 import ProductCard from './ProductCard'
 import { useAllDrafts } from './useDraft'
 import ProductCardSkeleton from './ProductCardSkeleton'
+import { avatarColor, initialOf } from './avatar'
 import ProductActions from './ProductActions'
 import ProductPreview from './ProductPreview'
 import FloatingBag from './FloatingBag'
@@ -1044,8 +1045,8 @@ function NearbyPage() {
                   {s.logoUrl ? (
                     <img src={s.logoUrl} alt={s.businessName} style={{ width: 54, height: 54, borderRadius: '50%', objectFit: 'cover', margin: '0 auto 8px', display: 'block' }} />
                   ) : (
-                    <div style={{ width: 54, height: 54, borderRadius: '50%', background: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 20, margin: '0 auto 8px' }}>
-                      {(s.businessName || 'S').charAt(0).toUpperCase()}
+                    <div aria-hidden="true" style={{ width: 54, height: 54, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 20, margin: '0 auto 8px', ...avatarColor(s.businessName || 'S') }}>
+                      {initialOf(s.businessName || 'S')}
                     </div>
                   )}
                   <p style={{ margin: '0 0 2px', fontWeight: '700', fontSize: '14px', color: '#fff' }}>{s.businessName}</p>

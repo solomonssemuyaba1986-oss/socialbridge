@@ -79,7 +79,7 @@ the page needs it.
 | `signup_completed` | method, role | ⏳ |
 | `signout` | role | ⏳ |
 | `role_selected` | role | ⏳ |
-| `store_created` | sellerId, slug, country | ✅ |
+| `store_created` | sellerId, slug, country, hasLogo, logoSource | ✅ |
 | `phone_verification_sent` | country, method | ✅ |
 | `phone_verified` | country, method | ✅ |
 | `browse_viewed` | category, storeCount | ✅ |
@@ -90,6 +90,7 @@ the page needs it.
 | `shuffle_tapped` | — | ⏳ |
 | `store_visited` | sellerId, slug, productCount, channel | ✅ |
 | `store_edited` | sellerId, fields | ⏳ |
+| `store_logo_added` | source, surface, failed | ✅ (Setup Store step 1 — optional — and Edit Store) |
 | `nearby_viewed` | areaSet, rangeKm, sortMode, sellerCount | ✅ |
 | `nearby_results` | count, sellerCount, areaSet, rangeKm, sortMode, category | ✅ |
 | `nearby_sort_changed` | sortMode, previousSortMode, resultCount | ✅ |

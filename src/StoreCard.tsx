@@ -1,3 +1,5 @@
+import { avatarColor, initialOf } from './avatar'
+
 const green = '#adff2f'
 
 export interface StoreCardData {
@@ -19,7 +21,8 @@ type Props = {
  * so a store looks the same everywhere.
  */
 function StoreCard({ store, onClick }: Props) {
-  const initial = (store.businessName || store.slug || 'S').charAt(0).toUpperCase()
+  const tileKey = store.businessName || store.slug || 'S'
+  const initial = initialOf(tileKey)
 
   return (
     <div onClick={onClick}
@@ -28,7 +31,9 @@ function StoreCard({ store, onClick }: Props) {
         {store.logoUrl ? (
           <img src={store.logoUrl} alt="" style={{ width: 44, height: 44, borderRadius: 12, objectFit: 'cover', background: '#111' }} />
         ) : (
-          <div style={{ width: 44, height: 44, borderRadius: 12, background: '#222', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 18 }}>
+          /* No photo yet — the shop wears its own letter on a colour taken from its name
+             (`avatar.ts`), which looks deliberate instead of unfinished. */
+          <div aria-hidden="true" style={{ width: 44, height: 44, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 18, ...avatarColor(tileKey) }}>
             {initial}
           </div>
         )}

@@ -7,6 +7,7 @@ import { COUNTRIES } from './countries'
 import { COUNTRY_CODES, type CountryCode } from './countryCodes'
 import { formatFull, lengthHint, lengthRange, validatePhone } from './phone'
 import { trackEvent } from './analytics'
+import StoreLogoPicker from './StoreLogoPicker'
 import {
   placeLabel,
   resolveSellerLocation,
@@ -38,6 +39,8 @@ interface SetupDraft {
   businessName?: string
   storeHandle?: string
   bio?: string
+  /** A logo picked during setup is kept here, so a reload cannot throw the photo away. */
+  logoUrl?: string
   nationality?: string
   location?: string
   whatsapp?: string
@@ -80,6 +83,10 @@ function SetupStore() {
   const [handleAvailable, setHandleAvailable] = useState<boolean | null>(null)
   const [handleChecking, setHandleChecking] = useState(false)
   const [bio, setBio] = useState(() => readSetupDraft().bio || '')
+  // Optional on purpose: the seller can give their shop a face right here, or skip it and
+  // still create the shop. It is never part of the "needed" list below, and it can never
+  // block Continue.
+  const [logoUrl, setLogoUrl] = useState(() => readSetupDraft().logoUrl || '')
   const initialPhone = auth.currentUser?.phoneNumber || ''
   const initialCountry = COUNTRY_CODES.find(c => initialPhone.startsWith(c.dialCode))
     || COUNTRY_CODES.find(c => c.dialCode === (readSetupDraft().dialCode || ''))
@@ -199,6 +206,7 @@ function SetupStore() {
       businessName,
       storeHandle,
       bio,
+      logoUrl,
       nationality,
       location,
       whatsapp,
@@ -210,7 +218,7 @@ function SetupStore() {
     } catch {
       // ignore storage errors
     }
-  }, [businessName, storeHandle, bio, nationality, location, whatsapp, selectedCountry, step, createdSlug])
+  }, [businessName, storeHandle, bio, logoUrl, nationality, location, whatsapp, selectedCountry, step, createdSlug])
 
   // If a signed-in user already has a store, don't let /setup overwrite it
   useEffect(() => {
@@ -439,9 +447,10 @@ function SetupStore() {
       const slug = storeHandle
       const fullNumber = getFullWhatsapp()
 
-      // Logo: use the sign-in photo when we have one (Google/Facebook/Apple);
-      // phone-only sellers get their initials until they add one in Edit Store.
-      const finalLogoUrl = user.photoURL || ''
+      // Logo, in order: what they chose in step 1 → the sign-in photo (Google/Facebook/
+      // Apple) → nothing, and the shop keeps its own letter tile (see `avatar.ts`) until
+      // they add one in Edit Store.
+      const finalLogoUrl = logoUrl || user.photoURL || ''
 
       // Phone-only sign-in (no email): prompt for recovery email later
       const isPhoneSignIn = !!user.phoneNumber && !user.email
@@ -482,7 +491,15 @@ function SetupStore() {
       // the one next action (add a product), plus a WhatsApp share for their bio.
       clearSetupDraft()
       setCreatedSlug(slug)
-      trackEvent('store_created', { sellerId: user.uid, slug, country: nationality })
+      trackEvent('store_created', {
+        sellerId: user.uid,
+        slug,
+        country: nationality,
+        // The one number that answers "do sellers actually use the logo button?" — and,
+        // later, whether the shops that do are the ones that stay (see analytics-report).
+        hasLogo: !!finalLogoUrl,
+        logoSource: logoUrl ? 'own' : finalLogoUrl ? 'provider' : 'none',
+      })
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to create store'
       const code = (error as { code?: string } | null)?.code
@@ -728,6 +745,20 @@ function SetupStore() {
           style={{ width: '100%', padding: '12px', borderRadius: '8px', border: errors.businessName ? '2px solid #c33' : '1px solid #ddd', marginTop: '8px', marginBottom: '4px', fontSize: '15px', boxSizing: 'border-box' }} />
         {errors.businessName && <p style={{ color: '#c33', fontSize: '12px', margin: '4px 0 16px' }}>{errors.businessName}</p>}
         {!errors.businessName && <div style={{ marginBottom: '16px' }} />}
+
+        {/* "Give your shop a face" — straight under the name they just typed, so the circle
+            showing *their* initial is a direct result of what they wrote. Optional: the shop
+            is created with or without it, and Continue never waits on it. */}
+        <label style={{ fontSize: '14px', fontWeight: '600', color: '#333', display: 'block' }}>Shop photo <span style={{ color: '#888', fontWeight: '400', fontSize: '12px' }}>— optional</span></label>
+        <div style={{ marginTop: '8px', marginBottom: '16px', padding: '14px', background: '#fafafa', border: '1px dashed #ddd', borderRadius: '10px' }}>
+          <StoreLogoPicker
+            businessName={businessName}
+            value={logoUrl}
+            fallbackUrl={auth.currentUser?.photoURL || ''}
+            source="setup"
+            onChange={setLogoUrl}
+          />
+        </div>
 
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Your shop link <span style={{ color: '#888', fontWeight: '400', fontSize: '12px' }}>— needed</span></label>
         <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>

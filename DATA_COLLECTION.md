@@ -83,7 +83,7 @@ Written by `SetupStore.tsx:434-466` (create), `EditStore.tsx:234-258` (edit), `D
 | `geoSource` | `'gps' \| 'area'` | real pin vs approximate town |
 | `showWhatsapp` | boolean | number public? (always `false` today) |
 | `instagram`, `tiktok` | string | `@` stripped |
-| `logoUrl` | string (Cloudinary) | falls back to the provider photoURL at creation |
+| `logoUrl` | string (Cloudinary) | set in Setup Store step 1 (optional, one tap) or Edit Store; falls back to the provider `photoURL` at creation, and to a colour + initial tile when empty (`avatar.ts`) |
 | `idDocumentPath` | string | **Legacy — no longer written.** National ID capture is off (see §11); older stores may still carry a path. Always stripped from exports. |
 | `idStatus` | `'pending'` | **Legacy — no longer written.** Was always `'pending'` with nothing to advance it. |
 | `createdAt` | Date | when the store was created (`SetupStore.tsx:407`) — powers the "Selling since …" trust line in the sidebar and dashboard. Older stores may be missing it; `functions/backfill-store-dates.js` fills it from real evidence only (first product → first order → first visit) and records where it came from. |
@@ -227,7 +227,7 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 
 | Processor | What it gets | Live? |
 |---|---|---|
-| **Cloudinary** | Logos, product photos, chat photos (compressed ≤1024px JPEG) + uploader IP | ✅ `uploadImage.ts`, `EditStore.tsx:201-208`, `BulkUpload.tsx:73-84` |
+| **Cloudinary** | Shop photos/logos (cropped square ≤512px JPEG), product photos, chat photos (compressed ≤1024px JPEG) + uploader IP | ✅ `uploadImage.ts`, `StoreLogoPicker.tsx` (Setup Store + Edit Store), `BulkUpload.tsx:73-84` |
 | **Africastalking** | Phone numbers + OTP SMS text | ✅ `server/index.js:83-87` |
 | **Nominatim / OpenStreetMap** | Seller's typed area text **and** GPS coordinates; buyer area lookup | ✅ `place.ts:30` |
 | **Resend** | Seller's `recoveryEmail` + 6-digit code | ✅ `functions/index.js` |
@@ -235,6 +235,12 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 | **Formspree** | Feedback text, name, contact, page URL, user email | ⚠️ only if `VITE_FORMSPREE_ID` is set |
 | **Flutterwave** | *Nothing* — `paymentService.ts` is **dead code** (no file imports it). **Decision (15 Sep 2026): leave it untouched until payments have been tested.** | ❌ |
 | **FCM / push** | *Nothing* — no messaging SDK anywhere; `notifications.ts` is UI copy only | ❌ |
+
+> **Note on setup uploads.** A shop photo is uploaded the moment it is picked — which is
+> *before* the shop exists — so a setup that is abandoned can leave one unreferenced file in
+> Cloudinary. That file is public, linked from nowhere and carries no name (only the uploader
+> IP, on Cloudinary's side); uploading after creation instead would mean losing the photo on
+> a reload, which is worse for the seller.
 
 ---
 
