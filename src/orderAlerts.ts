@@ -52,3 +52,21 @@ export function playNewMessageAlert() {
     // Web Audio unavailable
   }
 }
+
+const BASE_TITLE = typeof document !== 'undefined' ? document.title : 'rachett'
+
+/**
+ * The dot in the browser tab: "(2) rachett".
+ *
+ * This is the one notification that works with no push service, no permissions and no native app —
+ * it is there the moment somebody looks at a browser tab, which is exactly the case we can honour
+ * honestly today (see the note in `useInboxMessageAlert`).
+ */
+export function showUnreadBadge(count: number) {
+  try {
+    const safe = Math.max(0, Math.floor(Number(count) || 0))
+    document.title = safe > 0 ? `(${safe}) ${BASE_TITLE}` : BASE_TITLE
+  } catch {
+    // no document (tests, server)
+  }
+}

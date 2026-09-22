@@ -44,6 +44,15 @@ export function variantLabel(color?: string, size?: string): string {
 }
 
 /**
+ * When a product offers exactly one colour (or one size), there is nothing to ask — that *is* the
+ * choice, and making somebody tap the only option is friction for its own sake. Two or more, or
+ * none at all, and the buyer still chooses for themselves.
+ */
+export function defaultChoice(values: string[]): string {
+  return values.length === 1 ? values[0] : ''
+}
+
+/**
  * Has the buyer chosen everything this product actually offers? A product with no colours
  * (most of them today) is complete with nothing chosen — that is the honest rule, because
  * demanding a choice that doesn't exist is how a Buy button becomes a dead end.

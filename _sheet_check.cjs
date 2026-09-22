@@ -13,6 +13,7 @@
 const assert = require('assert')
 const path = require('path')
 const {
+  defaultChoice,
   listVariants,
   orderBubbleText,
   resolveSheetAction,
@@ -64,6 +65,21 @@ check('nothing to choose means nothing is missing', () => {
   const none = { colors: [], sizes: [] }
   assert.strictEqual(variantComplete(none, {}), true)
   assert.strictEqual(variantPrompt(none, {}), '')
+})
+
+check('a single option is already chosen — no need to ask', () => {
+  assert.strictEqual(defaultChoice(['Black']), 'Black')
+  assert.strictEqual(defaultChoice(['M']), 'M')
+  assert.strictEqual(defaultChoice([]), '')
+  assert.strictEqual(defaultChoice(['Black', 'White']), '')
+  // The consequence that matters: one colour + one size is buyable immediately.
+  const oneOfEach = { colors: ['Black'], sizes: ['M'] }
+  assert.strictEqual(variantComplete(oneOfEach, {
+    color: defaultChoice(oneOfEach.colors),
+    size: defaultChoice(oneOfEach.sizes),
+  }), true)
+  // Two colours is a real question, and still a question.
+  assert.strictEqual(variantComplete({ colors: ['Black', 'White'], sizes: ['M'] }, { size: 'M' }), false)
 })
 
 check('a product with options will not be ordered un-chosen', () => {

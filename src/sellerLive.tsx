@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
 import { collection, query, where, onSnapshot, doc } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth, db } from './firebase'
-import { playNewOrderAlert, playNewMessageAlert } from './orderAlerts'
+import { playNewOrderAlert, playNewMessageAlert, showUnreadBadge } from './orderAlerts'
 
 /**
  * Shared realtime seller overview — the single source of truth for the live
@@ -136,6 +136,9 @@ export function SellerLiveProvider({ children }: { children: ReactNode }) {
       playNewMessageAlert()
     }
     prevUnreadRef.current = totalUnread
+    // And the dot in the browser tab — the one signal that still reaches somebody whose tab is in
+    // the background, where a chime is deliberately silenced.
+    showUnreadBadge(totalUnread)
   }, [totalUnread])
 
   return <SellerLiveContext.Provider value={value}>{children}</SellerLiveContext.Provider>

@@ -3,6 +3,20 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { addDoc, collection, deleteDoc, doc, getDocs, updateDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
 import { notify } from './notifications'
+import { swatchFor } from './colourSwatch'
+
+/** The little circle a buyer sees next to a colour name. An unknown word stays visibly unknown. */
+function ColourDot({ name, size = 12 }: { name: string; size?: number }) {
+  const swatch = swatchFor(name)
+  const base: CSSProperties = { width: size, height: size, borderRadius: '50%', flexShrink: 0, display: 'inline-block' }
+  if (swatch?.kind === 'solid') {
+    return <span aria-hidden="true" style={{ ...base, background: swatch.hex, border: swatch.ring ? '1px solid #777' : '1px solid rgba(0,0,0,0.25)' }} />
+  }
+  if (swatch?.kind === 'multi') {
+    return <span aria-hidden="true" style={{ ...base, background: 'conic-gradient(#d32f2f,#fdd835,#2e7d32,#1976d2,#7b1fa2,#d32f2f)', border: '1px solid rgba(255,255,255,0.3)' }} />
+  }
+  return <span aria-hidden="true" title="We don't know this colour's shade — buyers will see it as a word" style={{ ...base, border: '1px dashed #666', background: '#2a2a2a' }} />
+}
 
 interface Product {
   id: string
@@ -232,6 +246,21 @@ function ProductsPage() {
   const productCount = useMemo(() => products.length, [products.length])
   const currentImage = galleryImages[activeImageIndex] || ''
   const stockPreview = stockBadge(Number(form.stock) || 0)
+  /** The colours as they are being typed right now — so the seller sees what a buyer will see. */
+  const typedColors = useMemo(() => {
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const part of form.colors.split(',')) {
+      const clean = part.trim().replace(/\s+/g, ' ')
+      if (!clean) continue
+      const key = clean.toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push(clean)
+      if (out.length >= 6) break
+    }
+    return out
+  }, [form.colors])
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f0f', color: '#fff', fontFamily: 'sans-serif', padding: '24px 16px 48px' }}>
@@ -281,7 +310,12 @@ function ProductsPage() {
                           </div>
                           {product.description ? <p style={{ margin: '8px 0 6px', color: '#888', fontSize: '13px' }}>{product.description}</p> : null}
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '6px' }}>
-                            {product.colors?.length ? product.colors.map((color) => <span key={color} style={{ padding: '4px 8px', borderRadius: '999px', background: '#222', color: '#ddd', fontSize: '12px' }}>{color}</span>) : null}
+                            {product.colors?.length ? product.colors.map((color) => (
+                              <span key={color} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 8px', borderRadius: '999px', background: '#222', color: '#ddd', fontSize: '12px' }}>
+                                <ColourDot name={color} size={10} />
+                                {color}
+                              </span>
+                            )) : null}
                             {product.sizes?.length ? product.sizes.map((size) => <span key={size} style={{ padding: '4px 8px', borderRadius: '999px', border: '1px solid #333', color: '#aaa', fontSize: '12px' }}>{size}</span>) : null}
                           </div>
                           <div style={{ marginTop: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -327,6 +361,18 @@ function ProductsPage() {
                 Colors (comma separated)
                 <input value={form.colors} onChange={(e) => setForm({ ...form, colors: e.target.value })} style={inputStyle} placeholder="Black, White, Beige" />
               </label>
+              {/* What the buyer will see, as you type it — so a colour word is never a mystery. */}
+              {typedColors.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: -6 }}>
+                  {typedColors.map(name => (
+                    <span key={name} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px', borderRadius: 999, background: '#1c1c1c', border: '1px solid #333', color: '#ddd', fontSize: 12, fontWeight: 700 }}>
+                      <ColourDot name={name} size={14} />
+                      {name}
+                    </span>
+                  ))}
+                  <span style={{ alignSelf: 'center', color: '#666', fontSize: 11 }}>This is how buyers will see them</span>
+                </div>
+              )}
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px', color: '#bbb' }}>
                 Sizes (comma separated)

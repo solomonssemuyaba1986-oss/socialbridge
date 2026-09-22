@@ -237,10 +237,10 @@ function BuyerOrders() {
 
         {error ? (
           <Notice
-            icon={error === 'index' ? '⚙️' : '📡'}
-            title={error === 'index' ? 'One setting is still switched off' : "Couldn't reach your orders"}
-            body={error === 'index'
-              ? 'Firebase needs the orders setting switched on before it can gather all your orders.\nRun this in your terminal once, then tap Try again:\n\nnpm run deploy:indexes'
+            icon={error === 'setup' ? '⚙️' : '📡'}
+            title={error === 'setup' ? 'One setting still needs switching on' : "Couldn't reach your orders"}
+            body={error === 'setup'
+              ? 'Your orders exist — Firebase just refuses to gather them until two settings are switched on. Run these once in your terminal, then tap Try again:\n\nnpm run deploy:rules\nnpm run deploy:indexes'
               : 'Check your connection and try again — your orders are safe.'}
             action={{ label: 'Try again', onClick: reload }}
           />

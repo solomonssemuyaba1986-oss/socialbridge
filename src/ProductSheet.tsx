@@ -3,6 +3,7 @@ import { doc, onSnapshot } from 'firebase/firestore'
 import { db } from './firebase'
 import { green, productImages, type CardProduct } from './productCardUtils'
 import {
+  defaultChoice,
   listVariants,
   resolveSheetAction,
   stockLine,
@@ -12,6 +13,7 @@ import {
   type SheetAction,
   type Variant,
 } from './productSheetUtils'
+import { swatchFor } from './colourSwatch'
 import LikePill from './LikePill'
 import ProductPreview from './ProductPreview'
 import ProductReviews from './ProductReviews'
@@ -62,6 +64,9 @@ type Props = {
 const fieldLabel: CSSProperties = { margin: '0 0 7px', color: '#888', fontSize: '11px', fontWeight: 800, letterSpacing: '0.5px', textTransform: 'uppercase' }
 const pillRow: CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: '8px' }
 const pillStyle = (active: boolean): CSSProperties => ({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '7px',
   padding: '7px 13px',
   borderRadius: '999px',
   background: active ? green : '#1c1c1c',
@@ -88,8 +93,8 @@ function ProductSheet({
   reviewEligibility,
   onWriteReview,
 }: Props) {
-  const [color, setColor] = useState('')
-  const [size, setSize] = useState('')
+  const [colorPicked, setColor] = useState('')
+  const [sizePicked, setSize] = useState('')
   const [imgIndex, setImgIndex] = useState(0)
   const [galleryOpen, setGalleryOpen] = useState(false)
   /** The seller's current copy of this product — null until the first snapshot lands. */
@@ -110,6 +115,12 @@ function ProductSheet({
   const imgs = product ? productImages(product) : []
   const colors = listVariants(product?.colors)
   const sizes = listVariants(product?.sizes)
+  /**
+   * A single option is not a question — it is already chosen. Derived rather than stored, so it is
+   * correct even when the colours arrive with the live document *after* the sheet opens.
+   */
+  const color = colorPicked || defaultChoice(colors)
+  const size = sizePicked || defaultChoice(sizes)
   const picked: Variant = { color, size }
   const ready = variantComplete({ colors, sizes }, picked)
   const prompt = variantPrompt({ colors, sizes }, picked)
@@ -286,11 +297,38 @@ function ProductSheet({
                 Colour {color && <span style={{ color: '#ddd', fontWeight: 600 }}>· {color}</span>}
               </p>
               <div style={pillRow}>
-                {colors.map(c => (
-                  <button key={c} onClick={() => setColor(prev => (prev === c ? '' : c))} style={pillStyle(color === c)}>
-                    {c}
-                  </button>
-                ))}
+                {colors.map(c => {
+                  const swatch = swatchFor(c)
+                  const active = color === c
+                  return (
+                    <button key={c} onClick={() => setColor(prev => (prev === c ? '' : c))} style={pillStyle(active)}>
+                      {/* The word is the seller's; the circle is what the buyer's eye checks. */}
+                      {swatch?.kind === 'solid' && (
+                        <span
+                          aria-hidden="true"
+                          style={{ width: 14, height: 14, borderRadius: '50%', background: swatch.hex, border: swatch.ring ? '1px solid #777' : '1px solid rgba(0,0,0,0.25)', flexShrink: 0 }}
+                        />
+                      )}
+                      {swatch?.kind === 'multi' && (
+                        <span
+                          aria-hidden="true"
+                          style={{ width: 14, height: 14, borderRadius: '50%', background: 'conic-gradient(#d32f2f,#fdd835,#2e7d32,#1976d2,#7b1fa2,#d32f2f)', border: '1px solid rgba(255,255,255,0.35)', flexShrink: 0 }}
+                        />
+                      )}
+                      {!swatch && (
+                        <span
+                          aria-hidden="true"
+                          title="We don't know this colour's shade"
+                          style={{ width: 14, height: 14, borderRadius: '50%', background: '#2a2a2a', border: '1px dashed #666', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#999', flexShrink: 0 }}
+                        >
+                          ?
+                        </span>
+                      )}
+                      {c}
+                      {active && <span aria-hidden="true">✓</span>}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )}
