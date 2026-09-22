@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback, type ChangeEvent } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo, type ChangeEvent } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { collection, query, where, getDocs, addDoc, setDoc, doc } from 'firebase/firestore'
 import { db, auth } from './firebase'
@@ -14,7 +14,7 @@ import { formatCount } from './productCardUtils'
 import { avatarColor, initialOf } from './avatar'
 import ProductSheet from './ProductSheet'
 import { variantLabel, type Variant } from './productSheetUtils'
-import { useSellerStats, getSalesLabel, formatRating, renderStars, getBadgeStatusLabel } from './useSellerStats.ts'
+import { useSellerStats, getSalesLabel, getBadgeStatusLabel } from './useSellerStats.ts'
 import QuickRepliesPanel from './QuickRepliesPanel'
 import FloatingBag from './FloatingBag'
 import StoreProblem from './StoreProblem'
@@ -72,6 +72,9 @@ interface Product {
   colors?: string[]
   sizes?: string[]
   stock?: string | number
+  /** Comment counters — they count every buyer comment, not just the page we loaded. */
+  reviewCount?: number
+  reviewLovedCount?: number
   /** ♥ The universal like tally — the same number for every visitor. */
   likeCount?: number
 }
@@ -348,6 +351,14 @@ function StorePage() {
 const messageDeepLinkId = searchParams.get('messageId')
   const [seller, setSeller] = useState<Seller | null>(null)
   const [products, setProducts] = useState<Product[]>([])
+  /**
+   * Buyer comments across this shop's products — summed from the products already on screen, so
+   * the storefront can say something true without a single extra read.
+   */
+  const shopComments = useMemo(() => products.reduce(
+    (acc, p) => ({ count: acc.count + (p.reviewCount || 0), loved: acc.loved + (p.reviewLovedCount || 0) }),
+    { count: 0, loved: 0 },
+  ), [products])
   const [bagCounts, setBagCounts] = useState<Record<string, BagCountData>>({})
   const [isOwner, setIsOwner] = useState(false)
   const [showForm, setShowForm] = useState(false)
@@ -942,13 +953,14 @@ const handleSignupForAction = async (provider: any) => {
           </div>
         )}
 
-        {/* Rating */}
-        {sellerStats.reviewCount > 0 && (
-          <div style={{ textAlign: 'center' }}>
-            <span style={{ color: '#ffd700', fontSize: '16px', letterSpacing: '2px' }}>{renderStars(sellerStats.avgRating)}</span>
-            <span style={{ color: '#fff', fontWeight: '700', fontSize: '15px', marginLeft: '8px' }}>{formatRating(sellerStats.avgRating)}</span>
-            <span style={{ color: '#888', fontSize: '13px', marginLeft: '4px' }}>({sellerStats.reviewCount} review{sellerStats.reviewCount === 1 ? '' : 's'})</span>
-          </div>
+        {/* Buyer comments on this shop. This used to render a star average from `avgRating` — a
+            field nothing ever wrote, so it could never appear. A star average built on three
+            comments says more about luck than about the shop, so this counts hearts instead, from
+            counters the products actually carry. */}
+        {shopComments.count > 0 && (
+          <p style={{ textAlign: 'center', margin: '0 0 10px', color: green, fontSize: '15px', fontWeight: 800 }}>
+            ♥ {shopComments.loved} of {shopComments.count} loved it
+          </p>
         )}
 
         {/* Stats Row */}

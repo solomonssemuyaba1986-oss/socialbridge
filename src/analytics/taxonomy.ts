@@ -81,6 +81,16 @@ export const EVENT_PROPS = {
   product_sheet_opened: ['productId', 'sellerId', 'surface', 'hasVariants'],
   product_sheet_closed: ['productId', 'surface', 'dwellMs', 'action'],
 
+  // ── Comments on a product (reviews) ──────────────────────────────────────────────────────
+  // Written only after delivery, by a buyer the order itself proves. `reaction` is love|fine|bad,
+  // `tags` are the tapped chips (so the *content* of feedback is countable, not just its volume),
+  // and `edited` means they corrected their own comment — the counters move by the difference.
+  review_posted: ['productId', 'sellerId', 'reaction', 'hasText', 'hasPhoto', 'tagCount', 'edited', 'surface'],
+  // The form itself: opened where, and whether the buyer was even allowed to write (eligibility).
+  review_form_opened: ['productId', 'sellerId', 'surface', 'eligible'],
+  // The comment list being read — `count` is how many comments it had when they looked.
+  review_comments_seen: ['productId', 'count', 'surface'],
+
   // ── Bag (the only "save" we have today) ──────────────────────────────────
   bag_opened: ['size'],
   bag_added: ['productId', 'sellerId', 'price', 'surface', 'bagSize'],

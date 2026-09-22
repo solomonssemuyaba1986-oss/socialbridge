@@ -14,6 +14,8 @@ import {
 } from './productSheetUtils'
 import LikePill from './LikePill'
 import ProductPreview from './ProductPreview'
+import ProductReviews from './ProductReviews'
+import type { Eligibility, Review } from './reviewUtils'
 import { trackEvent } from './analytics'
 
 /**
@@ -47,6 +49,13 @@ type Props = {
   onToggleBag: (variant: Variant) => void
   /** The way back to the whole shop when a buyer wants more than one product. */
   onOpenStore?: () => void
+  /**
+   * Who may write a comment here, when the host knows (the orders page does; Browse usually
+   * can't without an extra query per product). Omit it and the comments are read-only.
+   */
+  reviewEligibility?: Eligibility
+  /** Opens the review form. Omit it and the comments section is read-only. */
+  onWriteReview?: (existing: Review | null) => void
 }
 
 /** Shared looks for the small, dense controls in the sheet. */
@@ -76,6 +85,8 @@ function ProductSheet({
   onMessage,
   onToggleBag,
   onOpenStore,
+  reviewEligibility,
+  onWriteReview,
 }: Props) {
   const [color, setColor] = useState('')
   const [size, setSize] = useState('')
@@ -324,6 +335,15 @@ function ProductSheet({
               This is your product
             </div>
           )}
+          {/* What buyers said — right where someone is deciding, and after delivery only. */}
+          <ProductReviews
+            sellerId={product.sellerId}
+            productId={product.id}
+            aggregate={{ count: product.reviewCount, scoreSum: product.reviewScoreSum, loved: product.reviewLovedCount }}
+            eligibility={reviewEligibility}
+            onWrite={onWriteReview}
+            surface="sheet"
+          />
         </div>
 
         {/* The sticky bar: the whole point of the sheet. Message and bag side by side, Buy

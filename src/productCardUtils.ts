@@ -24,6 +24,13 @@ export interface CardProduct {
   sizes?: string[]
   /** Free text more often than not: "3", "in stock", "". `stockLine` decides what's worth saying. */
   stock?: string | number
+  /**
+   * The comment counters on the product document. They count *every* comment (not just the page
+   * the sheet loaded), which is why the header can say "19 of 23" truthfully.
+   */
+  reviewCount?: number
+  reviewScoreSum?: number
+  reviewLovedCount?: number
   /** ♥ The universal like tally — lives on the product doc, the same for every visitor. */
   likeCount?: number
 }

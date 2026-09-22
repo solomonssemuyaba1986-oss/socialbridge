@@ -17,6 +17,9 @@ import {
 import { green, toMillis } from './productCardUtils'
 import { useBag } from './useBag'
 import { variantLabel } from './productSheetUtils'
+import ReviewForm from './ReviewForm'
+import { getMyReview } from './useProductReviews'
+import { canReview, type Review } from './reviewUtils'
 import { useProductLikes } from './useProductLikes'
 import LikePill from './LikePill'
 import LovePrompt from './LovePrompt'
@@ -93,7 +96,36 @@ function BuyerOrders() {
    * dots they see right now describe their previous visit instead of vanishing under them.
    */
   const [seenAt, setSeenAt] = useState(0)
+  /** The order whose comment form is open, and the comment they already wrote (edit mode). */
+  const [reviewTarget, setReviewTarget] = useState<{ order: BuyerOrder; existing: Review | null } | null>(null)
+  /** Order ids we just commented on, so the row says so without another read. */
+  const [commented, setCommented] = useState<string[]>([])
+  const [reviewBusy, setReviewBusy] = useState('')
   const uid = auth.currentUser?.uid || ''
+
+  /**
+   * Opening the form: the order's own status decides whether they may write at all (delivered
+   * only), and one read finds a comment they already made so it opens ready to edit.
+   */
+  const openReview = async (order: BuyerOrder) => {
+    if (!order.productId || !order.sellerId || reviewBusy) return
+    setReviewBusy(order.id)
+    try {
+      const existing = await getMyReview(order.sellerId, order.productId)
+      const gate = canReview({
+        orderStatus: order.status,
+        alreadyReviewed: Boolean(existing),
+        isSeller: order.sellerId === uid,
+      })
+      if (!gate.ok && !existing) {
+        alert(gate.reason)
+        return
+      }
+      setReviewTarget({ order, existing })
+    } finally {
+      setReviewBusy('')
+    }
+  }
 
   useEffect(() => {
     if (!uid) return
@@ -237,9 +269,34 @@ function BuyerOrders() {
             onToggleLove={toggleLove}
             onChat={() => navigate('/inbox')}
             onLoadMore={loadMore}
+            onReview={(order) => void openReview(order)}
+            reviewBusyId={reviewBusy}
+            reviewedIds={commented}
           />
         )}
       </div>
+
+      {/* "How was it?" — opened from a delivered order, and nowhere else. */}
+      {reviewTarget && reviewTarget.order.productId && (
+        <ReviewForm
+          key={reviewTarget.order.id}
+          sellerId={reviewTarget.order.sellerId}
+          productId={reviewTarget.order.productId}
+          orderId={reviewTarget.order.id}
+          orderRef={reviewTarget.order.orderId}
+          productName={reviewTarget.order.productName}
+          businessName={shops.get(reviewTarget.order.sellerId)?.name}
+          productImage={reviewTarget.order.productImage}
+          variant={variantLabel(reviewTarget.order.color, reviewTarget.order.size)}
+          existing={reviewTarget.existing}
+          surface="orders"
+          onClose={() => setReviewTarget(null)}
+          onPosted={() => {
+            const id = reviewTarget.order.id
+            setCommented(prev => (prev.includes(id) ? prev : [...prev, id]))
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -260,6 +317,12 @@ interface OrdersBodyProps {
   onToggleLove: (order: BuyerOrder) => void
   onChat: () => void
   onLoadMore: () => void
+  /** Opens the comment form for a delivered order. */
+  onReview: (order: BuyerOrder) => void
+  /** The order whose comment form is being prepared, if any. */
+  reviewBusyId: string
+  /** Orders commented on in this session — so the row can say so without another read. */
+  reviewedIds: string[]
 }
 
 /** The chips + the list. Split out so the page above stays readable. */
@@ -278,6 +341,9 @@ function OrdersBody({
   onToggleLove,
   onChat,
   onLoadMore,
+  onReview,
+  reviewBusyId,
+  reviewedIds,
 }: OrdersBodyProps) {
   return (
     <>
@@ -325,6 +391,9 @@ function OrdersBody({
                 onBuyAgain={() => onBuyAgain(order)}
                 onToggleLove={() => onToggleLove(order)}
                 onChat={onChat}
+                onReview={() => onReview(order)}
+                reviewBusy={reviewBusyId === order.id}
+                reviewed={reviewedIds.includes(order.id)}
               />
             )
           })}
@@ -359,6 +428,12 @@ interface OrderRowProps {
   onBuyAgain: () => void
   onToggleLove: () => void
   onChat: () => void
+  /** Opens the comment form — only ever shown on a delivered order. */
+  onReview: () => void
+  /** A read is in flight for this row (finding a comment they may have already written). */
+  reviewBusy?: boolean
+  /** They just commented on this order in this session. */
+  reviewed?: boolean
 }
 
 /** One order: what it was, what it cost, which shop, and where it has got to. */
@@ -375,6 +450,9 @@ function OrderRow({
   onBuyAgain,
   onToggleLove,
   onChat,
+  onReview,
+  reviewBusy,
+  reviewed,
 }: OrderRowProps) {
   const status = buyerStatusLabel(order.status)
   const tone = TONES[status.tone]
@@ -434,6 +512,18 @@ function OrderRow({
             orderId={order.orderId || order.id}
           />
         </div>
+      )}
+
+      {/* Delivered → they get to say what it was like. Nothing at all before that, because
+          before delivery there is nothing honest to say. */}
+      {delivered && order.productId && (
+        <button
+          onClick={onReview}
+          disabled={reviewBusy}
+          style={{ width: '100%', marginTop: 10, padding: '10px', background: reviewed ? '#16240c' : '#222', color: reviewed ? green : '#fff', border: `1px solid ${reviewed ? green : '#333'}`, borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: reviewBusy ? 'wait' : 'pointer' }}
+        >
+          {reviewBusy ? 'Checking…' : reviewed ? '✓ Your comment' : '💬 Leave a comment'}
+        </button>
       )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>

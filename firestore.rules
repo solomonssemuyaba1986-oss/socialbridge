@@ -27,6 +27,26 @@ service cloud.firestore {
               request.resource.data.likeCount == resource.data.get('likeCount', 0) + 1
               || request.resource.data.likeCount == resource.data.get('likeCount', 0) - 1
             )
+          )
+          || (
+            // 🗣️ The comment counters. Only a buyer (never the seller) moves them, only by what one
+            // comment can move, and only in the same write as their own comment —
+            // `existsAfter` is the proof that the comment is landing alongside, so the scoreboard
+            // can never drift away from the comments.
+            request.auth != null
+            && request.auth.uid != sellerId
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['reviewCount', 'reviewScoreSum', 'reviewLovedCount'])
+            && existsAfter(/databases/$(database)/documents/sellers/$(sellerId)/products/$(productId)/reviews/$(request.auth.uid))
+            && request.resource.data.reviewCount is int
+            && request.resource.data.reviewScoreSum is int
+            && request.resource.data.reviewLovedCount is int
+            && request.resource.data.reviewCount - resource.data.get('reviewCount', 0) >= 0
+            && request.resource.data.reviewCount - resource.data.get('reviewCount', 0) <= 1
+            && request.resource.data.reviewScoreSum - resource.data.get('reviewScoreSum', 0) >= -5
+            && request.resource.data.reviewScoreSum - resource.data.get('reviewScoreSum', 0) <= 5
+            && request.resource.data.reviewLovedCount - resource.data.get('reviewLovedCount', 0) >= -1
+            && request.resource.data.reviewLovedCount - resource.data.get('reviewLovedCount', 0) <= 1
           );
 
         // ♥ One vote per account, world-wide: the document ID *is* the voter's uid, so a
@@ -41,6 +61,30 @@ service cloud.firestore {
           // A vote is never edited — no flip-flopping, no rewriting who voted.
           allow update: if false;
           allow delete: if request.auth != null && request.auth.uid == voterId;
+        }
+
+        // ── 🗣️ What buyers said ──────────────────────────────────────────────────────────────
+        // Public to read: that is the whole point — what people who actually received it said.
+        //
+        // Only the buyer may write, the document ID *is* their uid (so one comment each, and a
+        // second one is structurally impossible), and the write is authorised by **their own
+        // delivered order** — looked up here, in the rules, where it cannot be faked. That is what
+        // makes "✓ Bought it" a fact instead of a checkbox the buyer ticked.
+        match /reviews/{buyerUid} {
+          allow read: if true;
+          allow create, update: if request.auth != null
+            && request.auth.uid == buyerUid
+            && buyerUid != sellerId
+            && request.resource.data.buyerUid == request.auth.uid
+            && request.resource.data.verified == true
+            && request.resource.data.orderId is string
+            && request.resource.data.reaction in ['love', 'fine', 'bad']
+            && request.resource.data.text.size() <= 400
+            && get(/databases/$(database)/documents/sellers/$(sellerId)/orders/$(request.resource.data.orderId)).data.buyerUid == request.auth.uid
+            && get(/databases/$(database)/documents/sellers/$(sellerId)/orders/$(request.resource.data.orderId)).data.status == 'fulfilled';
+          // A buyer may take their own comment back. The seller can never touch it — not to edit
+          // it, not to delete it — which is the only way a comment stays worth reading.
+          allow delete: if request.auth != null && request.auth.uid == buyerUid;
         }
       }
 

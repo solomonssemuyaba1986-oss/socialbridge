@@ -91,8 +91,15 @@ Written by `SetupStore.tsx:434-466` (create), `EditStore.tsx:234-258` (edit), `D
 
 ### 2.3 Subcollections under `sellers/{uid}/`
 
-**`products/{id}`** — `name`, `price` *(string)*, `description`, `imageUrl`, `images[]`, `colors[]`, `sizes[]`, `stock`, `published`, `outOfStock`, `category`, `subCategory`, `orderCount`, `salesCount`, `likeCount`, `createdAt`, `updatedAt`.
+**`products/{id}`** — `name`, `price` *(string)*, `description`, `imageUrl`, `images[]`, `colors[]`, `sizes[]`, `stock`, `published`, `outOfStock`, `category`, `subCategory`, `orderCount`, `salesCount`, `likeCount`, `reviewCount`, `reviewScoreSum`, `reviewLovedCount`, `createdAt`, `updatedAt`.
 ⚠️ Inconsistently populated: `category`/`subCategory` only from `ProductsPage` + `StorePage` quick-add (`StorePage.tsx:570-572`); `images[]`/`colors`/`sizes`/`stock` only from `ProductsPage` (`ProductsPage.tsx:174-186`); `BulkUpload.tsx:98-104` writes just `name`, `price`, `description: ''`, `imageUrl`, `createdAt`.
+
+**`products/{id}/reviews/{buyerUid}`** — a buyer's comment, written **only after delivery**:
+`buyerUid`, `reaction` (`love` / `fine` / `bad`), `score` (5 / 3 / 1 — kept so a star average stays possible later), `tags[]` (the tapped chips: "Fast delivery", "Good quality", …), `text` (≤ 400 chars, line breaks kept), `photoUrl` *(Cloudinary)*, `orderId` (the **document id** of the delivered order — the rules look it up), `orderRef` (`RT-XXXXXX`, display only), `variant`, `buyerName` (**shortened to "Aisha N." — a full name is never published**), `verified: true`, `createdAt`, `editedAt` *(24-hour edit window; after that the comment is final)*.
+- The document ID **is** the buyer's uid, so one comment per buyer per product is structurally the only possibility.
+- **It is public.** This is the first buyer-written text on rachett: anyone can read it, and it stays readable until the buyer deletes it (`firestore.rules` — public read, buyer-only write, and the seller can never edit or delete one).
+- What authorises it is the buyer's **own delivered order**: the rule reads that order (`get()`), so "✓ Bought it" is a fact rather than a checkbox. That read costs one document read per post attempt.
+- The counters live on the product (`reviewCount`, `reviewScoreSum`, `reviewLovedCount`) and a buyer may move them by exactly what their one comment can move — only in the same write as the comment itself (`existsAfter`).
 
 **`orders/{id}`** — see §3.4.
 
