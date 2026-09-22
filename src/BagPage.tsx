@@ -17,6 +17,8 @@ import SignInPrompt from './SignInPrompt'
 // One number format for the whole app: ✓ bought (and ♥ likes) abbreviate to K/M.
 import { formatCount } from './productCardUtils'
 import { variantLabel } from './productSheetUtils'
+import { useBuyerName } from './useBuyerName'
+import { nameLabel } from './buyerName'
 
 const green = '#adff2f'
 const SUPPORT_WHATSAPP = (import.meta.env.VITE_SUPPORT_WHATSAPP || '256703174968').trim()
@@ -42,6 +44,9 @@ function BagPage() {
   const [messageTarget, setMessageTarget] = useState<BagTarget | null>(null)
   const [orderSuccess, setOrderSuccess] = useState(false)
   const [buyerName, setBuyerName] = useState('')
+  /** What sellers call this buyer — the order form pre-fills from it and remembers what they keep. */
+  const myName = useBuyerName()
+  const shownName = buyerName.trim() || myName.name
   const [orderQty, setOrderQty] = useState('1')
   const [deliveryArea, setDeliveryArea] = useState('')
   const [orderMessage, setOrderMessage] = useState('')
@@ -268,13 +273,15 @@ function BagPage() {
       requireSignIn(navigate, { action: 'order', returnTo: '/bag', productId: orderTarget?.id })
       return
     }
-    if (!buyerName.trim() || !deliveryArea.trim() || !orderTarget) return
+    if (!shownName.trim() || !deliveryArea.trim() || !orderTarget) return
+    // Checkout is where a buyer tells us what to call them — remember it once, quietly.
+    void myName.rememberIfNew(shownName, 'checkout')
     const sourcePlatform = detectSource()
     // The chosen colour/size lives on the bag line, not on the live product.
     const bagItem = items.find(i => i.productId === orderTarget.id)
     try {
       const { orderId } = await createBuyerOrder(orderTarget.sellerId, {
-        buyerName: buyerName.trim(),
+        buyerName: shownName.trim(),
         buyerUid: auth.currentUser.uid,
         productName: orderTarget.name,
         productPrice: orderTarget.price,
@@ -294,7 +301,7 @@ function BagPage() {
         sellerId: orderTarget.sellerId,
         buyerId: auth.currentUser.uid,
         sellerName: orderTarget.businessName,
-        buyerName: buyerName.trim(),
+        buyerName: shownName.trim(),
         orderId,
         productId: orderTarget.id,
         productName: orderTarget.name,
@@ -371,7 +378,7 @@ function BagPage() {
         buyerUid,
         messageText.trim() || (guestImageUrl ? '📷 Photo' : '🛍️ Product'),
         messageTarget.businessName || 'Seller',
-        auth.currentUser.displayName || 'Buyer',
+        auth.currentUser.displayName || myName.label,
         {
           ...(guestImageUrl ? { imageUrl: guestImageUrl, type: 'image' } : {}),
           productId: messageTarget.id,
@@ -548,8 +555,11 @@ function BagPage() {
                 <p style={{ margin: '0 0 24px', color: green, fontSize: '14px', fontWeight: '700', textAlign: 'left' }}>
                   UGX {orderTarget.price} each
                 </p>
-                <input placeholder="Your name" value={buyerName} onChange={e => setBuyerName(e.target.value)}
-                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+                <input placeholder="Your name" value={shownName} onChange={e => setBuyerName(e.target.value)}
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '6px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+                <p style={{ margin: '0 0 12px', color: '#777', fontSize: 12, textAlign: 'left' }}>
+                  Sellers see you as <strong style={{ color: green }}>{nameLabel(shownName)}</strong>
+                </p>
                 <input placeholder="Quantity" value={orderQty} onChange={e => setOrderQty(e.target.value)} type="number" min="1"
                   style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
                 <input placeholder="Delivery area e.g. Nakawa, Kampala" value={deliveryArea} onChange={e => setDeliveryArea(e.target.value)}

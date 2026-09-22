@@ -14,6 +14,8 @@ import LoadingScreen from './LoadingScreen'
 import { avatarColor, initialOf } from './avatar'
 import ProductSheet from './ProductSheet'
 import { variantLabel, type Variant } from './productSheetUtils'
+import { useBuyerName } from './useBuyerName'
+import { nameLabel } from './buyerName'
 import { useDraft } from './useDraft'
 import { uploadImageToCloudinary } from './uploadImage'
 import { getConversationId, sendConversationMessage } from './useConversation'
@@ -140,6 +142,9 @@ function BrowsePage() {
   const [buyerName, setBuyerName] = useState('')
   const [quantity, setQuantity] = useState('1')
   const [deliveryArea, setDeliveryArea] = useState('')
+  /** What sellers call this buyer — the order form pre-fills from it, and remembers what they keep. */
+  const myName = useBuyerName()
+  const shownName = buyerName.trim() || myName.name
   /** The details sheet: which product is open, and the colour/size picked in it. */
   const [detailsProduct, setDetailsProduct] = useState<Product | null>(null)
   const [orderVariant, setOrderVariant] = useState<Variant>({})
@@ -436,11 +441,13 @@ function BrowsePage() {
       alert(notify.messageSelfBlock)
       return
     }
-    if (!buyerName.trim() || !deliveryArea.trim() || !orderProduct) return
+    if (!shownName.trim() || !deliveryArea.trim() || !orderProduct) return
+    // Checkout is where a buyer tells us what to call them — remember it once, silently.
+    void myName.rememberIfNew(shownName, 'checkout')
     const sourcePlatform = detectSource()
     try {
       const { orderId } = await createBuyerOrder(orderProduct.sellerId, {
-        buyerName: buyerName.trim(),
+        buyerName: shownName.trim(),
         buyerUid: auth.currentUser.uid,
         productName: orderProduct.name,
         productPrice: orderProduct.price,
@@ -461,7 +468,7 @@ function BrowsePage() {
         sellerId: orderProduct.sellerId,
         buyerId: auth.currentUser.uid,
         sellerName: orderProduct.businessName,
-        buyerName: buyerName.trim(),
+        buyerName: shownName.trim(),
         orderId,
         productId: orderProduct.id,
         productName: orderProduct.name,
@@ -521,7 +528,7 @@ function BrowsePage() {
         buyerUid,
         messageText.trim() || (guestImageUrl ? '📷 Photo' : '🛍️ Product'),
         messageProduct.businessName || 'Seller',
-        auth.currentUser.displayName || 'Buyer',
+        shownName || myName.label,
         {
           ...(guestImageUrl ? { imageUrl: guestImageUrl, type: 'image' } : {}),
           productId: messageProduct.id,
@@ -1353,8 +1360,11 @@ function BrowsePage() {
                     <span style={{ color: '#ddd' }}> · {variantLabel(orderVariant.color, orderVariant.size)}</span>
                   )}
                 </p>
-                <input placeholder="Your name" value={buyerName} onChange={e => setBuyerName(e.target.value)}
-                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+                <input placeholder="Your name" value={shownName} onChange={e => setBuyerName(e.target.value)}
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '6px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+                <p style={{ margin: '0 0 12px', color: '#777', fontSize: 12, textAlign: 'left' }}>
+                  Sellers see you as <strong style={{ color: green }}>{nameLabel(shownName)}</strong>
+                </p>
                 <input placeholder="Quantity" value={quantity} onChange={e => setQuantity(e.target.value)} type="number" min="1"
                   style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
                 <input placeholder="Delivery area e.g. Nakawa, Kampala" value={deliveryArea} onChange={e => setDeliveryArea(e.target.value)}

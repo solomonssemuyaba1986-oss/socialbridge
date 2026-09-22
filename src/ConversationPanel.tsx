@@ -8,10 +8,15 @@ import { useDraft } from './useDraft'
 import { uploadImageToCloudinary } from './uploadImage'
 import { trackEvent } from './analytics'
 import { toMillis } from './productCardUtils'
+import { useBuyerName } from './useBuyerName'
+import { nameLabel } from './buyerName'
 import ProductPreview from './ProductPreview'
 import LovePrompt from './LovePrompt'
 
 const green = '#adff2f'
+
+/** Consecutive photos from one sender inside this window collapse into a single cluster. */
+const PHOTO_CLUSTER_WINDOW_MS = 3 * 60 * 1000
 
 type Props = {
   sellerId: string
@@ -47,6 +52,9 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [showOrderModal, setShowOrderModal] = useState(false)
   const [buyerNameOrder, setBuyerNameOrder] = useState('')
+  /** The buyer's own name, for the order form they fill in from inside a chat. */
+  const myName = useBuyerName()
+  const shownBuyerName = buyerNameOrder.trim() || myName.name
   const [quantity, setQuantity] = useState('1')
   const [deliveryArea, setDeliveryArea] = useState('')
   const [orderMessage, setOrderMessage] = useState('')
@@ -74,10 +82,12 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
   }, [feedbackVisible])
 
   const handleBuyNow = async () => {
-    if (!buyerNameOrder.trim()) {
+    if (!shownBuyerName.trim()) {
       showFeedback(notify.orderNameRequired, 'error')
       return
     }
+    // The name they type here becomes the one every seller calls them — once, quietly.
+    void myName.rememberIfNew(shownBuyerName, 'checkout')
     if (!deliveryArea.trim()) {
       showFeedback(notify.orderDeliveryRequired, 'error')
       return
@@ -89,7 +99,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
 
     try {
       const { orderId } = await createBuyerOrder(sellerId, {
-        buyerName: buyerNameOrder,
+        buyerName: shownBuyerName.trim(),
         buyerUid: buyerId,
         productName,
         productPrice,
@@ -116,7 +126,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
         sellerId,
         buyerId,
         sellerName: sellerName || 'Seller',
-        buyerName: buyerNameOrder,
+        buyerName: shownBuyerName.trim(),
         orderId: orderId || '',
         productId,
         productName: productName || '',
@@ -156,8 +166,6 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
     // Always snap straight to the latest message — no scroll animation
     el.scrollTop = el.scrollHeight
   }, [messages, loading])
-
-  const PHOTO_CLUSTER_WINDOW_MS = 3 * 60 * 1000
 
   // Consecutive photo-only messages (same sender, within the window) become one compact cluster.
   const clusters = useMemo(() => {
@@ -276,7 +284,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       <div style={{ borderBottom: '1px solid #222', paddingBottom: 12 }}>
-        <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>{buyerName || 'Buyer'}</div>
+        <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>{nameLabel(buyerName)}</div>
         <div style={{ fontSize: 13, color: '#888', marginTop: 4 }}>Chat with {buyerName || 'the buyer'}</div>
         {productName && productImage && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '12px', padding: '10px', background: '#111', borderRadius: '10px', border: '1px solid #222' }}>
@@ -546,8 +554,11 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
                 <p style={{ margin: '0 0 24px', color: green, fontSize: '14px', fontWeight: '700', textAlign: 'left' }}>
                   UGX {productPrice} each
                 </p>
-                <input placeholder="Your name" value={buyerNameOrder} onChange={e => setBuyerNameOrder(e.target.value)}
-                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+                <input placeholder="Your name" value={shownBuyerName} onChange={e => setBuyerNameOrder(e.target.value)}
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '6px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+                <p style={{ margin: '0 0 12px', color: '#777', fontSize: 12, textAlign: 'left' }}>
+                  Sellers see you as <strong style={{ color: green }}>{nameLabel(shownBuyerName)}</strong>
+                </p>
                 <input placeholder="Quantity" value={quantity} onChange={e => setQuantity(e.target.value)} type="number" min="1"
                   style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '24px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
                 <input placeholder="Delivery area e.g. Nakawa, Kampala" value={deliveryArea} onChange={e => setDeliveryArea(e.target.value)}

@@ -10,6 +10,8 @@ import { useDraft } from './useDraft'
 import { uploadImageToCloudinary } from './uploadImage'
 import { getConversationId, sendConversationMessage } from './useConversation'
 import { notify } from './notifications'
+import { useBuyerName } from './useBuyerName'
+import { nameLabel } from './buyerName'
 import { detectSource } from './tracking'
 import { trackEvent } from './analytics'
 import { requireSignIn } from './signInGate'
@@ -45,10 +47,17 @@ export default function ProductActions({
   surface = 'nearby',
 }: Props) {
   const navigate = useNavigate()
+  /** What sellers call this buyer — pre-filled at checkout, remembered once they use it. */
+  const myName = useBuyerName()
   const [buyerName, setBuyerName] = useState('')
   const [quantity, setQuantity] = useState('1')
   const [deliveryArea, setDeliveryArea] = useState('')
   const [orderMessage, setOrderMessage] = useState('')
+  /**
+   * The name field starts pre-filled with what they chose (or what we suggest from their account),
+   * but their typing always wins — no effect, no flicker.
+   */
+  const shownName = buyerName.trim() || myName.name
   const [orderSuccess, setOrderSuccess] = useState(false)
   /** What to tell the buyer after a guest order: the ref, their phone, which channel we used. */
   const [orderResult, setOrderResult] = useState<{
@@ -120,11 +129,13 @@ export default function ProductActions({
       alert(notify.messageSelfBlock)
       return
     }
-    if (!buyerName.trim() || !deliveryArea.trim() || !orderProduct) return
+    if (!shownName.trim() || !deliveryArea.trim() || !orderProduct) return
+    // The name they just confirmed at checkout becomes what every seller calls them, once.
+    void myName.rememberIfNew(shownName, 'checkout')
     const sourcePlatform = detectSource()
     try {
       const { orderId } = await createBuyerOrder(orderProduct.sellerId, {
-        buyerName: buyerName.trim(),
+        buyerName: shownName.trim(),
         buyerUid: auth.currentUser.uid,
         productName: orderProduct.name,
         productPrice: orderProduct.price,
@@ -144,7 +155,7 @@ export default function ProductActions({
         sellerId: orderProduct.sellerId,
         buyerId: auth.currentUser.uid,
         sellerName: orderProduct.businessName,
-        buyerName: buyerName.trim(),
+        buyerName: shownName.trim(),
         orderId,
         productId: orderProduct.id,
         productName: orderProduct.name,
@@ -204,7 +215,7 @@ export default function ProductActions({
         buyerUid,
         messageText.trim() || (photoUrl ? '📷 Photo' : '🛍️ Product'),
         messageProduct.businessName || 'Seller',
-        auth.currentUser.displayName || 'Buyer',
+        shownName || myName.label,
         {
           ...(photoUrl ? { imageUrl: photoUrl, type: 'image' } : {}),
           productId: messageProduct.id,
@@ -290,8 +301,12 @@ export default function ProductActions({
                   <img src={orderProduct.imageUrl} alt={orderProduct.name}
                     style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '10px', marginBottom: '16px' }} />
                 )}
-                <input placeholder="Your name" value={buyerName} onChange={e => setBuyerName(e.target.value)}
-                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+                <input placeholder="Your name" value={shownName} onChange={e => setBuyerName(e.target.value)}
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '6px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
+                <p style={{ margin: '0 0 12px', color: '#777', fontSize: 12, textAlign: 'left' }}>
+                  Sellers see you as <strong style={{ color: green }}>{nameLabel(shownName)}</strong>
+                  {myName.confirmed ? '' : ' — change it if you like, we\'ll remember it.'}
+                </p>
                 <input placeholder="Quantity" value={quantity} onChange={e => setQuantity(e.target.value)} type="number" min="1"
                   style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
                 <input placeholder="Delivery area e.g. Nakawa, Kampala" value={deliveryArea} onChange={e => setDeliveryArea(e.target.value)}

@@ -79,6 +79,9 @@ the page needs it.
 | `signup_completed` | method, role | ⏳ |
 | `signout` | role | ⏳ |
 | `role_selected` | role | ⏳ |
+| `buyer_name_prompt_shown` | hasSuggestion, surface | ✅ (the one-time name ask — Inbox / checkout / comment form) |
+| `buyer_name_saved` | source, wasSuggestion, surface | ✅ (`source` = google · email · self) |
+| `buyer_name_skipped` | surface | ✅ (tapped "Later" — asked once, never again) |
 | `store_created` | sellerId, slug, country, hasLogo, logoSource | ✅ |
 | `phone_verification_sent` | country, method | ✅ |
 | `phone_verified` | country, method | ✅ |

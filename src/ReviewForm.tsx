@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { auth } from './firebase'
 import { uploadImageToCloudinary } from './uploadImage'
 import { postReview } from './useProductReviews'
 import {
@@ -15,6 +14,8 @@ import {
 } from './reviewUtils'
 import { trackEvent } from './analytics'
 import { green } from './productCardUtils'
+import { useBuyerName } from './useBuyerName'
+import NameStrip from './NameStrip'
 
 /**
  * "How was it?" — the whole review form, three taps.
@@ -69,6 +70,10 @@ function ReviewForm({
   const [posting, setPosting] = useState(false)
   const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement | null>(null)
+  /** This comment is public, so it is worth showing who it will be attributed to — and letting
+   *  them change it right here, before they publish rather than after. */
+  const myName = useBuyerName()
+  const [editingName, setEditingName] = useState(false)
 
   const editing = Boolean(existing) && canEdit(existing?.createdAt)
   const ready = canPost({ reaction, orderId, text })
@@ -114,7 +119,7 @@ function ReviewForm({
         text,
         photoUrl: photoUrl || undefined,
         variant,
-        buyerName: auth.currentUser?.displayName || '',
+        buyerName: myName.name || myName.suggestion.name,
         surface,
       })
       onPosted?.()
@@ -242,6 +247,17 @@ function ReviewForm({
         </div>
 
         <div style={{ padding: '12px 16px 16px', borderTop: '1px solid #222', flexShrink: 0 }}>
+          {editingName ? (
+            <NameStrip buyerName={myName} surface="review" forceOpen />
+          ) : (
+            <p style={{ margin: '0 0 10px', color: '#777', fontSize: 12, textAlign: 'center' }}>
+              You'll appear as <strong style={{ color: green }}>{myName.label}</strong>{' '}
+              <button onClick={() => setEditingName(true)}
+                style={{ background: 'none', border: 'none', padding: 0, color: '#aaa', fontSize: 12, textDecoration: 'underline', cursor: 'pointer' }}>
+                change
+              </button>
+            </p>
+          )}
           <button onClick={handlePost} disabled={posting || uploading || !ready}
             style={{ width: '100%', padding: '14px', background: posting || uploading || !ready ? '#242424' : green, color: posting || uploading || !ready ? '#777' : '#000', border: 'none', borderRadius: '12px', fontWeight: 800, fontSize: '15px', cursor: posting || uploading || !ready ? 'not-allowed' : 'pointer' }}>
             {posting ? 'Posting…' : reaction ? `Post — ${reactionEmoji(reaction)} ${reactionLabel(reaction)}` : 'Tap a reaction, then post'}

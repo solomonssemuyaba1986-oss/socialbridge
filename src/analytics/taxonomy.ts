@@ -29,6 +29,13 @@ export const EVENT_PROPS = {
   signup_completed: ['method', 'role'],
   signout: ['role'],
   role_selected: ['role'],
+
+  // ── What we call a buyer ─────────────────────────────────────────────────────────────────
+  // The one-time ask: where it appeared, whether we had a suggestion worth accepting, and where
+  // the name they kept came from — the social account, the email, or their own typing.
+  buyer_name_prompt_shown: ['hasSuggestion', 'surface'],
+  buyer_name_saved: ['source', 'wasSuggestion', 'surface'],
+  buyer_name_skipped: ['surface'],
   store_created: ['sellerId', 'slug', 'country', 'hasLogo', 'logoSource'],
   phone_verification_sent: ['country', 'method'],
   phone_verified: ['country', 'method'],

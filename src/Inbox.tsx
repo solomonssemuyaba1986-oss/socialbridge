@@ -5,6 +5,9 @@ import { db, auth } from './firebase'
 import { useSellerMessages, isUnreadMessage, type SellerMessage } from './useSellerMessages'
 import { useSellerConversations, type SellerConversation } from './useSellerConversations'
 import { useBuyerConversations, type BuyerConversation } from './useBuyerConversations'
+import { useBuyerName } from './useBuyerName'
+import NameStrip from './NameStrip'
+import { nameLabel } from './buyerName'
 import ConversationPanel from './ConversationPanel'
 import DraftResumeSheet from './DraftResumeSheet'
 import { getConversationId, markConversationRead } from './useConversation'
@@ -97,6 +100,9 @@ function Inbox() {
   const { conversations: sellerConversations, unreadCount: unreadSellerConversations, loading: conversationsLoading } = useSellerConversations()
   const { conversations: buyerConversations, unreadCount: unreadBuyerConversations, loading: buyerConversationsLoading } = useBuyerConversations()
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  /** What sellers call this person — asked once, here, where a name is about to be seen. */
+  const buyerName = useBuyerName()
+  const [editingName, setEditingName] = useState(false)
   /** Drafts this person has typed but not sent — device + account. */
   const { drafts: openDrafts, discardDraft } = useAllDrafts()
   const [filter, setFilter] = useState<'all' | 'unread'>('all')
@@ -163,8 +169,8 @@ function Inbox() {
       const dt = getDraft(`convo_${c.id}`)
       list.push({
         key: `seller-${c.id}`,
-        name: c.buyerName || 'Buyer',
-        avatarText: (c.buyerName || 'B').charAt(0).toUpperCase(),
+        name: nameLabel(c.buyerName),
+        avatarText: nameLabel(c.buyerName).charAt(0).toUpperCase(),
         avatarUrl: logoMap[c.buyerId],
         preview: dt || c.lastMessage || '',
         timeValue: c.lastMessageAt?.toDate?.()?.getTime() || 0,
@@ -237,7 +243,7 @@ function Inbox() {
       if (knownConversationIds.has(conversationId)) return
       list.push({
         key: `draft-${conversationId}`,
-        name: d.counterpartName || (iAmBuyer ? 'Seller' : 'Buyer'),
+        name: d.counterpartName || (iAmBuyer ? 'Seller' : nameLabel(d.counterpartName)),
         avatarText: (d.counterpartName || 'D').charAt(0).toUpperCase(),
         avatarUrl: iAmBuyer ? logoMap[sellerId] : undefined,
         preview: d.text,
@@ -378,7 +384,7 @@ function Inbox() {
         sellerId: d.sellerId,
         buyerId: d.buyerId,
         sellerName: iAmBuyer ? d.counterpartName : (auth.currentUser?.displayName || 'You'),
-        buyerName: iAmBuyer ? (auth.currentUser?.displayName || 'Buyer') : d.counterpartName,
+        buyerName: iAmBuyer ? (auth.currentUser?.displayName || nameLabel('')) : d.counterpartName,
         productId: d.productId,
         productName: d.productName,
         productPrice: d.productPrice,
@@ -399,9 +405,22 @@ function Inbox() {
             </div>
           )}
         </div>
+        {/* The permanent home for "what we call you": a seller sees this name, so it must be
+            changeable from somewhere that isn't a one-time prompt. */}
+        {buyerName.uid && (
+          <button onClick={() => setEditingName(v => !v)}
+            style={{ background: 'transparent', border: 'none', color: editingName ? green : '#888', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: 0, textAlign: 'right' }}>
+            You appear as {buyerName.label} ✏️
+          </button>
+        )}
       </div>
 
       <div style={{ maxWidth: '640px', margin: '0 auto', padding: '16px' }}>
+        {editingName ? (
+          <NameStrip buyerName={buyerName} surface="inbox-header" forceOpen />
+        ) : (
+          <NameStrip buyerName={buyerName} surface="inbox" />
+        )}
         {/* Tabs + quick shortcuts — horizontally scrollable like the Browse categories */}
         <div className="rt-filters" style={{ display: 'flex', gap: '8px', marginBottom: '16px', overflowX: 'auto' }}>
           {(['all', 'unread'] as const).map(t => (
