@@ -346,7 +346,7 @@ function StorePage() {
   const unusableSlug = !slugParam || ['undefined', 'null'].includes(slugParam.toLowerCase())
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const { count: bagCount, addToBag, removeFromBag, isInBag, updateBagVariant } = useBag()
+  const { count: bagCount, addToBag, removeFromBag, isInBag, updateBagVariant, setQuantity: setBagQuantity } = useBag()
   // ♥ Universal likes: the tally rides on each product, my own vote comes from one listener.
   const { isLiked, likeCountFor, toggleLike } = useProductLikes()
   const productDeepLinkId = searchParams.get('productId')
@@ -580,12 +580,15 @@ const messageDeepLinkId = searchParams.get('messageId')
    * From the details sheet: remember the chosen colour/size on the bag line, or bag it fresh
    * with that choice. A tap in the sheet never removes something from the bag.
    */
-  const handleSheetBag = (p: Product, variant: Variant) => {
+  const handleSheetBag = (p: Product, variant: Variant, qty = 1) => {
     if (isInBag(p.id)) {
       updateBagVariant(p.id, variant)
+      setBagQuantity(p.id, Math.max(1, qty))
       return
     }
     handleToggleBag(p, variant)
+    // "Add 3 of them" is one thought, not two — the bag line takes the number straight away.
+    setBagQuantity(p.id, Math.max(1, qty))
   }
 
   const handleToggleLike = useCallback((p: Product) => {
@@ -1347,9 +1350,9 @@ const handleSignupForAction = async (provider: any) => {
           isMine={isOwner}
           inBag={isInBag(detailsProduct.id)}
           onClose={() => setDetailsProduct(null)}
-          onBuy={(variant) => { setOrderVariant(variant); setOrderProduct(detailsProduct); setDetailsProduct(null) }}
+          onBuy={(variant, qty) => { setOrderVariant(variant); setQuantity(String(qty)); setOrderProduct(detailsProduct); setDetailsProduct(null) }}
           onMessage={(variant) => { setMessageVariant(variant); setMessageProduct(detailsProduct); setDetailsProduct(null) }}
-          onToggleBag={(variant) => handleSheetBag(detailsProduct, variant)}
+          onToggleBag={(variant, qty) => handleSheetBag(detailsProduct, variant, qty)}
         />
       )}
 

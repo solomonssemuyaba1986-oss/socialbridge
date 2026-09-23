@@ -13,9 +13,12 @@
 const assert = require('assert')
 const path = require('path')
 const {
+  clampQty,
   defaultChoice,
+  lineTotal,
   listVariants,
   orderBubbleText,
+  parsePrice,
   resolveSheetAction,
   stockLine,
   variantComplete,
@@ -65,6 +68,36 @@ check('nothing to choose means nothing is missing', () => {
   const none = { colors: [], sizes: [] }
   assert.strictEqual(variantComplete(none, {}), true)
   assert.strictEqual(variantPrompt(none, {}), '')
+})
+
+check('the price is read honestly, or not at all', () => {
+  assert.strictEqual(parsePrice('45000'), 45000)
+  assert.strictEqual(parsePrice('45,000'), 45000)
+  assert.strictEqual(parsePrice('UGX 45,000'), 45000)
+  assert.strictEqual(parsePrice(45000), 45000)
+  assert.strictEqual(parsePrice(''), null)
+  assert.strictEqual(parsePrice('ask me'), null)
+  assert.strictEqual(parsePrice(0), null)
+  assert.strictEqual(parsePrice(undefined), null)
+})
+
+check('the quantity maths adds up, and is shown as arithmetic', () => {
+  assert.strictEqual(lineTotal('45000', 1), '1 × 45,000 = 45,000')
+  assert.strictEqual(lineTotal('45000', 3), '3 × 45,000 = 135,000')
+  assert.strictEqual(lineTotal('45,000', 2), '2 × 45,000 = 90,000')
+  assert.strictEqual(lineTotal('ask me', 4), '')       // never invent a total
+  assert.strictEqual(lineTotal('45000', 0), '1 × 45,000 = 45,000')
+})
+
+check('how many you may order is capped by what is left', () => {
+  assert.strictEqual(clampQty(1, undefined), 1)
+  assert.strictEqual(clampQty(3, '3'), 3)
+  assert.strictEqual(clampQty(9, '3'), 3)              // three left, so three is the ceiling
+  assert.strictEqual(clampQty(9, 'in stock'), 9)
+  assert.strictEqual(clampQty(0, undefined), 1)        // never below one
+  assert.strictEqual(clampQty(-4, undefined), 1)
+  assert.strictEqual(clampQty(500, undefined), 99)     // a sane ceiling
+  assert.strictEqual(clampQty(3, 0), 3)                // stock 0 is not a quantity limit
 })
 
 check('a single option is already chosen — no need to ask', () => {

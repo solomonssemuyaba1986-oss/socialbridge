@@ -38,7 +38,7 @@ type Props = {
 }
 
 function ProductReviews({ sellerId, productId, aggregate, eligibility, onWrite, surface = 'sheet' }: Props) {
-  const { reviews, summary, myReview, loading, error } = useProductReviews(sellerId, productId)
+  const { reviews, summary, myReview, loading, error, blocked } = useProductReviews(sellerId, productId)
 
   // The header counts *everything* (the product's counters); the list may be a shorter page.
   const usingAggregate = Number(aggregate?.count) > 0
@@ -63,6 +63,10 @@ function ProductReviews({ sellerId, productId, aggregate, eligibility, onWrite, 
   if (loading) {
     return <p style={{ margin: '14px 0 0', color: '#666', fontSize: 12 }}>Loading comments…</p>
   }
+
+  // The comments' rules are not deployed yet. Show nothing rather than an empty "No comments yet"
+  // that isn't true, and rather than an error that blames the connection.
+  if (blocked) return null
 
   return (
     <div style={{ marginTop: 18, borderTop: '1px solid #222', paddingTop: 14 }}>

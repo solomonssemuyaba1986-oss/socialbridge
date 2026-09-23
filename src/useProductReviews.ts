@@ -129,6 +129,13 @@ export async function postReview(input: PostReviewInput): Promise<void> {
     batch.update(productRef, patch)
   }
 
+  // A private index of "products I have commented on" — on the buyer's own document, so a later
+  // rename knows exactly which comments to relabel without a collection-group query.
+  batch.set(doc(db, 'users', uid, 'comments', input.productId), {
+    sellerId: input.sellerId,
+    at: serverTimestamp(),
+  }, { merge: true })
+
   await batch.commit()
   trackEvent('review_posted', {
     productId: input.productId,
@@ -178,6 +185,8 @@ export function useProductReviews(sellerId?: string | null, productId?: string |
   const [reviews, setReviews] = useState<Review[]>([])
   const [loading, setLoading] = useState(Boolean(sellerId && productId))
   const [error, setError] = useState('')
+  /** Firestore refused the read — the comments' rules are not live yet (see below). */
+  const [blocked, setBlocked] = useState(false)
   const uid = auth.currentUser?.uid || ''
 
   useEffect(() => {
@@ -192,11 +201,22 @@ export function useProductReviews(sellerId?: string | null, productId?: string |
       snap => {
         setReviews(snap.docs.map(d => mapReview(d.id, d.data() as Record<string, unknown>)))
         setError('')
+        setBlocked(false)
         setLoading(false)
       },
       err => {
-        console.warn('Could not load reviews:', err)
-        setError('Comments could not load. Check your connection.')
+        const code = String((err as { code?: string })?.code || '')
+        if (code === 'permission-denied') {
+          // This is *our* setup, not the buyer's connection: the comments rules have not been
+          // deployed, so Firestore refuses the read on purpose. Say what to run, once, and stay
+          // silent in the interface — an error banner would blame the wrong thing.
+          console.warn('rachett: comments are not switched on yet — run `npm run deploy:rules` once.')
+          setBlocked(true)
+          setError('')
+        } else {
+          console.warn('Could not load comments:', err)
+          setError('Comments could not load. Check your connection.')
+        }
         setLoading(false)
       },
     )
@@ -206,6 +226,6 @@ export function useProductReviews(sellerId?: string | null, productId?: string |
   const summary = useMemo(() => summaryOf(reviews), [reviews])
   const myReview = useMemo(() => reviews.find(r => r.buyerUid === uid) || null, [reviews, uid])
 
-  return { reviews, summary, myReview, loading, error }
+  return { reviews, summary, myReview, loading, error, blocked }
 }
 

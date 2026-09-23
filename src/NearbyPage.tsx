@@ -159,10 +159,11 @@ function NearbyPage() {
   const [bagCounts, setBagCounts] = useState<Record<string, BagCountData>>({})
   const [orderProduct, setOrderProduct] = useState<CardProduct | null>(null)
   const [messageProduct, setMessageProduct] = useState<CardProduct | null>(null)
-  /** The details sheet: the card's ⓘ, and the colour/size chosen inside it. */
+  /** The details sheet: the card's ⓘ, the colour/size chosen, and how many they asked for. */
   const [detailsProduct, setDetailsProduct] = useState<CardProduct | null>(null)
   const [orderVariant, setOrderVariant] = useState<Variant>({})
   const [messageVariant, setMessageVariant] = useState<Variant>({})
+  const [sheetQty, setSheetQty] = useState('1')
   const [preview, setPreview] = useState<{ images: string[]; index: number } | null>(null)
   // Unsent messages — a card you already wrote about says so.
   const { drafts: myDrafts } = useAllDrafts()
@@ -170,7 +171,7 @@ function NearbyPage() {
   const [userId, setUserId] = useState<string | null>(auth.currentUser?.uid || null)
   const [shuffleSeed, setShuffleSeed] = useState(() => Date.now())
   const rangeWrapRef = useRef<HTMLDivElement | null>(null)
-  const { addToBag, removeFromBag, isInBag, updateBagVariant, count: bagCount } = useBag()
+  const { addToBag, removeFromBag, isInBag, updateBagVariant, setQuantity: setBagQuantity, count: bagCount } = useBag()
   // ♥ Universal likes: the tally rides on each product, my own vote comes from one listener.
   const { isLiked, likeCountFor, toggleLike } = useProductLikes()
 
@@ -470,12 +471,15 @@ function NearbyPage() {
    * From the details sheet: bag it with the chosen colour/size, or — if it is already bagged —
    * just remember the new choice. A tap in the sheet never removes something from the bag.
    */
-  const handleSheetBag = (p: DiscoveryProduct, variant: Variant) => {
+  const handleSheetBag = (p: DiscoveryProduct, variant: Variant, qty = 1) => {
     if (isInBag(p.id)) {
       updateBagVariant(p.id, variant)
+      setBagQuantity(p.id, Math.max(1, qty))
       return
     }
     handleToggleBag(p, variant)
+    // "Add 3 of them" is one thought, not two — the bag line takes the number straight away.
+    setBagQuantity(p.id, Math.max(1, qty))
   }
 
   /**
@@ -1104,18 +1108,20 @@ function NearbyPage() {
           isMine={detailsProduct.sellerId === userId}
           inBag={isInBag(detailsProduct.id)}
           onClose={() => setDetailsProduct(null)}
-          onBuy={(variant) => { setOrderVariant(variant); setOrderProduct(detailsProduct); setDetailsProduct(null) }}
+          onBuy={(variant, qty) => { setOrderVariant(variant); setSheetQty(String(qty)); setOrderProduct(detailsProduct); setDetailsProduct(null) }}
           onMessage={(variant) => { setMessageVariant(variant); setMessageProduct(detailsProduct); setDetailsProduct(null) }}
-          onToggleBag={(variant) => handleSheetBag(detailsProduct, variant)}
+          onToggleBag={(variant, qty) => handleSheetBag(detailsProduct, variant, qty)}
           onOpenStore={() => { const p = detailsProduct; setDetailsProduct(null); openProduct(p) }}
         />
       )}
 
       <ProductActions
+        key={`${orderProduct?.id || 'none'}-${sheetQty}`}
         orderProduct={orderProduct}
         messageProduct={messageProduct}
         orderVariant={orderVariant}
         messageVariant={messageVariant}
+        orderQuantity={sheetQty}
         onCloseOrder={() => setOrderProduct(null)}
         onCloseMessage={() => setMessageProduct(null)}
       />

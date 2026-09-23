@@ -28,6 +28,8 @@ type Props = {
   /** What the buyer picked in the details sheet — shown back to them and carried onto the order. */
   orderVariant?: Variant
   messageVariant?: Variant
+  /** How many the details sheet was set to, so the form opens at that number instead of "1". */
+  orderQuantity?: string
   /** Which page opened these modals — stamped on order/message events. */
   surface?: string
 }
@@ -44,13 +46,14 @@ export default function ProductActions({
   onCloseMessage,
   orderVariant,
   messageVariant,
+  orderQuantity,
   surface = 'nearby',
 }: Props) {
   const navigate = useNavigate()
   /** What sellers call this buyer — pre-filled at checkout, remembered once they use it. */
   const myName = useBuyerName()
   const [buyerName, setBuyerName] = useState('')
-  const [quantity, setQuantity] = useState('1')
+  const [quantity, setQuantity] = useState(orderQuantity || '1')
   const [deliveryArea, setDeliveryArea] = useState('')
   const [orderMessage, setOrderMessage] = useState('')
   /**

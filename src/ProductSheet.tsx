@@ -3,7 +3,9 @@ import { doc, onSnapshot } from 'firebase/firestore'
 import { db } from './firebase'
 import { green, productImages, type CardProduct } from './productCardUtils'
 import {
+  clampQty,
   defaultChoice,
+  lineTotal,
   listVariants,
   resolveSheetAction,
   stockLine,
@@ -46,9 +48,10 @@ type Props = {
   /** Which page opened it — stamped on every event the sheet fires. */
   surface?: string
   onClose: () => void
-  onBuy: (variant: Variant) => void
+  /** The colour/size they chose, and how many they want. */
+  onBuy: (variant: Variant, quantity: number) => void
   onMessage: (variant: Variant) => void
-  onToggleBag: (variant: Variant) => void
+  onToggleBag: (variant: Variant, quantity: number) => void
   /** The way back to the whole shop when a buyer wants more than one product. */
   onOpenStore?: () => void
   /**
@@ -95,6 +98,8 @@ function ProductSheet({
 }: Props) {
   const [colorPicked, setColor] = useState('')
   const [sizePicked, setSize] = useState('')
+  /** How many they want — one to start, capped by what the seller said is left. */
+  const [qty, setQty] = useState(1)
   const [imgIndex, setImgIndex] = useState(0)
   const [galleryOpen, setGalleryOpen] = useState(false)
   /** The seller's current copy of this product — null until the first snapshot lands. */
@@ -126,6 +131,11 @@ function ProductSheet({
   const prompt = variantPrompt({ colors, sizes }, picked)
   const low = stockLine(product?.stock)
   const label = variantLabel(color, size)
+  /** The quantity we will actually order: never below 1, never above what's left. */
+  const count = clampQty(qty, product?.stock)
+  const maxQty = clampQty(99, product?.stock)
+  /** "2 × 45,000 = 90,000" — shown only when there is more than one, so a single item stays quiet. */
+  const total = count > 1 ? lineTotal(product?.price, count) : ''
 
   // Opened exactly once (the ref guard) and with complete deps, so no hooks warning.
   useEffect(() => {
@@ -390,6 +400,33 @@ function ProductSheet({
           {!isMine && !ready && !outOfStock && (
             <p style={{ margin: '0 0 8px', color: '#ffb020', fontSize: 12, fontWeight: 800 }}>{prompt}</p>
           )}
+          {!isMine && !outOfStock && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+              <span style={{ color: '#888', fontSize: 11, fontWeight: 800, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                Quantity
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: '#1c1c1c', border: '1px solid #333', borderRadius: 999, padding: 3 }}>
+                <button
+                  onClick={() => setQty(q => clampQty(q - 1, product?.stock))}
+                  disabled={count <= 1}
+                  aria-label="One fewer"
+                  style={{ width: 30, height: 30, borderRadius: '50%', background: count <= 1 ? 'transparent' : '#2f2f2f', color: count <= 1 ? '#555' : '#fff', border: 'none', fontSize: 17, fontWeight: 800, cursor: count <= 1 ? 'not-allowed' : 'pointer', lineHeight: 1 }}
+                >
+                  −
+                </button>
+                <span style={{ minWidth: 26, textAlign: 'center', color: '#fff', fontWeight: 800, fontSize: 15 }}>{count}</span>
+                <button
+                  onClick={() => setQty(q => clampQty(q + 1, product?.stock))}
+                  disabled={count >= maxQty}
+                  aria-label="One more"
+                  style={{ width: 30, height: 30, borderRadius: '50%', background: count >= maxQty ? 'transparent' : '#2f2f2f', color: count >= maxQty ? '#555' : '#fff', border: 'none', fontSize: 17, fontWeight: 800, cursor: count >= maxQty ? 'not-allowed' : 'pointer', lineHeight: 1 }}
+                >
+                  +
+                </button>
+              </div>
+              {total && <span style={{ marginLeft: 'auto', color: green, fontSize: 13, fontWeight: 800 }}>{total}</span>}
+            </div>
+          )}
           {!isMine && (
             <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
               <button
@@ -399,7 +436,7 @@ function ProductSheet({
                 💬 Message
               </button>
               <button
-                onClick={() => { lastAction.current = 'bag'; onToggleBag({ color, size }) }}
+                onClick={() => { lastAction.current = 'bag'; onToggleBag({ color, size }, count) }}
                 style={{ flex: 1, padding: 11, background: inBag ? '#16240c' : '#222', color: inBag ? green : '#fff', border: `1px solid ${inBag ? green : '#333'}`, borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
               >
                 {inBag ? '✓ In bag' : '🛍️ Add to bag'}
@@ -408,7 +445,7 @@ function ProductSheet({
           )}
           {!isMine && (
             <button
-              onClick={() => leaveWith('buy', () => onBuy({ color, size }))}
+              onClick={() => leaveWith('buy', () => onBuy({ color, size }, count))}
               disabled={actionDisabled}
               style={{ width: '100%', padding: 14, background: actionDisabled ? '#242424' : green, color: actionDisabled ? '#777' : '#000', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: actionDisabled ? 'not-allowed' : 'pointer' }}
             >

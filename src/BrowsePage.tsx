@@ -111,7 +111,7 @@ function BrowsePage() {
   const [userId, setUserId] = useState<string | null>(null)
   const [mySlug, setMySlug] = useState<string | null>(null)
   const [ownerFilter, setOwnerFilter] = useState<'all' | 'mine' | 'not-mine'>('all')
-  const { addToBag, removeFromBag, isInBag, updateBagVariant, count: bagCount } = useBag()
+  const { addToBag, removeFromBag, isInBag, updateBagVariant, setQuantity: setBagQuantity, count: bagCount } = useBag()
   // ♥ Universal likes: the tally rides on each product, my own vote comes from one listener.
   const { isLiked, likeCountFor, toggleLike } = useProductLikes()
   const navigate = useNavigate()
@@ -316,12 +316,15 @@ function BrowsePage() {
    * in the sheet must never throw away something the buyer deliberately kept). Not bagged yet →
    * the normal add, carrying the variant.
    */
-  const handleSheetBag = (p: Product, variant: Variant) => {
+  const handleSheetBag = (p: Product, variant: Variant, qty = 1) => {
     if (isInBag(p.id)) {
       updateBagVariant(p.id, variant)
+      setBagQuantity(p.id, Math.max(1, qty))
       return
     }
     handleToggleBag(p, variant)
+    // "Add 3 of them" is one thought, not two — the bag line takes the number straight away.
+    setBagQuantity(p.id, Math.max(1, qty))
   }
 
   /**
@@ -1321,9 +1324,9 @@ function BrowsePage() {
           isMine={detailsProduct.sellerId === (userId || '')}
           inBag={isInBag(detailsProduct.id)}
           onClose={() => setDetailsProduct(null)}
-          onBuy={(variant) => { setOrderVariant(variant); setOrderProduct(detailsProduct); setDetailsProduct(null) }}
+          onBuy={(variant, qty) => { setOrderVariant(variant); setQuantity(String(qty)); setOrderProduct(detailsProduct); setDetailsProduct(null) }}
           onMessage={(variant) => { setMessageVariant(variant); setMessageProduct(detailsProduct); setDetailsProduct(null) }}
-          onToggleBag={(variant) => handleSheetBag(detailsProduct, variant)}
+          onToggleBag={(variant, qty) => handleSheetBag(detailsProduct, variant, qty)}
           onOpenStore={() => { const slug = detailsProduct.sellerSlug; setDetailsProduct(null); navigate(`/store/${slug}`) }}
         />
       )}

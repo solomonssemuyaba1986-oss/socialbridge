@@ -53,6 +53,40 @@ export function defaultChoice(values: string[]): string {
 }
 
 /**
+ * The price as a number, or null when it isn't one. Sellers type prices by hand ("45000",
+ * "45,000", sometimes "UGX 45,000"), and a total must never be invented out of a guess.
+ */
+export function parsePrice(raw: unknown): number | null {
+  if (typeof raw === 'number') return Number.isFinite(raw) && raw > 0 ? raw : null
+  if (typeof raw !== 'string') return null
+  const cleaned = raw.replace(/[^\d.]/g, '')
+  if (!cleaned || !/\d/.test(cleaned)) return null
+  const value = Number(cleaned)
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+
+/**
+ * "2 × 45,000 = 90,000" — or '' when the price isn't a number we can trust. The sheet shows the
+ * arithmetic rather than a single bigger number, because a buyer adding two of something should
+ * see where the number came from.
+ */
+export function lineTotal(price: unknown, qty: number, maxQty = 99): string {
+  const unit = parsePrice(price)
+  const count = Math.min(Math.max(1, Math.floor(qty) || 1), maxQty)
+  if (unit === null) return ''
+  return `${count} × ${unit.toLocaleString('en-US')} = ${(unit * count).toLocaleString('en-US')}`
+}
+
+/** How many someone may order: never below 1, capped by what the seller said is left. */
+export function clampQty(qty: number, stock: unknown, maxQty = 99): number {
+  const wanted = Math.floor(Number(qty))
+  const safe = Number.isFinite(wanted) && wanted > 0 ? wanted : 1
+  const stockNum = typeof stock === 'number' ? stock : parseInt(String(stock ?? '').trim(), 10)
+  const ceiling = Number.isFinite(stockNum) && stockNum >= 1 ? Math.min(stockNum, maxQty) : maxQty
+  return Math.min(safe, ceiling)
+}
+
+/**
  * Has the buyer chosen everything this product actually offers? A product with no colours
  * (most of them today) is complete with nothing chosen — that is the honest rule, because
  * demanding a choice that doesn't exist is how a Buy button becomes a dead end.

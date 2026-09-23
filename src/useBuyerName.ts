@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { doc, onSnapshot, setDoc } from 'firebase/firestore'
+import { useCallback, useEffect, useState } from 'react'
+import { collection, doc, getDocs, onSnapshot, query, setDoc, where, writeBatch } from 'firebase/firestore'
 import { onAuthStateChanged, updateProfile } from 'firebase/auth'
 import { auth, db } from './firebase'
 import {
@@ -13,6 +13,50 @@ import {
   type BuyerNameState,
 } from './buyerName'
 import { trackEvent } from './analytics'
+
+/**
+ * A rename has to reach what already says the old name.
+ *
+ *  - **Comments**: kept under the buyer's own index (`users/{uid}/comments/{productId}`, written
+ *    when they post), so we know exactly which ones to relabel — no collection-group query, no
+ *    new rules, and nothing to guess at.
+ *  - **Threads**: every conversation they are the buyer of, so the seller's Inbox row and the chat
+ *    header stop showing the old name.
+ *
+ * **Orders are deliberately left alone.** An order records the name a delivery was actually made
+ * under; rewriting it could leave a seller matching a parcel to a name that never existed.
+ */
+async function spreadNameEverywhere(uid: string, shortName: string): Promise<void> {
+  if (!uid || !shortName) return
+
+  try {
+    const index = await getDocs(collection(db, 'users', uid, 'comments'))
+    if (!index.empty) {
+      const batch = writeBatch(db)
+      let touched = 0
+      index.docs.slice(0, 400).forEach(entry => {
+        const sellerId = String((entry.data() as { sellerId?: unknown }).sellerId || '')
+        if (!sellerId) return
+        batch.set(doc(db, 'sellers', sellerId, 'products', entry.id, 'reviews', uid), { buyerName: shortName }, { merge: true })
+        touched++
+      })
+      if (touched > 0) await batch.commit()
+    }
+  } catch (err) {
+    console.warn('Rename: comments could not be relabelled', err)
+  }
+
+  try {
+    const threads = await getDocs(query(collection(db, 'conversations'), where('buyerId', '==', uid)))
+    if (!threads.empty) {
+      const batch = writeBatch(db)
+      threads.docs.forEach(thread => batch.update(thread.ref, { buyerName: shortName }))
+      await batch.commit()
+    }
+  } catch (err) {
+    console.warn('Rename: threads could not be relabelled', err)
+  }
+}
 
 /**
  * What we call this buyer, and where we keep it.
@@ -68,14 +112,14 @@ export function useBuyerName() {
     }
   }, [])
 
-  const account = useMemo(
-    () => ({ displayName: auth.currentUser?.displayName, email: auth.currentUser?.email }),
-    // Recomputes when the account changes; auth fields themselves are read at call time.
-    [uid],
-  )
-  const suggestion = useMemo(() => suggestName(account), [account])
+  /**
+   * Read at call time rather than memoised: `auth.currentUser` is not a reactive value, and these
+   * two are cheap. (A `useMemo` here produced a dependency warning and bought nothing.)
+   */
+  const account = { displayName: auth.currentUser?.displayName, email: auth.currentUser?.email }
+  const suggestion = suggestName(account)
   /** What checkout pre-fills: what they confirmed, else our suggestion. */
-  const prefill = useMemo(() => checkoutPrefill(state, account), [state, account])
+  const prefill = checkoutPrefill(state, account)
 
   /** Their confirmed name, or the suggestion to show in offers — never a bare "Buyer". */
   const label = publicName(state.name || suggestion.name)
@@ -123,9 +167,14 @@ export function useBuyerName() {
       console.warn('Buyer name: could not save', err)
       return false
     }
+    // Changing a name that already existed has to reach what already says the old one. Fire and
+    // forget: the rename itself must never fail because a relabel did.
+    if (state.name && state.name !== clean) {
+      void spreadNameEverywhere(user.uid, publicName(clean))
+    }
     trackEvent('buyer_name_saved', { source: next.source, wasSuggestion: fromSuggestion, surface })
     return true
-  }, [suggestion, state.askedAt])
+  }, [suggestion, state.askedAt, state.name])
 
   /** "Later" — quietly, once. The line in the Inbox header stays available for good. */
   const skip = useCallback(async (surface = 'inbox') => {

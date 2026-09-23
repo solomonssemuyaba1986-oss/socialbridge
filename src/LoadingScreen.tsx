@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { hasShownFullLoader, markFullLoaderShown } from './loadingGate'
 
 const green = '#adff2f'
 
@@ -23,11 +24,29 @@ type Props = {
 
 export default function LoadingScreen({ message, variant = 'grid', logo, inline = false }: Props) {
   const [msgIndex, setMsgIndex] = useState(0)
+  /**
+   * Has this tab already seen the big banner? If so, a full-screen loader becomes a quiet line
+   * instead — "loading once, once", rather than the whole screen flashing on every page.
+   */
+  const [quiet] = useState(() => !inline && hasShownFullLoader())
+
+  useEffect(() => {
+    if (!inline) markFullLoaderShown()
+  }, [inline])
 
   useEffect(() => {
     const t = window.setInterval(() => setMsgIndex(i => (i + 1) % LOADING_MESSAGES.length), 2600)
     return () => window.clearInterval(t)
   }, [])
+
+  if (quiet) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', color: '#999', gap: 10, padding: '20px' }}>
+        <img src={logo || '/logo.jpg'} alt="" style={{ width: 28, height: 28, borderRadius: 8, objectFit: 'cover', opacity: 0.8 }} />
+        <p style={{ margin: 0, fontSize: 13 }}>{message || 'Loading…'}</p>
+      </div>
+    )
+  }
 
   const blockBase: React.CSSProperties = {
     borderRadius: 10,
