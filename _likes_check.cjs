@@ -12,7 +12,7 @@
 const assert = require('assert')
 const fs = require('fs')
 const path = require('path')
-const { formatCount, formatBagCount, likeTally } = require(path.join(__dirname, '_dsbuild', 'productCardUtils.cjs'))
+const { formatCount, formatBagCount, likeTally, withoutUndefined } = require(path.join(__dirname, '_dsbuild', 'productCardUtils.cjs'))
 
 let checks = 0
 const check = (name, fn) => { fn(); checks++; console.log('  ok  ' + name) }
@@ -82,6 +82,25 @@ check('the tally may only ever move by one, up or down', () => {
 check('my votes and my answers stay mine', () => {
   assert.ok(/match \/likes\/\{productId\} \{\s*allow read, write: if request\.auth\.uid == userId/.test(rules))
   assert.ok(/match \/loveAnswers\/\{orderId\} \{\s*allow read, write: if request\.auth\.uid == userId/.test(rules))
+})
+
+check('a Firestore write never carries an undefined field', () => {
+  // Why this exists: `color: undefined` in a bag line made setDoc throw *synchronously*, inside a
+  // React state updater — which unmounted the screen (a white page). Absent fields are now left
+  // out entirely, so the write cannot be refused for something that isn't there.
+  const written = withoutUndefined({
+    productId: 'p1', productName: 'Shoes', productPrice: '45000',
+    color: undefined, size: undefined, images: [], sellerSlug: '',
+  })
+  assert.deepStrictEqual(Object.keys(written).sort(), ['images', 'productId', 'productName', 'productPrice', 'sellerSlug'])
+  assert.strictEqual('color' in written, false)
+  assert.strictEqual('size' in written, false)
+  // An empty string IS a value (a product with no variant chosen) and must survive untouched.
+  assert.strictEqual(withoutUndefined({ color: '', size: 'M' }).color, '')
+  assert.strictEqual(withoutUndefined({ color: '', size: 'M' }).size, 'M')
+  // null goes the same way as undefined.
+  assert.strictEqual('whatsapp' in withoutUndefined({ whatsapp: null }), false)
+  assert.deepStrictEqual(withoutUndefined({}), {})
 })
 
 console.log('\n' + checks + ' like checks passed')

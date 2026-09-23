@@ -554,7 +554,7 @@ const messageDeepLinkId = searchParams.get('messageId')
     getBagCounts(ids).then(setBagCounts).catch(() => {})
   }, [products])
 
-  const handleToggleBag = (p: Product, variant?: Variant) => {
+  const handleToggleBag = (p: Product, variant?: Variant, qty = 1) => {
     if (isInBag(p.id)) {
       removeFromBag(p.id)
       trackEvent('bag_removed', { productId: p.id, sellerId, price: p.price, surface: 'store', bagSize: Math.max(0, bagCount - 1) })
@@ -563,7 +563,7 @@ const messageDeepLinkId = searchParams.get('messageId')
         [p.id]: { count: Math.max(0, (prev[p.id]?.count || 0) - 1), baggedCount: prev[p.id]?.baggedCount || 0 },
       }))
     } else {
-      addToBag({ productId: p.id, productName: p.name, productPrice: p.price, imageUrl: p.imageUrl, images: p.images?.length ? p.images : (p.imageUrl ? [p.imageUrl] : []), sellerSlug: seller?.slug || '', sellerId, businessName: seller?.businessName || '', color: variant?.color, size: variant?.size })
+      addToBag({ productId: p.id, productName: p.name, productPrice: p.price, imageUrl: p.imageUrl, images: p.images?.length ? p.images : (p.imageUrl ? [p.imageUrl] : []), sellerSlug: seller?.slug || '', sellerId, businessName: seller?.businessName || '', color: variant?.color, size: variant?.size }, qty)
       trackEvent('bag_added', { productId: p.id, sellerId, price: p.price, surface: 'store', bagSize: bagCount + 1 })
       setBagCounts(prev => ({
         ...prev,
@@ -586,9 +586,8 @@ const messageDeepLinkId = searchParams.get('messageId')
       setBagQuantity(p.id, Math.max(1, qty))
       return
     }
-    handleToggleBag(p, variant)
-    // "Add 3 of them" is one thought, not two — the bag line takes the number straight away.
-    setBagQuantity(p.id, Math.max(1, qty))
+    // "Add 3 of them" is one thought, not two — the number goes in with the add itself.
+    handleToggleBag(p, variant, qty)
   }
 
   const handleToggleLike = useCallback((p: Product) => {

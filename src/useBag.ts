@@ -3,6 +3,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { doc, setDoc, getDocs, collection, onSnapshot, updateDoc, deleteDoc, increment as firestoreIncrement, runTransaction } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebase'
+import { withoutUndefined } from './productCardUtils'
 
 export interface BagItem {
   productId: string
@@ -98,11 +99,31 @@ export async function getBagCounts(productIds: string[]): Promise<Record<string,
 }
 
 
+/**
+ * Every bag write goes through here, for one reason: these calls used to live *inside* React state
+ * updaters, and a synchronous throw from `setDoc` (an `undefined` field, say) took the whole screen
+ * down with it — the white page. Now a failed sync is a console warning and nothing more; the bag
+ * on this device still works exactly as the person expects.
+ */
+function firestoreWrite(label: string, run: () => Promise<unknown> | void) {
+  try {
+    const result = run()
+    if (result && typeof (result as Promise<unknown>).catch === 'function') {
+      void (result as Promise<unknown>).catch(err => console.warn(`Bag sync (${label}) failed:`, err))
+    }
+  } catch (err) {
+    console.warn(`Bag sync (${label}) threw before it was sent:`, err)
+  }
+}
+
 export function useBag() {
   const [items, setItems] = useState<BagItem[]>(loadBag)
   const uidRef = useRef<string | null>(null)
+  /** The latest items, for decisions taken *outside* a state updater (see the writers below). */
+  const itemsRef = useRef<BagItem[]>(items)
 
   useEffect(() => {
+    itemsRef.current = items
     saveBag(items)
   }, [items])
 
@@ -196,20 +217,24 @@ export function useBag() {
     }
   }, [])
 
-  const addToBag = useCallback((item: Omit<BagItem, 'addedAt' | 'quantity'>) => {
-    setItems(prev => {
-      if (prev.some(i => i.productId === item.productId)) return prev
-      const newItem = { ...item, addedAt: Date.now(), quantity: 1 }
-      incrementBagCount(item.productId, 1)
-      incrementBaggedCount(item.productId, uidRef.current ?? undefined)
-      const uid = uidRef.current
-      if (uid) {
-        setDoc(doc(db, 'users', uid, 'bag', item.productId), newItem).catch(err => {
-          console.warn('Failed to sync bag add:', err)
-        })
-      }
-      return [...prev, newItem]
-    })
+  const addToBag = useCallback((item: Omit<BagItem, 'addedAt' | 'quantity'>, quantity = 1) => {
+    if (itemsRef.current.some(i => i.productId === item.productId)) return
+    const newItem: BagItem = {
+      ...item,
+      // Never `undefined`: an absent choice is an empty string, which Firestore accepts.
+      color: (item.color || '').trim(),
+      size: (item.size || '').trim(),
+      addedAt: Date.now(),
+      quantity: Math.max(1, Math.floor(Number(quantity) || 1)),
+    }
+    setItems(prev => (prev.some(i => i.productId === item.productId) ? prev : [...prev, newItem]))
+
+    // Side effects *after* the state update, never inside it — the crash this fixes came from a
+    // Firestore call throwing mid-updater.
+    const uid = uidRef.current
+    firestoreWrite('bag-count', () => incrementBagCount(item.productId, 1))
+    firestoreWrite('bagged-count', () => incrementBaggedCount(item.productId, uid ?? undefined))
+    if (uid) firestoreWrite('add-line', () => setDoc(doc(db, 'users', uid, 'bag', item.productId), withoutUndefined({ ...newItem })))
   }, [])
 
   /**
@@ -218,50 +243,34 @@ export function useBag() {
    * whole bag, its counters and its order flow to be keyed differently.
    */
   const updateBagVariant = useCallback((productId: string, variant: { color?: string; size?: string }) => {
-    setItems(prev => {
-      const target = prev.find(i => i.productId === productId)
-      if (!target) return prev
-      const color = (variant.color || '').trim()
-      const size = (variant.size || '').trim()
-      if ((target.color || '') === color && (target.size || '') === size) return prev
-      const uid = uidRef.current
-      if (uid) {
-        updateDoc(doc(db, 'users', uid, 'bag', productId), { color, size }).catch(err => {
-          console.warn('Failed to sync bag variant:', err)
-        })
-      }
-      return prev.map(i => (i.productId === productId ? { ...i, color, size } : i))
-    })
+    const target = itemsRef.current.find(i => i.productId === productId)
+    if (!target) return
+    const color = (variant.color || '').trim()
+    const size = (variant.size || '').trim()
+    if ((target.color || '') === color && (target.size || '') === size) return
+    setItems(prev => prev.map(i => (i.productId === productId ? { ...i, color, size } : i)))
+    const uid = uidRef.current
+    if (uid) firestoreWrite('variant', () => updateDoc(doc(db, 'users', uid, 'bag', productId), { color, size }))
   }, [])
 
   const removeFromBag = useCallback((productId: string) => {
-    setItems(prev => {
-      const next = prev.filter(i => i.productId !== productId)
-      if (next.length < prev.length) {
-        incrementBagCount(productId, -1)
-        const uid = uidRef.current
-        if (uid) {
-          deleteDoc(doc(db, 'users', uid, 'bag', productId)).catch(err => {
-            console.warn('Failed to sync bag remove:', err)
-          })
-        }
-      }
-      return next
-    })
+    const wasThere = itemsRef.current.some(i => i.productId === productId)
+    setItems(prev => prev.filter(i => i.productId !== productId))
+    if (!wasThere) return
+    const uid = uidRef.current
+    firestoreWrite('remove-count', () => incrementBagCount(productId, -1))
+    if (uid) firestoreWrite('remove-line', () => deleteDoc(doc(db, 'users', uid, 'bag', productId)))
   }, [])
 
   const setQuantity = useCallback((productId: string, quantity: number) => {
-    const safeQty = Math.max(1, quantity)
-    setItems(prev => {
-      const next = prev.map(i => i.productId === productId ? { ...i, quantity: safeQty } : i)
-      const uid = uidRef.current
-      if (uid) {
-        updateDoc(doc(db, 'users', uid, 'bag', productId), { quantity: safeQty }).catch(err => {
-          console.warn('Failed to sync bag quantity:', err)
-        })
-      }
-      return next
-    })
+    const safeQty = Math.max(1, Math.floor(Number(quantity) || 1))
+    setItems(prev => prev.map(i => (i.productId === productId ? { ...i, quantity: safeQty } : i)))
+    const uid = uidRef.current
+    if (!uid) return
+    // Only a line that exists: "set the quantity of something not in the bag" is a no-op, not a
+    // write that Firestore has to refuse.
+    if (!itemsRef.current.some(i => i.productId === productId)) return
+    firestoreWrite('quantity', () => updateDoc(doc(db, 'users', uid, 'bag', productId), { quantity: safeQty }))
   }, [])
 
   const isInBag = useCallback((productId: string) => {

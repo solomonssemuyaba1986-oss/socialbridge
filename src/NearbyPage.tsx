@@ -438,7 +438,7 @@ function NearbyPage() {
     getBagCounts(displayedIds).then(setBagCounts).catch(() => {})
   }, [displayedIds])
 
-  const handleToggleBag = (p: DiscoveryProduct, variant?: Variant) => {
+  const handleToggleBag = (p: DiscoveryProduct, variant?: Variant, qty = 1) => {
     if (isInBag(p.id)) {
       removeFromBag(p.id)
       trackEvent('bag_removed', { productId: p.id, sellerId: p.sellerId, price: p.price, surface: 'nearby', bagSize: Math.max(0, bagCount - 1) })
@@ -458,7 +458,7 @@ function NearbyPage() {
         businessName: p.businessName,
         color: variant?.color,
         size: variant?.size,
-      })
+      }, qty)
       trackEvent('bag_added', { productId: p.id, sellerId: p.sellerId, price: p.price, surface: 'nearby', bagSize: bagCount + 1 })
       setBagCounts(prev => ({
         ...prev,
@@ -477,9 +477,8 @@ function NearbyPage() {
       setBagQuantity(p.id, Math.max(1, qty))
       return
     }
-    handleToggleBag(p, variant)
-    // "Add 3 of them" is one thought, not two — the bag line takes the number straight away.
-    setBagQuantity(p.id, Math.max(1, qty))
+    // "Add 3 of them" is one thought, not two — the number goes in with the add itself.
+    handleToggleBag(p, variant, qty)
   }
 
   /**

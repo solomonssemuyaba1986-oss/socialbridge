@@ -38,6 +38,21 @@ export interface CardProduct {
 export const green = '#adff2f'
 
 /**
+ * Firestore refuses `undefined` — and it throws **synchronously**, so a `.catch()` never sees it.
+ * That is exactly how a bag write with `color: undefined` could take a whole screen down.
+ *
+ * Anything written to Firestore goes through here first: absent fields are simply not sent.
+ */
+export function withoutUndefined(value: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [key, item] of Object.entries(value)) {
+    if (item === undefined || item === null) continue
+    out[key] = item
+  }
+  return out
+}
+
+/**
  * 999 → "999" · 1,200 → "1.2K" · 10,000 → "10K" · 1,000,000 → "1.0M".
  * A card never shows six digits: 999,500 rounds up to "1.0M" rather than "1000K".
  * Used by the ♥ like pill, 🛍️ bagged and ✓ bought counters — one number format, everywhere.
