@@ -7,7 +7,8 @@
   "main": "index.js",
   "scripts": {
     "serve": "firebase emulators:start --only functions",
-    "deploy": "firebase deploy --only functions"
+    "deploy": "firebase deploy --only functions",
+    "pesapal:register-ipn": "node pesapal-register-ipn.js"
   },
   "dependencies": {
     "firebase-admin": "^12.1.0",
