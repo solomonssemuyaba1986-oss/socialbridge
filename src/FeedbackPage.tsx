@@ -35,7 +35,7 @@ function FeedbackPage() {
 
   if (sent) {
     return (
-      <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', fontFamily: 'sans-serif', color: '#fff', textAlign: 'center' }}>
+      <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', fontFamily: 'sans-serif', color: '#fff', textAlign: 'center' }}>
         <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '28px', color: '#000', fontWeight: '800' }}>
           ✓
         </div>
@@ -53,7 +53,7 @@ function FeedbackPage() {
 
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '20px' }}>
+    <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '20px' }}>
       <div style={{ maxWidth: '480px', margin: '0 auto' }}>
         <h1 style={{ margin: '0 0 4px', fontSize: '24px', fontWeight: '800' }}>What didn't you like?</h1>
         <p style={{ color: '#888', fontSize: '14px', margin: '0 0 24px' }}>

@@ -703,7 +703,7 @@ function NearbyPage() {
   const widerRange = RANGE_PRESETS.find(r => r > range) || range * 2
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '20px' }}>
+    <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '20px' }}>
       <div style={{ maxWidth: '980px', margin: '0 auto' }}>
         {/* Header — title left, my location top right */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '14px', flexWrap: 'wrap' }}>

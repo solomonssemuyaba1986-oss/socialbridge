@@ -51,7 +51,7 @@ class ErrorBoundary extends Component<Props, State> {
     if (!this.state.crashed) return this.props.children
 
     return (
-      <div style={{ minHeight: '100vh', background: '#0f0f0f', color: '#fff', fontFamily: 'sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+      <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', color: '#fff', fontFamily: 'sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
         <div style={{ maxWidth: '460px', width: '100%', background: '#1a1a1a', border: '1px solid #262626', borderRadius: '16px', padding: '24px' }}>
           <p style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#fff' }}>
             Something on this screen broke

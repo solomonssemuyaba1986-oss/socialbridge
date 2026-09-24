@@ -224,7 +224,7 @@ function BuyerOrders() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '20px 16px 60px' }}>
+    <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '20px 16px 60px' }}>
       <div style={{ maxWidth: 720, margin: '0 auto' }}>
         <h1 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 800 }}>📦 My Orders</h1>
         <p style={{ margin: '0 0 16px', color: '#888', fontSize: 13 }}>

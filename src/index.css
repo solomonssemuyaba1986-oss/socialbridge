@@ -37,3 +37,111 @@ body {
   }
 }
 
+/* ---------------------------------------------------------------------------------------------
+ * Phone foundation.
+ *
+ * The app styles itself with inline `style={{ … }}` objects, and an inline style always beats a
+ * stylesheet — so anything that has to *change* for a phone lives in `responsive.css` and wins
+ * with `!important`. What belongs here is the other half: the handful of truths that hold on every
+ * screen, and that no component should have to restate.
+ * ------------------------------------------------------------------------------------------- */
+
+/* The insets a notched phone reports, named once. Everything else reports 0px, so a rule written
+   against these is always safe to apply. */
+:root {
+  --rt-safe-top: env(safe-area-inset-top, 0px);
+  --rt-safe-right: env(safe-area-inset-right, 0px);
+  --rt-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --rt-safe-left: env(safe-area-inset-left, 0px);
+  /* The phone tab bar's own height, so the bar and the space left for it can never disagree. */
+  --rt-tabs: 62px;
+}
+
+/* Rotating the phone must not silently re-scale the text. */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  /* One wide element must never make the whole page slide sideways. */
+  overflow-x: hidden;
+}
+
+/* Product photos, logos, store banners and chat images arrive at whatever size the seller
+   uploaded. Cap them, so no upload can ever widen the layout. */
+img,
+video,
+canvas {
+  max-width: 100%;
+}
+
+/* Everything tappable behaves like an app control: no 300ms click delay, no double-tap zoom,
+   no grey flash on tap. */
+button,
+a,
+[role='button'],
+input,
+select,
+textarea {
+  touch-action: manipulation;
+}
+
+button,
+[role='button'] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/**
+ * A screen, the way a phone means it: `dvh` shrinks with the URL bar instead of leaving the bottom
+ * of the page hidden behind it. `vh` stays first as the fallback for browsers without `dvh`, and
+ * both say `!important` because the pages carry `minHeight: '100vh'` inline.
+ */
+.rt-page {
+  min-height: 100vh !important;
+  min-height: 100dvh !important;
+  /* `clip`, not `hidden`: it stops sideways overflow without making the page a scroll container
+     (and without touching fixed children, so the bag button and every sheet still work). */
+  overflow-x: clip;
+}
+
+/* NOTE: a generic `.rt-hscroll` rail helper and a `.rt-tap` target helper were written for this
+   work and then removed: the rails that would have used them (`.rt-filters`, `.rt-rail`,
+   `.rt-appbar-actions`) already carry those exact properties, and `_responsive_check.cjs` refuses to
+   let a class live in the stylesheet that no component uses — dead CSS rots. */
+
+/* Anything that floats above the bottom of the screen clears the home indicator. */
+.rt-fab {
+  bottom: calc(24px + var(--rt-safe-bottom)) !important;
+  right: calc(24px + var(--rt-safe-right)) !important;
+}
+
+/**
+ * The new-order pulse on the phone tab bar.
+ *
+ * It is the phone's version of the dashboard spotlight: when an order arrives, the thing that
+ * should move is the badge that now shows it. The keyframes live here rather than inside a
+ * component, so the pulse doesn't depend on whichever screen happens to define it.
+ */
+@keyframes rt-pulse {
+  0%,
+  100% {
+    transform: translateX(12px) scale(1);
+    box-shadow: 0 0 0 0 rgba(173, 255, 47, 0.6);
+  }
+  50% {
+    transform: translateX(12px) scale(1.15);
+    box-shadow: 0 0 0 8px rgba(173, 255, 47, 0.2);
+  }
+}
+
+.rt-tabs-pulse {
+  animation: rt-pulse 0.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rt-tabs-pulse {
+    animation: none;
+  }
+}
+

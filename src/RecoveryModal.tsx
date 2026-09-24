@@ -157,7 +157,7 @@ export default function RecoveryModal({ open, onClose }: Props) {
     }
   }
   return (
-    <div onClick={close}
+    <div className="rt-modal-overlay" onClick={close}
       style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
       <div onClick={e => e.stopPropagation()}
         style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222', color: '#fff', maxHeight: '90vh', overflowY: 'auto' }}>

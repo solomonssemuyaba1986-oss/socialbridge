@@ -7,6 +7,7 @@ import { db } from './firebase'
 import { trackEvent } from './analytics'
 import ConfirmDialog from './ConfirmDialog'
 import Sidebar from './Sidebar'
+import SellerTabs from './SellerTabs'
 import { variantLabel } from './productSheetUtils'
 
 const green = '#adff2f'
@@ -122,17 +123,19 @@ function OrderHistory() {
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <p style={{ color: '#555', fontFamily: 'sans-serif' }}>Loading orders...</p>
       </div>
     )
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', display: 'flex' }}>
+    <div className="rt-page rt-shell" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', display: 'flex' }}>
       <Sidebar />
+      {/* The phone's navigation — same five places, same badges, hidden on desktop by CSS. */}
+      <SellerTabs />
 
-      <div style={{ width: '100%', marginLeft: 260, padding: '24px 28px', minHeight: '100vh' }}>
+      <div className="rt-main rt-has-tabs" style={{ width: '100%', marginLeft: 260, padding: '24px 28px', minHeight: '100vh' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <div>
             <h1 style={{ margin: 0, fontSize: '20px', fontWeight: '800' }}>Orders</h1>
@@ -241,7 +244,7 @@ function OrderHistory() {
 
                         {/* Status Action Buttons */}
                         {(o.status === 'pending' || !o.status || o.status === 'needs_details' || o.status === 'paid' || o.status === 'awaiting_payment') && (
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                          <div className="rt-order-actions" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
                             <button onClick={() => updateOrderStatus(o.id, 'fulfilled')}
                               style={{ padding: '10px', background: green, color: '#000', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700' }}>
                               ✓ Confirm

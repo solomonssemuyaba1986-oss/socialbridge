@@ -61,7 +61,7 @@ function TopNav({ variant = 'default' }: { variant?: 'default' | 'bag' }) {
 
   return (
     <>
-      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderBottom: '1px solid #111', background: '#0f0f0f', position: 'relative', zIndex: 100 }}>
+      <nav className="rt-appbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderBottom: '1px solid #111', background: '#0f0f0f', position: 'relative', zIndex: 100 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           {isHome || isMarketHome ? (
             // The logo used to be a dead end; now it is how you get back to the market.
@@ -77,7 +77,9 @@ function TopNav({ variant = 'default' }: { variant?: 'default' | 'bag' }) {
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        {/* The actions become a finger-scroll rail on a phone (`.rt-appbar-actions`), so the header
+            stays one row however many destinations are in it. */}
+        <div className="rt-appbar-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button onClick={() => navigate(isBag ? '/help?topic=bag' : '/help')} style={{ background: 'transparent', color: '#888', border: '1px solid #2a2a2a', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>{isBag ? '❓ Bag help?' : '❓ Need help?'}</button>
           <button onClick={() => navigate('/feedback')} style={{ background: 'transparent', color: green, border: '1px solid #2a2a2a', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>💡 Feedback</button>
           {!isSeller && (
@@ -133,7 +135,7 @@ function TopNav({ variant = 'default' }: { variant?: 'default' | 'bag' }) {
 
       {/* Login Modal */}
       {showLoginModal && (
-        <div onClick={() => setShowLoginModal(false)}
+        <div className="rt-modal-overlay" onClick={() => setShowLoginModal(false)}
           style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
           <div onClick={e => e.stopPropagation()}
             style={{ background: '#1a1a1a', borderRadius: '16px', padding: '32px', width: '100%', maxWidth: '380px', border: '1px solid #222', color: '#fff', textAlign: 'center' }}>

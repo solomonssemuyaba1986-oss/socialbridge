@@ -30,7 +30,7 @@ function StoreProblem({ slug = '', reason = 'not-found' }: Props) {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', display: 'flex', justifyContent: 'center', padding: '24px 16px' }}>
+    <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', display: 'flex', justifyContent: 'center', padding: '24px 16px' }}>
       <div style={{ width: '100%', maxWidth: '560px' }}>
         <div style={{ background: '#1a1a1a', border: '1px solid #262626', borderRadius: '16px', padding: '22px' }}>
 

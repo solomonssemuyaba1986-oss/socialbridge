@@ -835,7 +835,7 @@ function BrowsePage() {
   }, [activeCategory, search, products, sortBy, minPrice, maxPrice, hideOutOfStock, ownerFilter, mySlug])
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
+    <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
 
       {/* Hero */}
       <div style={{ textAlign: 'center', padding: '48px 20px 32px', borderBottom: '1px solid #1a1a1a' }}>
@@ -1233,7 +1233,7 @@ function BrowsePage() {
         const surveyImages = getSurveyImages(surveyProduct)
         const currentImg = surveyImages[surveyImageIndex] || surveyProduct.imageUrl || ''
         return (
-          <div onClick={closeSurvey}
+          <div className="rt-modal-overlay" onClick={closeSurvey}
             style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.92)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
             <div onClick={e => e.stopPropagation()}
               style={{ background: '#1a1a1a', borderRadius: '16px', padding: '20px', width: '100%', maxWidth: '420px', border: '1px solid #222', maxHeight: '92vh', overflowY: 'auto' }}>
@@ -1331,7 +1331,7 @@ function BrowsePage() {
       )}
 
       {orderProduct && (
-        <div onClick={() => { setOrderProduct(null); setOrderSuccess(false) }}
+        <div className="rt-modal-overlay" onClick={() => { setOrderProduct(null); setOrderSuccess(false) }}
           style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
           <div onClick={e => e.stopPropagation()}
             style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222', textAlign: 'center' }}>
@@ -1389,7 +1389,7 @@ function BrowsePage() {
 
       {/* Message Modal */}
       {messageProduct && (
-        <div onClick={closeMessageModal}
+        <div className="rt-modal-overlay" onClick={closeMessageModal}
           style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
           <div onClick={e => e.stopPropagation()}
             style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222', textAlign: 'center' }}>

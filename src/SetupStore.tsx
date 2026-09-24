@@ -684,7 +684,7 @@ function SetupStore() {
     const shopUrl = `${window.location.origin}/store/${createdSlug}`
     const shareText = `Buy from my shop on rachett: ${shopUrl}`
     return (
-      <div style={{ minHeight: '100vh', background: '#f9f9f9', fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+      <div className="rt-page" style={{ minHeight: '100vh', background: '#f9f9f9', fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
         <div style={{ background: '#fff', borderRadius: '16px', padding: '32px', maxWidth: '460px', width: '100%', textAlign: 'center', boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}>
           <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#adff2f', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 30, margin: '0 auto 16px' }}>🎉</div>
           <h1 style={{ fontSize: '22px', fontWeight: 800, margin: '0 0 8px', color: '#1a1a1a' }}>Your shop is live!</h1>
@@ -715,7 +715,7 @@ function SetupStore() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f9f9f9', fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+    <div className="rt-page" style={{ minHeight: '100vh', background: '#f9f9f9', fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
       <h1 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '8px' }}>Set up your store</h1>
       <p style={{ color: '#666', marginBottom: '32px' }}>Your store will be live in seconds</p>
 

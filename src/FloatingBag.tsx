@@ -16,6 +16,7 @@ function FloatingBag({ count }: Props) {
 
   return (
     <button onClick={() => navigate('/bag')} aria-label="Open your bag" title="Your bag"
+      className="rt-fab"
       style={{ position: 'fixed', bottom: '24px', right: '24px', width: '56px', height: '56px', borderRadius: '50%', background: green, color: '#000', border: 'none', cursor: 'pointer', fontSize: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, boxShadow: '0 4px 16px rgba(173,255,47,0.4)' }}>
       🛍️
       {count > 0 && (

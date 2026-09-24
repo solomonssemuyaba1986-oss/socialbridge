@@ -7,6 +7,7 @@ import { useSellerOrders } from './useSellerOrders'
 import { notify } from './notifications'
 import LoadingScreen from './LoadingScreen'
 import Sidebar from './Sidebar'
+import SellerTabs from './SellerTabs'
 import { variantLabel } from './productSheetUtils'
 import { getStoreAgeLabel } from './useSellerStats'
 import { resolveSellerLocation, type GeoSource, type Place } from './place'
@@ -199,14 +200,14 @@ function Dashboard() {
   )
 
   if (!seller) return (
-    <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p style={{ color: '#555', fontFamily: 'sans-serif' }}>No store found.</p>
     </div>
   )
 
   const storeLink = `${window.location.origin}/store/${seller.slug}`
   return (
-    <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', display: 'flex' }}>
+    <div className="rt-page rt-shell" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', display: 'flex' }}>
       {/* Spotlight dark overlay */}
       {showSpotlight && (
         <div
@@ -229,8 +230,10 @@ function Dashboard() {
         </div>
       )}
       <Sidebar spotlight={showSpotlight} />
+      {/* The phone's navigation: same five places, same badges. Hidden on desktop by responsive.css. */}
+      <SellerTabs spotlight={showSpotlight} />
 
-      <div style={{ width: '100%', marginLeft: 260, padding: '32px 28px', minHeight: '100vh' }}>
+      <div className="rt-main rt-has-tabs" style={{ width: '100%', marginLeft: 260, padding: '32px 28px', minHeight: '100vh' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <button
@@ -357,16 +360,16 @@ function Dashboard() {
               background: '#1a1a1a', borderRadius: '12px', padding: '24px', border: `1px solid ${green}`,
               cursor: 'pointer', textAlign: 'left', width: '100%',
             }}>
-            <p style={{ fontSize: '32px', fontWeight: '800', margin: '0 0 4px', color: green }}>{orders.length}</p>
+            <p className="rt-big" style={{ fontSize: '32px', fontWeight: '800', margin: '0 0 4px', color: green }}>{orders.length}</p>
             <p style={{ fontSize: '13px', color: '#888', margin: '0 0 4px' }}>Total Orders</p>
             <p style={{ fontSize: '11px', color: green, margin: 0, fontWeight: '600' }}>Tap to view all →</p>
           </button>
           <div style={{ background: '#1a1a1a', borderRadius: '12px', padding: '24px', border: '1px solid #222' }}>
-            <p style={{ fontSize: '32px', fontWeight: '800', margin: '0 0 4px', color: green }}>{products.length}</p>
+            <p className="rt-big" style={{ fontSize: '32px', fontWeight: '800', margin: '0 0 4px', color: green }}>{products.length}</p>
             <p style={{ fontSize: '13px', color: '#888', margin: 0 }}>Products</p>
           </div>
           <div style={{ background: '#1a1a1a', borderRadius: '12px', padding: '24px', border: '1px solid #222' }}>
-            <p style={{ fontSize: '32px', fontWeight: '800', margin: '0 0 4px', color: green }}>{pendingOrders.length}</p>
+            <p className="rt-big" style={{ fontSize: '32px', fontWeight: '800', margin: '0 0 4px', color: green }}>{pendingOrders.length}</p>
             <p style={{ fontSize: '13px', color: '#888', margin: 0 }}>Pending Orders</p>
           </div>
         </div>

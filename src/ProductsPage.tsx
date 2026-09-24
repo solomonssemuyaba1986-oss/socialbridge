@@ -4,6 +4,7 @@ import { addDoc, collection, deleteDoc, doc, getDocs, updateDoc } from 'firebase
 import { auth, db } from './firebase'
 import { notify } from './notifications'
 import { swatchFor } from './colourSwatch'
+import SellerTabs from './SellerTabs'
 
 /** The little circle a buyer sees next to a colour name. An unknown word stays visibly unknown. */
 function ColourDot({ name, size = 12 }: { name: string; size?: number }) {
@@ -263,7 +264,10 @@ function ProductsPage() {
   }, [form.colors])
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f0f0f', color: '#fff', fontFamily: 'sans-serif', padding: '24px 16px 48px' }}>
+    <div className="rt-page rt-has-tabs" style={{ minHeight: '100vh', background: '#0f0f0f', color: '#fff', fontFamily: 'sans-serif', padding: '24px 16px 48px' }}>
+      {/* The phone's navigation — this page has no sidebar on any screen, so the tabs are its only
+          seller nav. Hidden on desktop by CSS, and only rendered for an actual seller. */}
+      <SellerTabs />
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', gap: '12px', flexWrap: 'wrap' }}>
           <div>
@@ -276,7 +280,7 @@ function ProductsPage() {
           </button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 0.85fr', gap: '20px', alignItems: 'start' }}>
+        <div className="rt-split" style={{ display: 'grid', gridTemplateColumns: '1.15fr 0.85fr', gap: '20px', alignItems: 'start' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ background: '#121212', border: '1px solid #1f1f1f', borderRadius: '16px', padding: '16px 18px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>

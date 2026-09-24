@@ -298,7 +298,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
         )}
       </div>
 
-      <div ref={listRef} style={{ maxHeight: 420, overflowY: 'auto', padding: 12, background: '#0a0a0a', borderRadius: 14, border: '1px solid #222', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div ref={listRef} className="rt-thread" style={{ maxHeight: 420, overflowY: 'auto', padding: 12, background: '#0a0a0a', borderRadius: 14, border: '1px solid #222', display: 'flex', flexDirection: 'column', gap: 12 }}>
         {loading ? (
           <>
             <style>{`

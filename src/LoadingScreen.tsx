@@ -41,7 +41,7 @@ export default function LoadingScreen({ message, variant = 'grid', logo, inline 
 
   if (quiet) {
     return (
-      <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', color: '#999', gap: 10, padding: '20px' }}>
+      <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', color: '#999', gap: 10, padding: '20px' }}>
         <img src={logo || '/logo.jpg'} alt="" style={{ width: 28, height: 28, borderRadius: 8, objectFit: 'cover', opacity: 0.8 }} />
         <p style={{ margin: 0, fontSize: 13 }}>{message || 'Loading…'}</p>
       </div>

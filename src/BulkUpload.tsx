@@ -111,7 +111,7 @@ function BulkUpload({ sellerId, onDone }: { sellerId: string, onDone: () => void
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '32px 16px' }}>
+    <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '32px 16px' }}>
       <div style={{ maxWidth: '640px', margin: '0 auto' }}>
 
         {/* Back Button */}

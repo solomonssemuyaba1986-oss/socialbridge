@@ -840,7 +840,7 @@ const handleSignupForAction = async (provider: any) => {
 }
 
   if (loading) return (
-    <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p style={{ color: '#555', fontFamily: 'sans-serif' }}>Loading store...</p>
     </div>
   )
@@ -850,7 +850,7 @@ const handleSignupForAction = async (provider: any) => {
   if (!seller) return <StoreProblem slug={slugParam} />
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
+    <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
       {feedbackVisible && (
         <div style={{ margin: '16px auto 0', maxWidth: '640px', padding: '14px 16px', borderRadius: '14px', border: `1px solid ${feedbackType === 'success' ? '#2f8' : feedbackType === 'error' ? '#f55' : '#55d'}`, background: feedbackType === 'success' ? '#122a0d' : feedbackType === 'error' ? '#2a0d0d' : '#0d122a', color: '#fff', fontSize: '14px', textAlign: 'center' }}>
           {feedbackMessage}

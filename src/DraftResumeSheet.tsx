@@ -106,7 +106,7 @@ export default function DraftResumeSheet({ draft, onSent, onClose }: Props) {
 
 
   return (
-    <div onClick={onClose}
+    <div className="rt-sheet" onClick={onClose}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 80 }}>
       <div onClick={e => e.stopPropagation()}
         style={{ background: '#141414', borderRadius: '16px 16px 0 0', padding: '20px', width: '100%', maxWidth: '640px', maxHeight: '88vh', overflowY: 'auto', border: '1px solid #222' }}>

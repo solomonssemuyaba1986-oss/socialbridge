@@ -5,28 +5,22 @@ import { db, auth } from './firebase'
 import { notify } from './notifications'
 import { useSellerLive } from './sellerLive'
 import { getStoreAgeLabel } from './useSellerStats'
+import { SELLER_NAV, badgeFor } from './sellerNav'
 
 const green = '#adff2f'
-
-const NAV_ITEMS = [
-  { label: 'Dashboard', path: '/dashboard', icon: '📊' },
-  { label: 'Products', path: '/products', icon: '🛍️' },
-  { label: 'Orders', path: '/orders', icon: '📦' },
-  { label: 'Inbox', path: '/inbox', icon: '📩' },
-  { label: 'Nearby', path: '/nearby', icon: '📍' },
-  { label: 'Analytics', path: '/analytics', icon: '📈' },
-  { label: 'Marketing', path: '/dashboard', icon: '📣' },
-  { label: 'Payouts', path: '/dashboard', icon: '💸' },
-  { label: 'Settings', path: '/edit-store', icon: '⚙️' },
-  { label: 'Reviews', path: '/dashboard', icon: '⭐' },
-]
 
 type Props = {
   /** Dashboard's new-order spotlight flash (raises the sidebar + pulses the badge). */
   spotlight?: boolean
 }
 
-/** One shared seller sidebar — the same nav follows you across Dashboard / Orders / Analytics. */
+/**
+ * One shared seller sidebar — the same nav follows you across Dashboard / Orders / Analytics.
+ *
+ * It is the **desktop** navigation. On a phone it is hidden (`.rt-sidebar`) and `SellerTabs` takes
+ * over with the same destinations and the same badges, because a fixed 260px column leaves a 360px
+ * screen with 100px to work in. The list itself lives in `sellerNav.ts`, so the two can't drift.
+ */
 function Sidebar({ spotlight }: Props) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -57,7 +51,7 @@ function Sidebar({ spotlight }: Props) {
   return (
     <>
       <style>{`@keyframes rachettPulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(173,255,47,0.6); } 50% { transform: scale(1.15); box-shadow: 0 0 0 8px rgba(173,255,47,0.2); } }`}</style>
-      <div style={{ position: 'fixed', left: 0, top: 0, bottom: 0, width: 260, background: '#070707', borderRight: '1px solid #111', padding: '28px 16px', display: 'flex', flexDirection: 'column', gap: '28px', zIndex: spotlight ? 40 : 20, overflowY: 'auto', overscrollBehavior: 'contain' }}>
+      <div className="rt-sidebar" style={{ position: 'fixed', left: 0, top: 0, bottom: 0, width: 260, background: '#070707', borderRight: '1px solid #111', padding: '28px 16px', display: 'flex', flexDirection: 'column', gap: '28px', zIndex: spotlight ? 40 : 20, overflowY: 'auto', overscrollBehavior: 'contain' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
           {sellerInfo?.logoUrl ? (
             <img src={sellerInfo.logoUrl} alt={sellerInfo.businessName}
@@ -77,9 +71,10 @@ function Sidebar({ spotlight }: Props) {
           </div>
         </div>
         <div style={{ display: 'grid', gap: '6px' }}>
-          {NAV_ITEMS.map(item => {
+          {SELLER_NAV.map(item => {
             const active = location.pathname === item.path
-            const showBadge = item.label === 'Orders' ? pendingOrdersCount : item.label === 'Inbox' ? inboxUnread : 0
+            // The same list and the same numbers as the phone tab bar: one definition, one truth.
+            const showBadge = badgeFor(item, { pendingOrdersCount, inboxUnread })
             return (
               <button key={item.path + item.label} onClick={() => navigate(item.path)}
                 style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderRadius: '14px', border: 'none', cursor: 'pointer', textAlign: 'left', background: active ? '#0f2910' : 'transparent', color: active ? '#fff' : '#aaa', fontWeight: active ? 700 : 600, fontSize: '14px' }}>

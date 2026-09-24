@@ -238,7 +238,7 @@ function SignIn() {
 
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
+    <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
       {/* Navbar */}
       <nav className="rt-topnav" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 32px', borderBottom: '1px solid #1a1a1a' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -537,7 +537,7 @@ function SignIn() {
       <RecoveryModal open={showRecoveryModal} onClose={() => setShowRecoveryModal(false)} />
 
       {/* Problem Section */}
-      <div style={{ background: '#0a0a0a', padding: '80px 20px', borderTop: '1px solid #1a1a1a' }}>
+      <div className="rt-section" style={{ background: '#0a0a0a', padding: '80px 20px', borderTop: '1px solid #1a1a1a' }}>
         <div style={{ maxWidth: '800px', margin: '0 auto', textAlign: 'center' }}>
           <h2 className="rt-title-md" style={{ fontSize: '42px', fontWeight: '900', margin: '0 0 16px', letterSpacing: '-1px' }}>
             The shops you love. The people you trust. All in one place<br />
@@ -563,7 +563,7 @@ function SignIn() {
       </div>
 
       {/* How It Works */}
-      <div style={{ padding: '80px 20px', maxWidth: '800px', margin: '0 auto' }}>
+      <div className="rt-section" style={{ padding: '80px 20px', maxWidth: '800px', margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: '48px' }}>
           <h2 className="rt-title-md" style={{ fontSize: '42px', fontWeight: '900', margin: '0 0 16px', letterSpacing: '-1px' }}>Get set up in minutes.</h2>
           <p style={{ color: '#666', fontSize: '16px', margin: 0 }}>It's you, your audience, and rachett.</p>
@@ -584,7 +584,7 @@ function SignIn() {
       </div>
 
       {/* Stats */}
-      <div style={{ background: '#0a0a0a', padding: '60px 20px', borderTop: '1px solid #1a1a1a', borderBottom: '1px solid #1a1a1a' }}>
+      <div className="rt-section" style={{ background: '#0a0a0a', padding: '60px 20px', borderTop: '1px solid #1a1a1a', borderBottom: '1px solid #1a1a1a' }}>
         <div style={{ maxWidth: '800px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '32px', textAlign: 'center' }}>
           {[
             { value: 'Free', label: 'to start today' },
@@ -601,7 +601,7 @@ function SignIn() {
       </div>
 
       {/* CTA */}
-      <div style={{ padding: '80px 20px', textAlign: 'center' }}>
+      <div className="rt-section" style={{ padding: '80px 20px', textAlign: 'center' }}>
         <h2 className="rt-title-md" style={{ fontSize: '42px', fontWeight: '900', margin: '0 0 16px', letterSpacing: '-1px' }}>
           It doesn't matter where you are, or your customers,
           Manage your business<br />

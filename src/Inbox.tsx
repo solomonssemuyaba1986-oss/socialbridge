@@ -14,6 +14,7 @@ import { getConversationId, markConversationRead } from './useConversation'
 import LoadingScreen from './LoadingScreen'
 import { getDraft, useAllDrafts } from './useDraft'
 import { draftAge, draftLabel, type DraftMeta } from './draftStore'
+import SellerTabs from './SellerTabs'
 import { useSellerLive } from './sellerLive'
 import { trackEvent } from './analytics'
 
@@ -395,7 +396,10 @@ function Inbox() {
   })() : null
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
+    <div className="rt-page rt-has-tabs" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
+      {/* The phone's seller navigation. Inbox is a shared screen, so `SellerTabs` decides for itself
+          whether the person looking is a seller — a buyer here sees no seller tabs at all. */}
+      <SellerTabs />
       <div className="rt-topnav" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid #1a1a1a' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <h1 style={{ margin: 0, fontSize: '18px', fontWeight: '800' }}>Inbox</h1>

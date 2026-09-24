@@ -11,7 +11,7 @@ function NotFound() {
   const navigate = useNavigate()
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+    <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
       <div style={{ background: '#1a1a1a', border: '1px solid #222', borderRadius: '16px', padding: '32px 24px', maxWidth: '420px', width: '100%', textAlign: 'center' }}>
         <div style={{ fontSize: '40px', marginBottom: '10px' }}>🧭</div>
         <h1 style={{ margin: '0 0 8px', fontSize: '20px', fontWeight: '800' }}>This page doesn't exist</h1>

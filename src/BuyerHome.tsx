@@ -86,7 +86,7 @@ function BuyerHome() {
   )
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
+    <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
       <div style={{ maxWidth: '640px', margin: '0 auto', padding: '20px 16px 40px' }}>
 
         <h1 style={{ margin: '0 0 4px', fontSize: '22px', fontWeight: '800' }}>

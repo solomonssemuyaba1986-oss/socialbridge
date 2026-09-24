@@ -266,7 +266,7 @@ export default function ProductActions({
     <>
       {/* ── Order modal ─────────────────────────────────────────────── */}
       {orderProduct && (
-        <div onClick={closeOrder}
+        <div className="rt-modal-overlay" onClick={closeOrder}
           style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
           <div onClick={e => e.stopPropagation()}
             style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222', textAlign: 'center' }}>
@@ -342,7 +342,7 @@ export default function ProductActions({
 
       {/* ── Message modal ───────────────────────────────────────────── */}
       {messageProduct && (
-        <div onClick={closeMessageModal}
+        <div className="rt-modal-overlay" onClick={closeMessageModal}
           style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
           <div onClick={e => e.stopPropagation()}
             style={{ background: '#1a1a1a', borderRadius: '16px', padding: '24px', width: '100%', maxWidth: '400px', border: '1px solid #222', textAlign: 'center', maxHeight: '92vh', overflowY: 'auto' }}>

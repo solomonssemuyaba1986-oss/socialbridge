@@ -406,7 +406,7 @@ function BagPage() {
 
   if (count === 0) {
     return (
-      <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', fontFamily: 'sans-serif', color: '#fff' }}>
+      <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', fontFamily: 'sans-serif', color: '#fff' }}>
         <p style={{ fontSize: '48px', margin: '0 0 16px' }}>🛍️</p>
         <h2 style={{ fontWeight: '800', margin: '0 0 8px', fontSize: '22px' }}>Your bag is empty</h2>
         <p style={{ color: '#888', fontSize: '14px', margin: '0 0 24px', textAlign: 'center' }}>Browse stores and tap 🛍️ on any product to save it here.</p>
@@ -419,7 +419,7 @@ function BagPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '20px' }}>
+    <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '20px' }}>
       <div style={{ maxWidth: '640px', margin: '0 auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <h1 style={{ margin: 0, fontSize: '22px', fontWeight: '800' }}>🛍️ Your Bag ({count})</h1>
@@ -527,7 +527,7 @@ function BagPage() {
 
       {/* Order Modal */}
       {orderTarget && (
-        <div onClick={() => { setOrderTarget(null); setOrderSuccess(false) }}
+        <div className="rt-modal-overlay" onClick={() => { setOrderTarget(null); setOrderSuccess(false) }}
           style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
           <div onClick={e => e.stopPropagation()}
             style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222', textAlign: 'center' }}>
@@ -582,7 +582,7 @@ function BagPage() {
 
       {/* Message Modal */}
       {messageTarget && (
-        <div onClick={closeMessageModal}
+        <div className="rt-modal-overlay" onClick={closeMessageModal}
           style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
           <div onClick={e => e.stopPropagation()}
             style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222', textAlign: 'center' }}>
@@ -653,7 +653,7 @@ function BagPage() {
 
       {/* Product Preview Modal */}
       {previewItem && (
-        <div onClick={() => setPreviewItem(null)}
+        <div className="rt-modal-overlay" onClick={() => setPreviewItem(null)}
           style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.92)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
           <div onClick={e => e.stopPropagation()}
             style={{ background: '#1a1a1a', borderRadius: '16px', padding: '20px', width: '100%', maxWidth: '400px', border: '1px solid #222', maxHeight: '92vh', overflowY: 'auto', textAlign: 'center' }}>

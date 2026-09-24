@@ -4,6 +4,7 @@ import { collection, onSnapshot } from 'firebase/firestore'
 import { db, auth } from './firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 import Sidebar from './Sidebar'
+import SellerTabs from './SellerTabs'
 
 const green = '#adff2f'
 const amber = '#ffaa00'
@@ -272,18 +273,20 @@ function AnalyticsPage() {
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <p style={{ color: '#555', fontFamily: 'sans-serif' }}>Loading analytics...</p>
       </div>
     )
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', display: 'flex' }}>
+    <div className="rt-page rt-shell" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', display: 'flex' }}>
       <Sidebar />
+      {/* The phone's navigation — same five places, same badges, hidden on desktop by CSS. */}
+      <SellerTabs />
 
       {/* Main Content */}
-      <div style={{ width: '100%', marginLeft: 260, padding: '24px 28px', minHeight: '100vh' }}>
+      <div className="rt-main rt-has-tabs" style={{ width: '100%', marginLeft: 260, padding: '24px 28px', minHeight: '100vh' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <div>
             <h1 style={{ margin: 0, fontSize: '20px', fontWeight: '800' }}>Analytics</h1>
@@ -305,7 +308,7 @@ function AnalyticsPage() {
                 {/* Left: Stats */}
                 <div style={{ flex: 1, minWidth: '200px' }}>
                   <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#666', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: '600' }}>📊 Weekly Report</p>
-                  <p style={{ margin: '0 0 2px', fontSize: '36px', fontWeight: '900', color: green, letterSpacing: '-1px', lineHeight: '1.1' }}>
+                  <p className="rt-big" style={{ margin: '0 0 2px', fontSize: '36px', fontWeight: '900', color: green, letterSpacing: '-1px', lineHeight: '1.1' }}>
                     {weeklyReport.thisWeek.conversion.toFixed(1)}%
                   </p>
                   <p style={{ margin: '0 0 6px', fontSize: '13px', color: '#888' }}>
@@ -401,21 +404,21 @@ function AnalyticsPage() {
         {/* Insight Cards */}
         <div className="rt-insights" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '24px' }}>
           <div style={{ background: '#1a1a1a', borderRadius: '12px', padding: '16px', border: '1px solid #222', textAlign: 'center' }}>
-            <p style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 2px', color: green }}>{totalVisits}</p>
+            <p className="rt-big" style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 2px', color: green }}>{totalVisits}</p>
             <p style={{ fontSize: '11px', color: '#888', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Visits</p>
           </div>
           <div style={{ background: '#1a1a1a', borderRadius: '12px', padding: '16px', border: '1px solid #222', textAlign: 'center' }}>
-            <p style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 2px', color: green }}>{totalOrders}</p>
+            <p className="rt-big" style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 2px', color: green }}>{totalOrders}</p>
             <p style={{ fontSize: '11px', color: '#888', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Orders</p>
           </div>
           <div style={{ background: '#1a1a1a', borderRadius: '12px', padding: '16px', border: '1px solid #222', textAlign: 'center' }}>
-            <p style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 2px', color: totalVisits > 0 ? (totalOrders / totalVisits >= 0.03 ? green : amber) : '#555' }}>
+            <p className="rt-big" style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 2px', color: totalVisits > 0 ? (totalOrders / totalVisits >= 0.03 ? green : amber) : '#555' }}>
               {totalVisits > 0 ? `${((totalOrders / totalVisits) * 100).toFixed(1)}%` : '—'}
             </p>
             <p style={{ fontSize: '11px', color: '#888', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Conversion</p>
           </div>
           <div style={{ background: '#1a1a1a', borderRadius: '12px', padding: '16px', border: '1px solid #222', textAlign: 'center' }}>
-            <p style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 2px', color: repeatBuyers > 0 ? green : '#555' }}>{repeatBuyers}</p>
+            <p className="rt-big" style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 2px', color: repeatBuyers > 0 ? green : '#555' }}>{repeatBuyers}</p>
             <p style={{ fontSize: '11px', color: '#888', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Repeat Buys</p>
           </div>
         </div>
@@ -427,9 +430,9 @@ function AnalyticsPage() {
             <p style={{ color: '#444', margin: 0 }}>No data yet. Share your store link to start tracking.</p>
           </div>
         ) : (
-          <div style={{ marginBottom: '32px', background: '#1a1a1a', borderRadius: '12px', border: '1px solid #222', overflow: 'hidden' }}>
+          <div className="rt-table" style={{ marginBottom: '32px', background: '#1a1a1a', borderRadius: '12px', border: '1px solid #222', overflow: 'hidden' }}>
             {/* Table Header */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: '8px', padding: '12px 16px', background: '#111', borderBottom: '1px solid #222', fontSize: '12px', color: '#666', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '600' }}>
+            <div className="rt-table-row" style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: '8px', padding: '12px 16px', background: '#111', borderBottom: '1px solid #222', fontSize: '12px', color: '#666', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '600' }}>
               <span>Source</span>
               <span style={{ textAlign: 'center' }}>Visitors</span>
               <span style={{ textAlign: 'center' }}>Orders</span>
@@ -443,6 +446,7 @@ function AnalyticsPage() {
                 : '#555'
               return (
                 <div key={stat.platform}
+                  className="rt-table-row"
                   style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: '8px', padding: '14px 16px', alignItems: 'center', borderBottom: i < platformStats.length - 1 ? '1px solid #1a1a1a' : 'none', fontSize: '14px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontSize: '18px' }}>{stat.icon}</span>
