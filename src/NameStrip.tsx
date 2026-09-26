@@ -13,8 +13,13 @@ import type { BuyerName } from './useBuyerName'
  * It never appears twice: accepting, typing, or tapping Later all stop it for good. And it only
  * lives where the name is about to be *seen* — the Inbox, the checkout form, the comment form —
  * never as a first-run sheet that costs the funnel a step.
+ *
+ * One place is a step rather than a moment: the onboarding screen, where choosing "buyer" leads
+ * straight into this ask. There, `onDone` says the step is finished so the screen can move on,
+ * answered or deferred. ("Later" rather than "Cancel" is also the honest word in a flow: either way
+ * they are moving forward.)
  */
-export default function NameStrip({ buyerName, surface, forceOpen = false }: { buyerName: BuyerName; surface: string; forceOpen?: boolean }) {
+export default function NameStrip({ buyerName, surface, forceOpen = false, onDone }: { buyerName: BuyerName; surface: string; forceOpen?: boolean; onDone?: (how: 'saved' | 'skipped') => void }) {
   const { suggestion, needsAsk, markAsked, save, skip } = buyerName
   /** Start in "confirm" mode when we have a suggestion; otherwise straight to the field. */
   const [typing, setTyping] = useState(!suggestion.name || forceOpen)
@@ -39,7 +44,19 @@ export default function NameStrip({ buyerName, surface, forceOpen = false }: { b
     setError('')
     const ok = await save(value, surface)
     setBusy(false)
-    if (!ok) setError(`Keep it simple: 2–${NAME_MAX} letters, no links or numbers-only.`)
+    if (!ok) {
+      setError(`Keep it simple: 2–${NAME_MAX} letters, no links or numbers-only.`)
+      return
+    }
+    onDone?.('saved')
+  }
+
+  /** Later — stop asking, and in a flow move the screen on. */
+  const handleSkip = async () => {
+    setBusy(true)
+    await skip(surface)
+    setBusy(false)
+    onDone?.('skipped')
   }
 
   const openTyping = () => {
@@ -98,9 +115,9 @@ export default function NameStrip({ buyerName, surface, forceOpen = false }: { b
               style={{ padding: '10px 16px', background: busy || !value.trim() ? '#242424' : green, color: busy || !value.trim() ? '#777' : '#000', border: 'none', borderRadius: 9, fontWeight: 800, fontSize: 13, cursor: busy ? 'wait' : 'pointer' }}>
               {busy ? 'Saving…' : 'Save'}
             </button>
-            <button onClick={() => void skip(surface)} disabled={busy}
+            <button onClick={() => void handleSkip()} disabled={busy}
               style={{ padding: '10px 14px', background: 'transparent', color: '#888', border: '1px solid #222', borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-              {forceOpen ? 'Cancel' : 'Later'}
+              {forceOpen && !onDone ? 'Cancel' : 'Later'}
             </button>
           </div>
           {error && <p style={{ margin: '8px 0 0', color: '#ff6b6b', fontSize: 12, fontWeight: 700 }}>{error}</p>}

@@ -53,6 +53,22 @@ export const CATEGORIES = {
     "eBooks",
     "Design Services"
   ],
+  // Services are people selling their time — a tutor, a coach, a photographer. Nothing ships, so
+  // these are booked: the buyer sends the order and the two of them agree a time in chat.
+  "Services": [
+    "Tutoring & Lessons",
+    "Music Lessons",
+    "Languages",
+    "Tech & Coding",
+    "Fitness & Coaching",
+    "Photography & Video",
+    "Art & Design Lessons",
+    "Business & Career",
+    "Beauty & Grooming",
+    "Repairs & Maintenance",
+    "Events & Entertainment",
+    "Home Services"
+  ],
   "Home & Living": [
     "Furniture",
     "Bedding & Linens",

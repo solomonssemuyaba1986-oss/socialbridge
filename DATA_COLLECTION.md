@@ -216,6 +216,7 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 | `rachett_last_user` | Last signed-in identity for "Continue as": displayName, **email**, photoURL, uid, providerId | `userMemory.ts:3-28` |
 | `rachett_quick_replies_guest` | Guest quick replies | `useQuickReplies.ts:6` |
 | `rachett_role` | The buyer/seller choice made on the onboarding screen — stops us asking twice (`role.ts`) | `role.ts` |
+| `rachett_name` | The name chosen *before* there is an account (`{ name, skipped, at }`) — a "just looking" visitor can choose one, and it is adopted onto `users/{uid}` at their first sign-in rather than evaporating. Written only when nobody is signed in, cleared the moment it is adopted | `buyerNameDevice.ts` → `buyerName.ts` |
 | `rachett_feedback` | When the "what didn't you like?" ask was last shown, and when they answered (ms). "Later" = a week; answered = three months of quiet. Mirrored onto `users/{uid}` so a second phone doesn't ask again | `feedbackRules.ts` |
 | `rachett_feedback_visit` (session) | The distinct pages seen this visit — that is what "they have actually used it" means (3+ pages before the ask is deserved) | `feedbackRules.ts` |
 | `rachett_nearby_sort` | The Nearby quick control the buyer prefers (`closest` / `newest` / `popular`) — remembered so the page opens the way they like it (`NearbyPage.tsx`) | `NearbyPage.tsx` |

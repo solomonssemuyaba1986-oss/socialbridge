@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
-import { collection, doc, getDocs, onSnapshot, query, setDoc, where, writeBatch } from 'firebase/firestore'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, where, writeBatch } from 'firebase/firestore'
 import { onAuthStateChanged, updateProfile } from 'firebase/auth'
 import { auth, db } from './firebase'
 import {
   checkoutPrefill,
   cleanBuyerName,
+  deviceNameToState,
   emptyNameState,
   hasConfirmedName,
   needsNameAsk,
@@ -12,6 +13,7 @@ import {
   suggestName,
   type BuyerNameState,
 } from './buyerName'
+import { clearDeviceName, readDeviceName, writeDeviceName } from './buyerNameDevice'
 import { trackEvent } from './analytics'
 
 /**
@@ -67,7 +69,9 @@ async function spreadNameEverywhere(uid: string, shortName: string): Promise<voi
  *
  * Asked once, ever: `confirmedAt` (they accepted or typed one) or `skipped` (they tapped Later)
  * both stop the asking. Those markers are on the account, not the device, so a new phone never
- * re-asks.
+ * re-asks. The one exception is somebody with no account at all — the "just looking" visitor on the
+ * onboarding screen. Their answer waits on the device (`buyerNameDevice.ts`) and is adopted by the
+ * account on their first sign-in, so a name chosen before signing up is never one that evaporates.
  */
 export function useBuyerName() {
   const [state, setState] = useState<BuyerNameState>(emptyNameState())
@@ -80,8 +84,10 @@ export function useBuyerName() {
       unsubDoc?.()
       unsubDoc = undefined
       if (!user || user.isAnonymous) {
+        // No account yet. The name they chose on the onboarding screen (or the Later they tapped)
+        // is kept on this device, so read it back in the same shape an account would give us.
         setUid('')
-        setState(emptyNameState())
+        setState(deviceNameToState(readDeviceName()))
         setLoading(false)
         return
       }
@@ -128,21 +134,22 @@ export function useBuyerName() {
 
   /** Note that the one-time ask was put in front of them (informational; drives the funnel). */
   const markAsked = useCallback((surface: string) => {
-    const user = auth.currentUser
-    if (!user) return
     const at = Date.now()
     setState(prev => (prev.askedAt ? prev : { ...prev, askedAt: at }))
     if (state.askedAt) return
+    // The funnel counts the ask itself, not the answer — and somebody with no account is still
+    // somebody we asked, so this fires before the account write is even considered.
+    trackEvent('buyer_name_prompt_shown', { hasSuggestion: Boolean(suggestion.name), surface })
+    const user = auth.currentUser
+    if (!user) return
     void setDoc(doc(db, 'users', user.uid), { nameAskedAt: at }, { merge: true })
       .catch(err => console.warn('Buyer name: could not record the ask', err))
-    trackEvent('buyer_name_prompt_shown', { hasSuggestion: Boolean(suggestion.name), surface })
   }, [state.askedAt, suggestion.name])
 
   /** Accept a name (ours or theirs). Returns false when it isn't usable, so the field can say so. */
   const save = useCallback(async (entered: string, surface = 'inbox'): Promise<boolean> => {
     const clean = cleanBuyerName(entered)
-    const user = auth.currentUser
-    if (!clean || !user) return false
+    if (!clean) return false
     const fromSuggestion = clean === suggestion.name
     const at = Date.now()
     const next = {
@@ -151,6 +158,16 @@ export function useBuyerName() {
       confirmedAt: at,
       skipped: false,
       askedAt: state.askedAt || at,
+    }
+    const user = auth.currentUser
+    if (!user) {
+      // No account yet — the "just looking" visitor on the onboarding step, or a guest at checkout.
+      // The name still has to stick somewhere, so it goes to this device and is adopted by the
+      // account on their first sign-in. Same events either way: this is one funnel.
+      writeDeviceName({ name: clean, skipped: false, at })
+      setState(prev => ({ ...prev, ...next }))
+      trackEvent('buyer_name_saved', { source: next.source, wasSuggestion: fromSuggestion, surface })
+      return true
     }
     setState(prev => ({ ...prev, ...next }))
     try {
@@ -178,16 +195,66 @@ export function useBuyerName() {
 
   /** "Later" — quietly, once. The line in the Inbox header stays available for good. */
   const skip = useCallback(async (surface = 'inbox') => {
+    const at = Date.now()
+    setState(prev => ({ ...prev, skipped: true, askedAt: prev.askedAt || at }))
     const user = auth.currentUser
-    setState(prev => ({ ...prev, skipped: true, askedAt: prev.askedAt || Date.now() }))
-    if (!user) return
+    if (!user) {
+      // Nobody to record it on yet: keep the Later on the device so the same ask does not come back
+      // tomorrow, and let the account take it over when they sign in.
+      writeDeviceName({ name: state.name, skipped: true, at })
+      trackEvent('buyer_name_skipped', { surface })
+      return
+    }
     try {
-      await setDoc(doc(db, 'users', user.uid), { nameSkipped: true, nameAskedAt: Date.now() }, { merge: true })
+      await setDoc(doc(db, 'users', user.uid), { nameSkipped: true, nameAskedAt: at }, { merge: true })
     } catch (err) {
       console.warn('Buyer name: could not record the skip', err)
     }
     trackEvent('buyer_name_skipped', { surface })
-  }, [])
+  }, [state.name])
+
+  /**
+   * A name chosen before signing in belongs to the account they then sign in to.
+   *
+   * Decided from the **database**, never from local state: a snapshot that has not landed yet would
+   * otherwise make a long-standing account look nameless and overwrite the answer it already has.
+   * A name they confirmed on the account wins outright; otherwise the one they chose on the device
+   * is adopted — over a mere "Later", which is not a name — and the device copy is cleared so
+   * nothing can ever be adopted twice.
+   *
+   * It sits below `save` and `skip` on purpose: a dependency array is read during render, so naming
+   * them from further up the hook would be a ReferenceError rather than a re-run.
+   */
+  const adoptedFor = useRef('')
+  useEffect(() => {
+    if (!uid || loading || adoptedFor.current === uid) return
+    const device = readDeviceName()
+    if (!device) return
+    adoptedFor.current = uid
+
+    void (async () => {
+      try {
+        const snap = await getDoc(doc(db, 'users', uid))
+        const data = (snap.data() || {}) as { nameConfirmedAt?: unknown }
+        if (Number(data.nameConfirmedAt) > 0) {
+          // They answered on the account itself — that answer is the one of record.
+          clearDeviceName()
+          return
+        }
+        if (device.name) {
+          const ok = await save(device.name, 'device-adopted')
+          if (ok) clearDeviceName()
+          return
+        }
+        if (device.skipped) {
+          await skip('device-adopted')
+          clearDeviceName()
+        }
+      } catch (err) {
+        console.warn('Buyer name: could not adopt the name from this device', err)
+      }
+    })()
+  }, [uid, loading, save, skip])
 
   /**
    * Remember a name that arrived from checkout — but only when it is actually new, so a buyer who

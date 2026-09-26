@@ -1,8 +1,55 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { setRole, clearRole, MARKET_HOME } from './role'
+import { useBuyerName } from './useBuyerName'
+import NameStrip from './NameStrip'
 
 function Onboarding() {
   const navigate = useNavigate()
+  /** Who we call them — the same name system the Inbox, checkout and comments use. */
+  const myName = useBuyerName()
+  /** 'choose' is the three cards; 'name' is the one question that follows a buyer's choice. */
+  const [step, setStep] = useState<'choose' | 'name'>('choose')
+
+  /**
+   * Choosing a way in. The name ask belongs *here*, at the moment of choosing, because this is where
+   * a visitor becomes a person on rachett — and whatever they answer is what sellers, the Inbox and
+   * every order form will call them from then on.
+   *
+   * While the account is still loading we go straight through: asking somebody who answered months
+   * ago is worse than not asking somebody new. A seller's own name is their business name, asked on
+   * the store setup screen, so that card leads straight there.
+   */
+  const choose = (role: 'buyer' | 'looking') => {
+    if (role === 'buyer') setRole('buyer')
+    else clearRole()
+    if (myName.loading || !myName.needsAsk) {
+      navigate(MARKET_HOME)
+      return
+    }
+    setStep('name')
+  }
+
+  if (step === 'name') {
+    return (
+      <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+        <p style={{ color: '#aaa', marginBottom: '8px', fontSize: '14px' }}>Welcome to rachett</p>
+        <h1 style={{ color: '#fff', fontSize: '28px', fontWeight: '800', marginBottom: '8px', textAlign: 'center' }}>One thing before you look around</h1>
+        <p style={{ color: '#888', marginBottom: '24px', fontSize: '15px', textAlign: 'center', maxWidth: '460px' }}>
+          What should we call you? This is the name sellers see when you message or order — and you can change it any time.
+        </p>
+        <div style={{ width: '100%', maxWidth: '460px' }}>
+          {/* forceOpen: this *is* the ask, and it moves the screen on however they answer it. */}
+          <NameStrip buyerName={myName} surface="onboarding" forceOpen onDone={() => navigate(MARKET_HOME)} />
+        </div>
+        {!myName.loading && !myName.uid && (
+          <p style={{ color: '#666', fontSize: 12, marginTop: 2, maxWidth: '460px', textAlign: 'center', lineHeight: 1.6 }}>
+            You are browsing without an account, so this stays on this phone — and it follows you if you sign in later.
+          </p>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
@@ -22,7 +69,7 @@ function Onboarding() {
         </div>
 
         {/* Buyer */}
-        <div onClick={() => { setRole('buyer'); navigate(MARKET_HOME) }}
+        <div onClick={() => choose('buyer')}
           style={{ flex: 1, background: '#1a1a1a', border: '2px solid #333', borderRadius: '16px', padding: '24px', cursor: 'pointer' }}>
           <div style={{ background: '#3b82f6', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', fontSize: '22px' }}>🛍️</div>
           <p style={{ color: '#fff', fontWeight: '700', fontSize: '16px', margin: '0 0 8px' }}>I'm a Buyer</p>
@@ -32,7 +79,7 @@ function Onboarding() {
 
         {/* Just looking — records NO role at all. Browsing the market needs no account and no
             choice, and this is also the way out of a half-made seller choice (see clearRole). */}
-        <div onClick={() => { clearRole(); navigate(MARKET_HOME) }}
+        <div onClick={() => choose('looking')}
           style={{ flex: 1, background: '#1a1a1a', border: '2px solid #333', borderRadius: '16px', padding: '24px', cursor: 'pointer' }}>
           <div style={{ background: '#7c3aed', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', fontSize: '22px' }}>🔍</div>
           <p style={{ color: '#fff', fontWeight: '700', fontSize: '16px', margin: '0 0 8px' }}>Just looking</p>

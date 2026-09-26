@@ -159,3 +159,68 @@ export function checkoutPrefill(
   if (confirmed) return { name: confirmed, source: (state?.source as NameSource) || 'self' }
   return suggestName(account)
 }
+
+/**
+ * The device copy of a name, for someone who has not signed in yet.
+ *
+ * The name system only ever spoke to an account, so a visitor who picks "just looking" on the
+ * onboarding screen had nowhere to put the name they had just chosen. This record is that place:
+ * written before an account exists, read back when the same phone opens the app again, and adopted
+ * onto the account the moment they sign in — so the name they chose is the one sellers see either
+ * way, rather than an ask that silently evaporated.
+ */
+export interface DeviceNameState {
+  /** The name they chose, cleaned — '' when they only tapped Later. */
+  name: string
+  /** They tapped Later on this device. Stops the same ask coming back tomorrow. */
+  skipped: boolean
+  /** When they answered it (ms). */
+  at: number
+}
+
+/** Read whatever is in device storage as a record. Junk, or nothing, is simply forgotten. */
+export function parseDeviceName(raw: unknown): DeviceNameState | null {
+  if (typeof raw !== 'string' || raw.trim() === '') return null
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return null
+  }
+  if (!parsed || typeof parsed !== 'object') return null
+
+  const rec = parsed as Partial<DeviceNameState>
+  // The same gate a fresh name passes: a name we would refuse to *show* is never one we keep.
+  const name = cleanBuyerName(rec.name)
+  const skipped = rec.skipped === true
+  if (!name && !skipped) return null
+
+  const at = Number(rec.at)
+  return { name, skipped, at: Number.isFinite(at) && at > 0 ? at : Date.now() }
+}
+
+/** What to write back. Always a clean record — never a name we would refuse to publish. */
+export function serializeDeviceName(rec: DeviceNameState): string {
+  const at = Number(rec.at)
+  return JSON.stringify({
+    name: cleanBuyerName(rec.name),
+    skipped: rec.skipped === true,
+    at: Number.isFinite(at) && at > 0 ? at : Date.now(),
+  })
+}
+
+/**
+ * A device record read as account-shaped state, so everything downstream — `needsAsk`, the
+ * prefill, the strip itself — behaves the same whether the name came from a phone or an account.
+ */
+export function deviceNameToState(rec: DeviceNameState | null): BuyerNameState {
+  if (!rec) return emptyNameState()
+  return {
+    name: rec.name,
+    source: rec.name ? 'self' : '',
+    askedAt: rec.at,
+    confirmedAt: rec.name ? rec.at : 0,
+    skipped: rec.skipped,
+  }
+}
