@@ -11,11 +11,13 @@
  */
 import { httpsCallable } from 'firebase/functions'
 import { functions } from './firebase'
-import { paymentErrorMessage, PAYMENT_NOT_CONFIGURED_MESSAGE } from './pesapalUtils'
 
 // The words for a failure are shared with the card flow on purpose: a buyer should not be able to
 // tell which processor was involved by the phrasing of a problem. (The filename is now a little
 // narrow for what it holds — worth renaming to `paymentError.ts` one day.)
+//
+// Re-exported, never imported-then-re-exported: with `noUnusedLocals` on, a flat import of names we
+// only pass straight back out is an error the build refuses.
 export { PAYMENT_NOT_CONFIGURED_MESSAGE, paymentErrorMessage } from './pesapalUtils'
 
 export type PawapayOutcome = 'initiated' | 'completed' | 'failed' | 'unknown' | 'none'
