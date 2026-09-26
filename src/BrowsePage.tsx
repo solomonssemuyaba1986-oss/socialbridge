@@ -9,6 +9,7 @@ import { IMPRESSION_ATTR, IMPRESSION_SELLER_ATTR, observeImpressions } from './a
 import { useBag, getBagCounts, type BagCountData } from './useBag'
 import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder'
 import QuickRepliesPanel from './QuickRepliesPanel'
+import PawapayCheckout from './PawapayCheckout'
 import { getMainCategories } from './categories'
 import LoadingScreen from './LoadingScreen'
 import { avatarColor, initialOf } from './avatar'
@@ -139,6 +140,8 @@ function BrowsePage() {
   const [orderProduct, setOrderProduct] = useState<Product | null>(null)
   const [messageProduct, setMessageProduct] = useState<Product | null>(null)
   const [orderSuccess, setOrderSuccess] = useState(false)
+  /** The order document id — what the payment function needs. The visible ref is `RT-XXXXXX`. */
+  const [orderDocId, setOrderDocId] = useState('')
   const [buyerName, setBuyerName] = useState('')
   const [quantity, setQuantity] = useState('1')
   const [deliveryArea, setDeliveryArea] = useState('')
@@ -448,7 +451,7 @@ function BrowsePage() {
     void myName.rememberIfNew(shownName, 'checkout')
     const sourcePlatform = detectSource()
     try {
-      const { orderId } = await createBuyerOrder(orderProduct.sellerId, {
+      const { orderRef, orderId } = await createBuyerOrder(orderProduct.sellerId, {
         buyerName: shownName.trim(),
         buyerUid: auth.currentUser.uid,
         productName: orderProduct.name,
@@ -466,6 +469,8 @@ function BrowsePage() {
         sourcePlatform,
         createdAt: new Date(),
       })
+      // The payment step needs the *document* id, not the RT-XXXXXX the buyer sees on the order.
+      setOrderDocId(orderRef.id)
       await createOrderConversation({
         sellerId: orderProduct.sellerId,
         buyerId: auth.currentUser.uid,
@@ -1341,7 +1346,15 @@ function BrowsePage() {
                   ✓
                 </div>
                 <h3 style={{ color: '#fff', fontWeight: '800', fontSize: '18px', margin: '0 0 8px' }}>Order Sent!</h3>
-                <p style={{ color: '#888', fontSize: '14px', margin: 0 }}>The seller will contact you to confirm delivery.</p>
+                <p style={{ color: '#888', fontSize: '14px', margin: '0 0 16px' }}>Your order is in. Pay now to lock it in — or the seller will contact you to arrange it.</p>
+                <PawapayCheckout
+                  sellerId={orderProduct.sellerId}
+                  sellerName={orderProduct.businessName}
+                  productName={orderProduct.name}
+                  productPrice={orderProduct.price}
+                  quantity={quantity}
+                  orderDocId={orderDocId}
+                />
               </div>
             ) : !auth.currentUser || auth.currentUser.isAnonymous ? (
               <SignInPrompt
