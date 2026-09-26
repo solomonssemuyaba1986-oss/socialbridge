@@ -103,6 +103,8 @@ the page needs it.
 | `search_performed` | query, surface, resultCount, zeroResult, category, sortBy | ✅ (Browse + Nearby — fired by the 🔍 button, the phone's Search key, Enter, or a recent search) |
 | `search_suggestion_clicked` | query, suggestion, kind, surface | ✅ (Browse + Nearby type-ahead) |
 | `recent_search_clicked` | query, surface | ⏳ |
+| `history_entry_opened` | surface, bucket | ✅ (opening something from your own history strip — Browse or Nearby, `bucket` = today · yesterday · past 3 days · this week · last week · this month · last month) |
+| `history_cleared` | surface, count | ✅ ("Clear history" — count is what was wiped) |
 | `search_cleared` | surface, hadQuery | ✅ |
 | `product_impression` | productId, sellerId, surface, position | ✅ |
 | `product_viewed` | productId, sellerId, sellerSlug, surface, position, category | ✅ |

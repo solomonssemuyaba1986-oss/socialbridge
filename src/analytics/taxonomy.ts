@@ -69,6 +69,12 @@ export const EVENT_PROPS = {
   recent_search_clicked: ['query', 'surface'],
   search_cleared: ['surface', 'hadQuery'],
 
+  // ── History (Browse's own list and Nearby's own list — never merged, never an account) ──
+  // `bucket` is the interval it was opened from: today · yesterday · past 3 days · this week ·
+  // last week · this month · last month.
+  history_entry_opened: ['surface', 'bucket'],
+  history_cleared: ['surface', 'count'],
+
   // ── Products ─────────────────────────────────────────────────────────────
   product_impression: ['productId', 'sellerId', 'surface', 'position'],
   product_viewed: ['productId', 'sellerId', 'sellerSlug', 'surface', 'position', 'category'],

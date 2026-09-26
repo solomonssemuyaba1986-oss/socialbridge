@@ -28,6 +28,8 @@ import { formatCount, toMillis } from './productCardUtils'
 import { useProductLikes } from './useProductLikes'
 import LikePill from './LikePill'
 import SearchBar from './SearchBar'
+import ViewHistory from './ViewHistory'
+import { useViewHistory } from './useViewHistory'
 import { useRotatingPlaceholder } from './useRotatingPlaceholder'
 import { useProductFeed } from './useProductFeed'
 import StoreCard from './StoreCard'
@@ -150,6 +152,18 @@ function BrowsePage() {
   const shownName = buyerName.trim() || myName.name
   /** The details sheet: which product is open, and the colour/size picked in it. */
   const [detailsProduct, setDetailsProduct] = useState<Product | null>(null)
+  /** What this page showed them, kept on this device — Browse's own, never Nearby's. */
+  const history = useViewHistory('browse')
+
+  /**
+   * Opening the details sheet *is* the view — recorded here, in one place, so every way of opening a
+   * product is covered (the card's ⓘ, its photo, the sheet itself). Re-opening something this session
+   * does not move it, because the first open in this session already put it at the top.
+   */
+  useEffect(() => {
+    if (!detailsProduct) return
+    history.record(detailsProduct)
+  }, [detailsProduct, history.record])
   const [orderVariant, setOrderVariant] = useState<Variant>({})
   const [messageVariant, setMessageVariant] = useState<Variant>({})
   const [orderMessage, setOrderMessage] = useState('')
@@ -850,6 +864,10 @@ function BrowsePage() {
         <p style={{ color: '#666', fontSize: '15px', margin: '0 0 24px' }}>
           Every store here is run by a real social media seller. Browse, order, and they'll reach out to complete your purchase.
         </p>
+
+        {/* What they looked at on this page — its own history, directly in front of the search bar */}
+        <ViewHistory history={history} onOpen={(product: Product) => setDetailsProduct(product)}
+          style={{ maxWidth: '500px', margin: '0 auto 10px' }} />
 
         {/* Search — one magnifier, on the right, and a hint that rolls with real rachett names */}
         <div style={{ maxWidth: '500px', margin: '0 auto' }}>

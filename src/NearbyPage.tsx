@@ -22,6 +22,8 @@ import { green, productImages, seededShuffle, toMillis, type CardProduct } from 
 import { trackEvent } from './analytics'
 import SearchSuggest from './SearchSuggest'
 import SearchBar from './SearchBar'
+import ViewHistory from './ViewHistory'
+import { useViewHistory } from './useViewHistory'
 import { useRotatingPlaceholder } from './useRotatingPlaceholder'
 import { buildSuggestions, type Suggestion } from './useSuggestions'
 import { consumePendingAction, requireSignIn } from './signInGate'
@@ -165,6 +167,18 @@ function NearbyPage() {
   const [messageVariant, setMessageVariant] = useState<Variant>({})
   const [sheetQty, setSheetQty] = useState('1')
   const [preview, setPreview] = useState<{ images: string[]; index: number } | null>(null)
+  /** What this page showed them, kept on this device — Nearby's own, never Browse's. */
+  const history = useViewHistory('nearby')
+
+  /**
+   * Opening the details sheet *is* the view — recorded here, in one place, so every way of opening a
+   * product is covered. Re-opening something this session does not move it, because the first open in
+   * this session already put it at the top.
+   */
+  useEffect(() => {
+    if (!detailsProduct) return
+    history.record(detailsProduct)
+  }, [detailsProduct, history.record])
   // Unsent messages — a card you already wrote about says so.
   const { drafts: myDrafts } = useAllDrafts()
   const draftProductIds = new Set(myDrafts.map(d => d.productId).filter((id): id is string => Boolean(id)))
@@ -749,6 +763,10 @@ function NearbyPage() {
             <p style={{ margin: '10px 0 0', color: '#555', fontSize: '11px' }}>Your location is used only on this screen — never saved.</p>
           </div>
         )}
+
+        {/* What they looked at on this page — its own history, directly in front of the search bar */}
+        <ViewHistory history={history} onOpen={(product: CardProduct) => setDetailsProduct(product)}
+          style={{ marginBottom: '10px' }} />
 
         {/* Search bar — magnifier on the right; Enter searches too (it used to do nothing) */}
         <div style={{ marginBottom: '10px' }}>
