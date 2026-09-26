@@ -331,6 +331,22 @@ function EditStore() {
           }}
           onClose={() => setConfirmSignOut(false)}
         />
+
+        {/* Payments — a page of its own, because how you get paid is its own decision. */}
+        <div style={{ marginTop: 28, paddingTop: 20, borderTop: '1px solid #e0e0e0' }}>
+          <h3 style={{ margin: '0 0 4px', fontSize: 15, color: '#1a1a1a' }}>Payments</h3>
+          <p style={{ margin: '0 0 12px', fontSize: 13, color: '#666', lineHeight: 1.5 }}>
+            Choose how your buyers can pay you — MTN MoMo, Airtel Money, or a card.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate('/payment-setup')}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '14px 16px', borderRadius: 12, border: '1px solid #ddd', background: '#fff', color: '#1a1a1a', fontSize: 15, fontWeight: 700, cursor: 'pointer', textAlign: 'left' }}
+          >
+            <span>💸 How you get paid</span>
+            <span aria-hidden="true" style={{ color: '#888' }}>→</span>
+          </button>
+        </div>
       </div>
     </div>
   )

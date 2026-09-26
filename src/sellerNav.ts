@@ -23,7 +23,7 @@ export const SELLER_NAV: SellerNavItem[] = [
   { label: 'Nearby', path: '/nearby', icon: '📍' },
   { label: 'Analytics', path: '/analytics', icon: '📈', tab: true },
   { label: 'Marketing', path: '/dashboard', icon: '📣' },
-  { label: 'Payouts', path: '/dashboard', icon: '💸' },
+  { label: 'Payouts', path: '/payment-setup', icon: '💸' },
   { label: 'Settings', path: '/edit-store', icon: '⚙️' },
   { label: 'Reviews', path: '/dashboard', icon: '⭐' },
 ]

@@ -16,6 +16,7 @@ import BulkUpload from './BulkUpload.tsx'
 import Inbox from './Inbox.tsx'
 import OrderHistory from './OrderHistory.tsx'
 import EditStore from './EditStore.tsx'
+import PaymentSetup from './PaymentSetup.tsx'
 import ProductsPage from './ProductsPage.tsx'
 import AnalyticsPage from './AnalyticsPage.tsx'
 import FeedbackPage from './FeedbackPage.tsx'
@@ -143,6 +144,8 @@ function App() {
       <Route path="/orders" element={sellerOnly ? <OrderHistory /> : <Navigate to="/" />} />
       <Route path="/analytics" element={sellerOnly ? <AnalyticsPage /> : <Navigate to="/" />} />
       <Route path="/edit-store" element={sellerOnly ? <EditStore /> : <Navigate to="/" />} />
+      {/* How the seller gets paid. It writes to their own document, so it needs no rules deploy. */}
+      <Route path="/payment-setup" element={sellerOnly ? <PaymentSetup /> : <Navigate to="/" />} />
       <Route path="/feedback" element={<FeedbackPage />} />
       <Route path="/recover" element={<RecoverPage />} />
       <Route path="/help" element={<HelpPage />} />
