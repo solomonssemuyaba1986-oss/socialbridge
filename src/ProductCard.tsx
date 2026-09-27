@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { formatBagCount, green, productImages, type CardProduct } from './productCardUtils'
+import { CARD_IMAGE_WIDTH, sizedImage } from './cloudinaryUrl'
 import LikePill from './LikePill'
 import { useImpression } from './analytics/useImpression'
 
@@ -144,9 +145,13 @@ function ProductCard({
             {imgs.map((img, i) => (
               <img
                 key={`${p.id}-${i}`}
-                src={img}
+                src={sizedImage(img, CARD_IMAGE_WIDTH)}
                 alt={p.name}
                 draggable={false}
+                /* The photo on screen loads now; the ones behind a swipe wait until they are asked for.
+                   That alone is most of the saving on a feed of four-photo products. */
+                loading={i === 0 ? 'eager' : 'lazy'}
+                decoding="async"
                 style={{ width: '100%', flex: '0 0 100%', height: 160, objectFit: 'cover', scrollSnapAlign: 'start', opacity: p.outOfStock ? 0.5 : 1 }}
               />
             ))}

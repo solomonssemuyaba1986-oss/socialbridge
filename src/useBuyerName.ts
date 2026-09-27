@@ -13,7 +13,7 @@ import {
   suggestName,
   type BuyerNameState,
 } from './buyerName'
-import { clearDeviceName, readDeviceName, writeDeviceName } from './buyerNameDevice'
+import { clearDeviceName, readDeviceName, readLastName, rememberLastName, writeDeviceName } from './buyerNameDevice'
 import { trackEvent } from './analytics'
 
 /**
@@ -74,7 +74,17 @@ async function spreadNameEverywhere(uid: string, shortName: string): Promise<voi
  * account on their first sign-in, so a name chosen before signing up is never one that evaporates.
  */
 export function useBuyerName() {
-  const [state, setState] = useState<BuyerNameState>(emptyNameState())
+  /**
+   * Seeded from this phone, not from an empty box.
+   *
+   * The account answer arrives over the network (auth, then `users/{uid}`), so starting empty means
+   * every order form is blank for a moment and a buyer types a name they already gave us. The last
+   * name used on this phone fills it instantly; the account simply corrects it if it disagrees.
+   */
+  const [state, setState] = useState<BuyerNameState>(() => {
+    const remembered = readLastName()
+    return remembered ? { ...emptyNameState(), name: remembered, source: 'self' } : emptyNameState()
+  })
   const [uid, setUid] = useState('')
   const [loading, setLoading] = useState(true)
 
@@ -263,6 +273,8 @@ export function useBuyerName() {
   const rememberIfNew = useCallback(async (entered: string, surface = 'checkout') => {
     const clean = cleanBuyerName(entered)
     if (!clean || clean === state.name) return
+    // Keep it for the next order form on this phone, so the box is never empty again.
+    rememberLastName(clean)
     await save(clean, surface)
   }, [save, state.name])
 

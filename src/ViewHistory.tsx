@@ -12,6 +12,7 @@
  */
 import { useEffect, useState, type CSSProperties } from 'react'
 import { green } from './productCardUtils'
+import { sizedImage } from './cloudinaryUrl'
 import { timeAgo } from './reviewUtils'
 import { bucketLabelFor, type HistoryGroup, type ViewEntry } from './history'
 import { fetchHistoryProduct, type ViewHistoryApi } from './useViewHistory'
@@ -34,7 +35,7 @@ function Thumb({ entry, size = 28 }: { entry: ViewEntry; size?: number }) {
     width: size, height: size, flexShrink: 0, objectFit: 'cover', background: '#222',
     borderRadius: size >= 40 ? 10 : '50%',
   }
-  if (entry.imageUrl) return <img src={entry.imageUrl} alt="" style={box} />
+  if (entry.imageUrl) return <img src={sizedImage(entry.imageUrl, 140)} alt="" loading="lazy" decoding="async" style={box} />
   return (
     <span aria-hidden="true" style={{ ...box, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size >= 40 ? 18 : 13 }}>
       🛍️
@@ -188,9 +189,12 @@ export default function ViewHistory<T>({ history, onOpen, style }: Props<T>) {
             <button type="button"
               onClick={() => {
                 if (!confirmClear) { setConfirmClear(true); return }
+                // Say what just happened, and stay open long enough to be read — an acknowledgment
+                // that vanishes with the thing it is about is not an acknowledgment.
+                const wiped = history.count
                 history.clear()
                 setConfirmClear(false)
-                setPanel(false)
+                setNotice(`Cleared — ${wiped} ${wiped === 1 ? 'look' : 'looks'} forgotten. This list fills again as you browse.`)
               }}
               style={{ ...clearStyle, borderColor: confirmClear ? '#f55' : '#333', color: confirmClear ? '#ff6b6b' : '#888' }}>
               {confirmClear ? 'Tap again to clear everything' : 'Clear history'}

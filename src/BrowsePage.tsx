@@ -392,7 +392,8 @@ function BrowsePage() {
     const imgs = getSurveyImages(p)
     if (imgs.length <= 1) {
       return (
-        <img src={imgs[0] || 'https://placehold.co/300x200/1a1a1a/333333'} alt={p.name}
+        <img src={sizedImage(imgs[0] || 'https://placehold.co/300x200/1a1a1a/333333', CARD_IMAGE_WIDTH)} alt={p.name}
+          loading="lazy" decoding="async"
           style={{ width: '100%', height, objectFit: 'cover', opacity: p.outOfStock ? 0.5 : 1 }} />
       )
     }
@@ -421,7 +422,10 @@ function BrowsePage() {
         }}
         style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', cursor: 'pointer', position: 'relative' }}>
         {imgs.map((img, i) => (
-          <img key={`${p.id}-${i}`} src={img} alt={p.name} draggable={false}
+          <img key={`${p.id}-${i}`} src={sizedImage(img, CARD_IMAGE_WIDTH)} alt={p.name} draggable={false}
+            /* The couple of photos actually on screen come down now; the ones behind a swipe wait to be
+               asked for. On a feed of four-photo products that is most of the data saved. */
+            loading={i === 0 ? 'eager' : 'lazy'} decoding="async"
             style={{ width: '100%', flex: '0 0 100%', height, objectFit: 'cover', scrollSnapAlign: 'start', opacity: p.outOfStock ? 0.5 : 1 }} />
         ))}
         <div style={{ position: 'absolute', bottom: '6px', right: '6px', background: 'rgba(0,0,0,0.6)', color: '#fff', padding: '2px 7px', borderRadius: '12px', fontSize: '10px', fontWeight: '700', zIndex: 2, backdropFilter: 'blur(4px)', lineHeight: 1.4 }}>

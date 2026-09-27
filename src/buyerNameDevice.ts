@@ -31,6 +31,40 @@ export function writeDeviceName(rec: DeviceNameState): void {
   }
 }
 
+/**
+ * The name this phone last gave a seller — kept apart from the one above, and **never cleared**.
+ *
+ * `rachett_name` is an answer to a question (and is cleared the moment an account adopts it, so it is
+ * never adopted twice). This is not an answer, it is a memory: it exists so the order form is already
+ * filled in on the **first paint**, before any Firebase round-trip has answered. On a slow connection
+ * the difference is a buyer who recognises their own name in the box and taps Confirm, versus a buyer
+ * who starts typing it again while the field sits empty.
+ *
+ * It is a convenience, never a source of truth: whatever the account says wins, and this only ever
+ * fills a box the buyer can still edit.
+ */
+const LAST_NAME_KEY = 'rachett_last_name'
+
+/** The last name used on this phone, or '' if there never was one. */
+export function readLastName(): string {
+  try {
+    return (localStorage.getItem(LAST_NAME_KEY) || '').trim()
+  } catch {
+    // ignore storage errors
+    return ''
+  }
+}
+
+export function rememberLastName(name: string): void {
+  const tidy = (name || '').trim()
+  if (!tidy) return
+  try {
+    localStorage.setItem(LAST_NAME_KEY, tidy)
+  } catch {
+    // ignore storage errors
+  }
+}
+
 /** Called once the device name has been adopted onto a real account — it must not be read twice. */
 export function clearDeviceName(): void {
   try {
