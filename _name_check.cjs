@@ -16,11 +16,14 @@ const {
   NAME_MAX,
   checkoutPrefill,
   cleanBuyerName,
+  deviceNameToState,
   emptyNameState,
   hasConfirmedName,
   nameLabel,
   needsNameAsk,
+  parseDeviceName,
   publicName,
+  serializeDeviceName,
   suggestName,
 } = require(path.join(__dirname, '_dsbuild', 'buyerName.cjs'))
 
@@ -126,4 +129,62 @@ check('checkout is pre-filled with what they confirmed, else with the suggestion
   assert.strictEqual(checkoutPrefill(null, {}).name, '')
 })
 
-console.log(`\n${checks} checks passed \u2014 buyer names: suggestions, tidying, labels and asking once.\n`)
+// -- the name a phone keeps before there is an account -------------------------------------------
+//
+// `rachett_last_name` (the memory that fills a checkout box on first paint) is *not* here: it is
+// localStorage-only by design, a convenience rather than a stored identity. What is here is the
+// record the ask itself lives in, because that one decides whether we ask again.
+
+check('a device record is stored clean, and reads back exactly as saved', () => {
+  const saved = serializeDeviceName({ name: '  Aisha   N.  ', skipped: false, at: 1700000000000 })
+  assert.deepStrictEqual(parseDeviceName(saved), { name: 'Aisha N.', skipped: false, at: 1700000000000 })
+  // Written then re-written: the stored form is already settled, so saving it again changes nothing.
+  assert.deepStrictEqual(parseDeviceName(serializeDeviceName(parseDeviceName(saved))), parseDeviceName(saved))
+})
+
+check('a name we would refuse to show is never kept on the phone', () => {
+  const saved = serializeDeviceName({ name: 'aisha@x.com', skipped: false, at: 1700000000000 })
+  assert.strictEqual(JSON.parse(saved).name, '')
+  // Nothing worth keeping and nothing said: the ask stays open rather than closing on junk.
+  assert.strictEqual(parseDeviceName(saved), null)
+  assert.strictEqual(needsNameAsk(deviceNameToState(parseDeviceName(saved))), true)
+})
+
+check('a device name becomes the same state an account name would be', () => {
+  const state = deviceNameToState(parseDeviceName(serializeDeviceName({ name: 'Aisha', skipped: false, at: 1700000000000 })))
+  assert.deepStrictEqual(state, {
+    name: 'Aisha', source: 'self', askedAt: 1700000000000, confirmedAt: 1700000000000, skipped: false,
+  })
+  // ...which is what makes checkout arrive already filled in.
+  assert.deepStrictEqual(checkoutPrefill(state, {}), { name: 'Aisha', source: 'self' })
+  assert.strictEqual(deviceNameToState(null).name, '')
+})
+
+check('"Later" is remembered, so the same ask does not come back tomorrow', () => {
+  const rec = parseDeviceName(serializeDeviceName({ name: '', skipped: true, at: 1700000000000 }))
+  assert.deepStrictEqual(rec, { name: '', skipped: true, at: 1700000000000 })
+  const state = deviceNameToState(rec)
+  assert.strictEqual(needsNameAsk(state), false)
+  // But Later is not a name: a seller still never sees one.
+  assert.strictEqual(hasConfirmedName(state), false)
+})
+
+check('junk in device storage is forgotten, never shown', () => {
+  const junk = [
+    '', '   ', 'not json', '5', '"Aisha"', 'null', 'true', '[]', '{}',
+    '{"name":"aisha@x.com"}', '{"name":"A"}', '{"skipped":"yes"}',
+  ]
+  for (const raw of junk) assert.strictEqual(parseDeviceName(raw), null, JSON.stringify(raw))
+  assert.strictEqual(parseDeviceName(undefined), null)
+  assert.strictEqual(parseDeviceName(42), null)
+})
+
+check('a record with no usable clock is stamped, never left at zero', () => {
+  const rec = parseDeviceName('{"name":"Aisha","at":"nonsense"}')
+  assert.strictEqual(rec.name, 'Aisha')
+  assert.ok(rec.at > 0, 'a record with no clock still has a time')
+  assert.ok(JSON.parse(serializeDeviceName({ name: 'Aisha', skipped: false, at: 0 })).at > 0)
+  assert.ok(JSON.parse(serializeDeviceName({ name: 'Aisha', skipped: false, at: -5 })).at > 0)
+})
+
+console.log(`\n${checks} checks passed \u2014 buyer names: suggestions, tidying, labels, asking once, and the phone that remembers.\n`)
