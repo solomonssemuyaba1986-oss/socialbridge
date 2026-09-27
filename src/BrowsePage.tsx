@@ -155,6 +155,8 @@ function BrowsePage() {
   const [detailsProduct, setDetailsProduct] = useState<Product | null>(null)
   /** What this page showed them, kept on this device — Browse's own, never Nearby's. */
   const history = useViewHistory('browse')
+  /** Held apart from the hook's object, which is rebuilt every render, so the effect stays stable. */
+  const recordView = history.record
 
   /**
    * Opening the details sheet *is* the view — recorded here, in one place, so every way of opening a
@@ -163,8 +165,8 @@ function BrowsePage() {
    */
   useEffect(() => {
     if (!detailsProduct) return
-    history.record(detailsProduct)
-  }, [detailsProduct, history.record])
+    recordView(detailsProduct)
+  }, [detailsProduct, recordView])
   const [orderVariant, setOrderVariant] = useState<Variant>({})
   const [messageVariant, setMessageVariant] = useState<Variant>({})
   const [orderMessage, setOrderMessage] = useState('')

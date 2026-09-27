@@ -169,6 +169,8 @@ function NearbyPage() {
   const [preview, setPreview] = useState<{ images: string[]; index: number } | null>(null)
   /** What this page showed them, kept on this device — Nearby's own, never Browse's. */
   const history = useViewHistory('nearby')
+  /** Held apart from the hook's object, which is rebuilt every render, so the effect stays stable. */
+  const recordView = history.record
 
   /**
    * Opening the details sheet *is* the view — recorded here, in one place, so every way of opening a
@@ -177,8 +179,8 @@ function NearbyPage() {
    */
   useEffect(() => {
     if (!detailsProduct) return
-    history.record(detailsProduct)
-  }, [detailsProduct, history.record])
+    recordView(detailsProduct)
+  }, [detailsProduct, recordView])
   // Unsent messages — a card you already wrote about says so.
   const { drafts: myDrafts } = useAllDrafts()
   const draftProductIds = new Set(myDrafts.map(d => d.productId).filter((id): id is string => Boolean(id)))

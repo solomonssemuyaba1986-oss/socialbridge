@@ -2,9 +2,13 @@
  * Dev-only harness for the buyer-name rules (`src/buyerName.ts`).
  *
  *   npx tsc --ignoreConfig src/buyerName.ts src/reviewUtils.ts --outDir _dsbuild --module commonjs --target es2020 --skipLibCheck
- *   Move-Item -Force _dsbuild/buyerName.js _dsbuild/buyerName.cjs
- *   Move-Item -Force _dsbuild/reviewUtils.js _dsbuild/reviewUtils.cjs
+ *   Copy-Item -Force _dsbuild/buyerName.js _dsbuild/buyerName.cjs
+ *   Copy-Item -Force _dsbuild/reviewUtils.js _dsbuild/reviewUtils.cjs
  *   node _name_check.cjs
+ *
+ * Copy, not move: the compiled `buyerName.cjs` still asks for `./reviewUtils` with no extension, and
+ * Node only resolves that to `reviewUtils.js` — renaming the helper away is what makes this harness
+ * fail to load ("Cannot find module './reviewUtils'") before a single check has run.
  *
  * Why this exists: this decides what a seller calls the person asking for a delivery, and what a
  * stranger reads above a public comment. Get it wrong and a buyer is either nameless ("Buyer"), or

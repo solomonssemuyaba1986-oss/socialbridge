@@ -9,7 +9,7 @@
  * What counts as a view is decided by the page: it opens the details sheet, and *that* is the
  * moment — not a card drifting past in a feed.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from './firebase'
 import {
@@ -43,38 +43,50 @@ function saveHistory(surface: HistorySurface, entries: ViewEntry[]): void {
 }
 
 export function useViewHistory(surface: HistorySurface) {
-  const [entries, setEntries] = useState<ViewEntry[]>(() => loadHistory(surface))
+  const [state, setState] = useState<{ surface: HistorySurface; entries: ViewEntry[] }>(
+    () => ({ surface, entries: loadHistory(surface) }),
+  )
 
-  // One component renders both pages, so moving between them must re-read — never inherit a list.
-  useEffect(() => {
-    setEntries(loadHistory(surface))
+  /**
+   * The list for the surface we were handed — never the one this hook last loaded.
+   *
+   * One component can render both pages, and moving between them must show *that* page's history
+   * rather than inherit the other's. So the list is derived: while the stored state still belongs to
+   * the surface we were given before, this surface's stored list is the one on screen. No effect
+   * mirroring a prop into state, and no frame of the wrong page's history in between.
+   */
+  const entries = state.surface === surface ? state.entries : loadHistory(surface)
+
+  /**
+   * Every write goes through here and is stamped with the surface it belongs to, so a change made
+   * after a surface switch starts from the right list and lands under the right key.
+   */
+  const update = useCallback((mutate: (prev: ViewEntry[]) => ViewEntry[]) => {
+    setState(prev => {
+      const base = prev.surface === surface ? prev.entries : loadHistory(surface)
+      const next = mutate(base)
+      saveHistory(surface, next)
+      return { surface, entries: next }
+    })
   }, [surface])
 
   /** Remember that they opened this. Repeated views move up; they never repeat. */
   const record = useCallback((product: unknown) => {
     const entry = toViewEntry(product as ViewProduct)
     if (!entry) return
-    setEntries(prev => {
-      const next = mergeView(prev, entry)
-      saveHistory(surface, next)
-      return next
-    })
-  }, [surface])
+    update(prev => mergeView(prev, entry))
+  }, [update])
 
   /** Drop one row — used when a product has been taken down since they looked at it. */
   const remove = useCallback((productId: string) => {
-    setEntries(prev => {
-      const next = prev.filter(entry => entry.productId !== productId)
-      saveHistory(surface, next)
-      return next
-    })
-  }, [surface])
+    update(prev => prev.filter(entry => entry.productId !== productId))
+  }, [update])
 
   /** "Clear history" — the whole list, because somebody on a shared phone asked for it. */
   const clear = useCallback(() => {
     saveHistory(surface, [])
     trackEvent('history_cleared', { surface, count: entries.length })
-    setEntries([])
+    setState({ surface, entries: [] })
   }, [surface, entries.length])
 
   const groups = useMemo(() => groupHistory(entries), [entries])
