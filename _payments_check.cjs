@@ -332,6 +332,93 @@ check('the CLI no longer keeps a second, stricter copy of that summary', () => {
   assert.ok(cli.includes('safeSummary'), 'so a surprise shape cannot take --config down')
 })
 
+acheck('the deposit we send is the one pawaPay accepts, and its envelope is peeled', async () => {
+  // Two bugs that each stopped every deposit, and neither of which is visible from our own code:
+  //
+  //   1. pawaPay wants `payer.accountDetails`. `payer.address` — which this file used to send — is
+  //      refused with `400 MISSING_PARAMETER: … the required parameter 'accountDetails'`, a message
+  //      that reads like a *missing* field and is really a wrongly-named one.
+  //   2. Their status endpoint answers `{ status: 'FOUND', data: { …status: 'COMPLETED'… } }`. Reading
+  //      the envelope's `FOUND` as the payment's status made money that had arrived look unfinished.
+  //
+  // A stubbed fetch is what makes both decidable without a key: the shape of the request, and the
+  // reading of the response.
+  const realFetch = global.fetch
+  const stub = (payload) => {
+    global.fetch = async (url, options) => ({
+      ok: true,
+      status: 200,
+      sentUrl: url,
+      sentBody: options && options.body ? JSON.parse(options.body) : null,
+      text: async () => JSON.stringify(payload),
+    })
+  }
+  let sent = null
+  global.fetch = async (url, options) => {
+    sent = { url, body: options && options.body ? JSON.parse(options.body) : null }
+    return { ok: true, status: 200, text: async () => JSON.stringify({ depositId: 'RT-TEST-0001', status: 'ACCEPTED' }) }
+  }
+
+  let started = null
+  try {
+    started = await pawapay.initiateDeposit({
+      env: 'sandbox',
+      apiToken: 'test-token-not-a-real-one',
+      depositId: 'RT-TEST-0001',
+      amount: 1000,
+      currency: 'UGX',
+      provider: 'MTN_MOMO_UGA',
+      phoneNumber: '256783456789',
+      customerMessage: 'test',
+    })
+  } finally {
+    global.fetch = realFetch
+  }
+
+  assert.ok(sent, 'a deposit must actually be sent')
+  assert.ok(sent.url.endsWith('/v2/deposits'), sent.url)
+  assert.ok(sent.body.payer.accountDetails, 'the payer details must be named accountDetails')
+  assert.strictEqual(sent.body.payer.address, undefined, 'never address — that is the 400')
+  assert.strictEqual(sent.body.payer.accountDetails.provider, 'MTN_MOMO_UGA')
+  assert.strictEqual(sent.body.payer.accountDetails.phoneNumber, '256783456789')
+  assert.strictEqual(sent.body.amount, '1000', 'UGX has no minor unit to round to')
+  assert.strictEqual(started.reading.status, 'initiated', 'ACCEPTED means "on its way", not paid')
+
+  // The envelope: `FOUND` is "here it is", never the payment's state.
+  stub({
+    status: 'FOUND',
+    data: {
+      depositId: 'RT-TEST-0001',
+      status: 'COMPLETED',
+      amount: '1000.00',
+      currency: 'UGX',
+      country: 'UGA',
+      payer: { type: 'MMO', accountDetails: { phoneNumber: '256783456789', provider: 'MTN_MOMO_UGA' } },
+      providerTransactionId: 'a0d00278-6a8f-426a-8f5e-8053f632d577',
+    },
+  })
+  let checked = null
+  try {
+    checked = await pawapay.checkDepositStatus({ env: 'sandbox', apiToken: 'test-token-not-a-real-one', depositId: 'RT-TEST-0001' })
+  } finally {
+    global.fetch = realFetch
+  }
+
+  assert.strictEqual(checked.reading.status, 'completed', 'a completed deposit must read as paid')
+  assert.strictEqual(checked.reading.final, true)
+  const readback = rules.depositCallbackFrom(checked.raw)
+  assert.strictEqual(readback.depositId, 'RT-TEST-0001', 'the deposit, not the envelope')
+  assert.strictEqual(readback.rawStatus, 'COMPLETED')
+  assert.strictEqual(readback.provider, 'MTN_MOMO_UGA')
+  assert.strictEqual(readback.phoneNumber, '256783456789')
+  assert.strictEqual(readback.providerTransactionId, 'a0d00278-6a8f-426a-8f5e-8053f632d577')
+
+  // A flat payload — what the deposit POST returns, and what pawaPay's callback posts — is untouched.
+  assert.strictEqual(pawapay.unwrapDeposit({ status: 'ACCEPTED' }).status, 'ACCEPTED')
+  assert.strictEqual(pawapay.unwrapDeposit(null).status, undefined, 'rubbish must not throw')
+  assert.strictEqual(pawapay.unwrapDeposit({ data: [1, 2] }).data.length, 2, 'a list is not a deposit')
+})
+
 ;(async () => {
   for (const { name, fn } of laterChecks) {
     await fn()

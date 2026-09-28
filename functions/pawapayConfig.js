@@ -36,15 +36,35 @@ function pick(source, keys) {
 function operationBits(operationTypes) {
   const bits = []
   for (const [name, detail] of entriesOf(operationTypes)) {
-    const d = detail || {}
-    const min = pick(d, ['minAmount', 'min'])
-    const max = pick(d, ['maxAmount', 'max'])
-    const label = String(name || pick(d, ['operationType', 'type']) || 'operation')
-    bits.push(`${label}${min || max ? ` ${min || '?'}-${max || '?'}` : ''}`)
-    if (d.authType) bits.push(`auth:${d.authType}`)
-    if (d.decimalsInAmount) bits.push(`decimals:${d.decimalsInAmount}`)
-    const callback = pick(d, ['callbackUrl'])
-    if (callback) bits.push(`callback:${callback}`)
+    /**
+     * Two shapes mean the same thing, and both must arrive here with a *name*.
+     *
+     * The live API returns a map keyed by operation type (`{ DEPOSIT: {…} }`) — the key is the name.
+     * Their docs show a list of one-key maps (`[{ DEPOSIT: {…} }]`) — where the name is one level in.
+     * Reading that second shape literally lost it: the entry had no name of its own, so it rendered as
+     * `operation 500-5000000`, a line that describes an operation without saying which one.
+     *
+     * So an entry that carries none of the operation's own fields is a wrapper: descend, and keep the
+     * key it was filed under. Rule 2 of this file, applied one level deeper.
+     */
+    const ownFields = ['minAmount', 'min', 'maxAmount', 'max', 'authType', 'callbackUrl', 'operationType', 'type']
+    const carriesItsOwn = detail && typeof detail === 'object'
+      && ownFields.some((field) => detail[field] !== undefined)
+    const parts = !name && detail && typeof detail === 'object' && !Array.isArray(detail) && !carriesItsOwn
+      ? entriesOf(detail)
+      : [[name, detail]]
+
+    for (const [keyName, operation] of parts) {
+      const d = operation || {}
+      const min = pick(d, ['minAmount', 'min'])
+      const max = pick(d, ['maxAmount', 'max'])
+      const label = String(keyName || pick(d, ['operationType', 'type']) || 'operation')
+      bits.push(`${label}${min || max ? ` ${min || '?'}-${max || '?'}` : ''}`)
+      if (d.authType) bits.push(`auth:${d.authType}`)
+      if (d.decimalsInAmount) bits.push(`decimals:${d.decimalsInAmount}`)
+      const callback = pick(d, ['callbackUrl'])
+      if (callback) bits.push(`callback:${callback}`)
+    }
   }
   return bits
 }

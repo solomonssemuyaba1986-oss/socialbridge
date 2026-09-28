@@ -821,7 +821,9 @@ exports.pawapayCallback = onRequest(
         return
       }
 
-      const callback = pawapayRules.depositCallbackFrom(body)
+      // The body is the deposit itself, but pawaPay wraps their API responses in `{ data: … }` — peel it,
+      // so a wrapped callback is read instead of being shrugged off as "no deposit id".
+      const callback = pawapayRules.depositCallbackFrom(pawapay.unwrapDeposit(body))
       if (!pawapayRules.isDepositId(callback.depositId)) {
         res.status(200).json({ ok: true, ignored: 'no deposit id' })
         return

@@ -24,7 +24,8 @@ const POLL_MS = 3000
 const POLL_MAX_TRIES = 60 // ~3 minutes, then we stop asking — and say so rather than spin
 
 type Rail = 'mtn' | 'airtel'
-type Stage = 'choice' | 'waiting' | 'done' | 'failed'
+/** The stages of paying, exported because the sheet that hosts this needs to know which one we are in. */
+export type Stage = 'choice' | 'waiting' | 'done' | 'failed'
 
 interface MethodShape {
   enabled?: boolean
@@ -45,6 +46,14 @@ type Props = {
   quantity: string
   /** The Firestore id of the order just created — the server reads the amount from it. */
   orderDocId: string
+  /**
+   * Which stage the payment has reached, told to whoever is showing this sheet.
+   *
+   * It exists because unmounting this component stops the only thing watching the buyer's deposit:
+   * the sheet uses this to hold itself open while a prompt is on a phone, and to close once pawaPay
+   * has settled it. Optional — a host that ignores it still gets a working payment step.
+   */
+  onStageChange?: (stage: Stage) => void
 }
 
 /** The seller's country gives the buyer's number its country code. Uganda, unless we know better. */
@@ -81,7 +90,7 @@ function quantityNumber(raw: unknown): number {
 }
 
 export default function PawapayCheckout({
-  sellerId, sellerName, productName, productPrice, quantity, orderDocId,
+  sellerId, sellerName, productName, productPrice, quantity, orderDocId, onStageChange,
 }: Props) {
   const [methods, setMethods] = useState<Methods | null>(null)
   const [country, setCountry] = useState('Uganda')
@@ -119,6 +128,14 @@ export default function PawapayCheckout({
   useEffect(() => () => {
     if (pollRef.current !== null) window.clearInterval(pollRef.current)
   }, [])
+
+  /**
+   * Report each stage, once per change — never once per render, so a host can hold the sheet open
+   * without the callback firing in a loop. The host is expected to pass a stable function.
+   */
+  useEffect(() => {
+    if (onStageChange) onStageChange(stage)
+  }, [stage, onStageChange])
 
   const stopPolling = () => {
     if (pollRef.current !== null) {

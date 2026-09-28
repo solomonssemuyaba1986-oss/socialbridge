@@ -9,7 +9,7 @@ import { IMPRESSION_ATTR, IMPRESSION_SELLER_ATTR, observeImpressions } from './a
 import { useBag, getBagCounts, type BagCountData } from './useBag'
 import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder'
 import QuickRepliesPanel from './QuickRepliesPanel'
-import PawapayCheckout from './PawapayCheckout'
+import PawapayCheckout, { type Stage } from './PawapayCheckout'
 import { getMainCategories } from './categories'
 import LoadingScreen from './LoadingScreen'
 import { avatarColor, initialOf } from './avatar'
@@ -145,6 +145,13 @@ function BrowsePage() {
   const [orderSuccess, setOrderSuccess] = useState(false)
   /** The order document id — what the payment function needs. The visible ref is `RT-XXXXXX`. */
   const [orderDocId, setOrderDocId] = useState('')
+  /**
+   * How far the payment on this order has got — told to us by the `PawapayCheckout` inside the sheet.
+   *
+   * It is here because the sheet now stays open over the payment step: a tap on the overlay while a
+   * prompt is live on the buyer's phone must not unmount the one component watching their money.
+   */
+  const [payStage, setPayStage] = useState<Stage>('choice')
   const [buyerName, setBuyerName] = useState('')
   const [quantity, setQuantity] = useState('1')
   const [deliveryArea, setDeliveryArea] = useState('')
@@ -516,20 +523,45 @@ function BrowsePage() {
         surface: 'browse',
       })
       setOrderSuccess(true)
+      setPayStage('choice')
+      // The *form* is cleared; the sheet is not. It now holds the payment step, and closing it here
+      // would unmount `PawapayCheckout` mid-prompt — the buyer would pay into a page that stopped
+      // listening. It closes when the buyer closes it, or shortly after pawaPay says "paid".
       setTimeout(() => {
         setBuyerName('')
         setQuantity('1')
         setDeliveryArea('')
         setOrderMessage('')
         setOrderVariant({})
-        setOrderProduct(null)
-        setOrderSuccess(false)
       }, 2500)
     } catch (err) {
       console.error('Order failed:', err)
       alert('Failed to place order. Try again.')
     }
   }
+
+  /**
+   * Close the order sheet — deliberately, by the buyer.
+   *
+   * Everything the sheet holds goes with it, including the checkout that polls pawaPay, so this is
+   * never called on a timer and never from a stray tap on the overlay while a prompt is live.
+   */
+  const closeOrderSheet = useCallback(() => {
+    setOrderProduct(null)
+    setOrderSuccess(false)
+    setPayStage('choice')
+    setOrderDocId('')
+  }, [])
+
+  /** Stable, so the checkout's stage effect fires on a real change rather than on every render. */
+  const handlePayStage = useCallback((stage: Stage) => setPayStage(stage), [])
+
+  /** pawaPay has decided and the buyer has seen it: hold the receipt a moment, then close. */
+  useEffect(() => {
+    if (!(orderSuccess && orderProduct && payStage === 'done')) return
+    const timer = window.setTimeout(closeOrderSheet, 2500)
+    return () => window.clearTimeout(timer)
+  }, [orderSuccess, orderProduct, payStage, closeOrderSheet])
 
   const handleSendMessage = async () => {
     if ((!messageText.trim() && !guestImageUrl) || !messageProduct) return
@@ -1361,7 +1393,7 @@ function BrowsePage() {
       )}
 
       {orderProduct && (
-        <div className="rt-modal-overlay" onClick={() => { setOrderProduct(null); setOrderSuccess(false) }}
+        <div className="rt-modal-overlay" onClick={() => { if (payStage !== 'waiting') closeOrderSheet() }}
           style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
           <div onClick={e => e.stopPropagation()}
             style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222', textAlign: 'center' }}>
@@ -1379,7 +1411,12 @@ function BrowsePage() {
                   productPrice={orderProduct.price}
                   quantity={quantity}
                   orderDocId={orderDocId}
+                  onStageChange={handlePayStage}
                 />
+                <button type="button" onClick={closeOrderSheet}
+                  style={{ width: '100%', marginTop: '14px', padding: '12px', background: 'transparent', color: '#888', border: '1px solid #333', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '700' }}>
+                  {payStage === 'waiting' ? 'Close — the payment carries on to my phone' : 'Close'}
+                </button>
               </div>
             ) : !auth.currentUser || auth.currentUser.isAnonymous ? (
               <SignInPrompt

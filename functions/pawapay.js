@@ -103,6 +103,21 @@ async function call(env, path, options) {
 }
 
 /**
+ * Peel pawaPay's envelope off a single deposit.
+ *
+ * Their status endpoint answers `{ "status": "FOUND", "data": { …the deposit… } }`, and `FOUND` is the
+ * envelope's word for *"here it is"* — not the payment's state. Read as the status it is the worst
+ * possible answer: a `COMPLETED` deposit maps to "we are checking this payment", so money that has
+ * arrived looks unfinished and the buyer is told their payment failed. Flat payloads pass through
+ * untouched, so this is safe on any endpoint and on a callback body.
+ */
+function unwrapDeposit(payload) {
+  const p = payload || {}
+  const inner = p.data
+  return inner && typeof inner === 'object' && !Array.isArray(inner) ? inner : p
+}
+
+/**
  * Everything our account can actually do: the providers and currencies enabled for us, the deposit
  * limits, whether a provider takes decimals, each provider's live status, and the callback URL
  * registered for every operation type. This is the source of truth behind "can this seller be paid
@@ -170,18 +185,27 @@ async function initiateDeposit(options) {
         depositId: o.depositId,
         amount,
         currency: String(o.currency).toUpperCase(),
-        payer: { type: 'MMO', address: { provider: o.provider, phoneNumber } },
+        /**
+         * `accountDetails` — not `address`. pawaPay answers a flat payer with
+         * `400 MISSING_PARAMETER: Request does not include the required parameter 'accountDetails'`,
+         * which reads like a missing field and is really a wrongly-named one. `pawapayRules.readDeposit`
+         * already reads this shape back (and tolerates `address` on the way in), so this is the one
+         * spelling the whole flow agrees on: get it wrong and no deposit ever starts, in any country.
+         */
+        payer: { type: 'MMO', accountDetails: { provider: o.provider, phoneNumber } },
       },
       statement ? { customerMessage: statement } : {},
       Array.isArray(o.metadata) && o.metadata.length ? { metadata: o.metadata.slice(0, 10) } : {}
     ),
   })
 
+  const record = unwrapDeposit(payload)
+
   return {
-    raw: payload,
+    raw: record,
     depositId: o.depositId,
-    reading: rules.mapDepositStatus(payload && payload.status),
-    failureWords: rules.depositFailureWords(payload),
+    reading: rules.mapDepositStatus(record && record.status),
+    failureWords: rules.depositFailureWords(record),
   }
 }
 
@@ -190,10 +214,12 @@ async function checkDepositStatus(options) {
   const o = options || {}
   if (!rules.isDepositId(o.depositId)) throw new PawapayError('That deposit id is not one of ours.')
   const payload = await call(o.env, depositStatusPath(o.depositId), { apiToken: o.apiToken })
+  // The envelope goes, the deposit stays: `data.status`, never the `FOUND` around it.
+  const record = unwrapDeposit(payload)
   return {
-    raw: payload,
-    reading: rules.mapDepositStatus(payload && payload.status),
-    failureWords: rules.depositFailureWords(payload),
+    raw: record,
+    reading: rules.mapDepositStatus(record && record.status),
+    failureWords: rules.depositFailureWords(record),
   }
 }
 
@@ -220,6 +246,7 @@ module.exports = {
   isConfigured,
   failureOf,
   call,
+  unwrapDeposit,
   depositStatusPath,
   resendDepositCallbackPath,
   toAmountString,
