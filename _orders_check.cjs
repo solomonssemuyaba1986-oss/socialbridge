@@ -6,7 +6,8 @@
  *   node _orders_check.cjs
  *
  * Pins the two things a buyer actually reads — the status sentence and the price — plus the
- * index that makes the list possible at all (without it the page can only show a notice).
+ * index that makes the list possible at all (without it the page can only show a notice) and the
+ * one number their profile adds up (`summariseBuyerOrders`).
  */
 const assert = require('assert')
 const fs = require('fs')
@@ -21,6 +22,7 @@ const {
   orderChangedMs,
   orderTotal,
   splitBuyerOrders,
+  summariseBuyerOrders,
   wasUpdatedAfterPlacing,
 } = require(path.join(__dirname, '_dsbuild', 'buyerOrderUtils.cjs'))
 
@@ -126,6 +128,31 @@ check('"new since you last looked" needs a recorded visit first', () => {
   assert.strictEqual(isOrderNew(changed, 6000), false)
   assert.strictEqual(countNewOrders([changed, { createdAt: 7000, updatedAt: 7000 }], 6000), 1)
   assert.strictEqual(countNewOrders([changed], 9000), 0)
+})
+
+check('what a profile counts as money spent', () => {
+  const summary = summariseBuyerOrders([
+    { status: 'pending', productPrice: '45000', quantity: '2' },        // waiting — committed to
+    { status: 'fulfilled', productPrice: '30000', quantity: '1' },      // delivered
+    { status: 'needs_details', productPrice: '10,000', quantity: 3 },   // still coming
+    { productPrice: '5000' },                                          // no status = waiting
+    { status: 'cancelled', productPrice: '999000', quantity: '1' },     // never paid
+    { status: 'out_of_stock', productPrice: '888000', quantity: '1' },  // never happened
+  ])
+  assert.strictEqual(summary.counted, 4)
+  assert.strictEqual(summary.total, 45000 * 2 + 30000 + 10000 * 3 + 5000)
+  assert.strictEqual(summary.active, 3)
+  assert.strictEqual(summary.delivered, 1)
+  // Every counted order is exactly one of the two — the tiles can never disagree with the total.
+  assert.strictEqual(summary.active + summary.delivered, summary.counted)
+})
+
+check('an empty or junk order list is zeroes, never NaN', () => {
+  assert.deepStrictEqual(summariseBuyerOrders([]), { counted: 0, total: 0, active: 0, delivered: 0 })
+  const junk = summariseBuyerOrders([{ status: 'pending', productPrice: 'free', quantity: 'lots' }])
+  assert.strictEqual(junk.total, 0)
+  assert.ok(Number.isFinite(junk.total))
+  assert.strictEqual(junk.counted, 1)
 })
 
 check('the orders index exists, or the page can only ever show a notice', () => {

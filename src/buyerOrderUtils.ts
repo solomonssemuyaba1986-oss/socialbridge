@@ -65,6 +65,37 @@ export function orderAge(createdAtMs?: number | null, now = Date.now()): string 
   return months <= 1 ? 'last month' : `${months} months ago`
 }
 
+/**
+ * What a buyer's own orders add up to — the number their profile shows.
+ *
+ * Only money they actually stand to pay: an order that was cancelled, or that the seller marked as
+ * not available, was never a purchase, so it is not in the total. Everything else counts, including
+ * an order still waiting on the seller — the buyer has committed to it, and pretending otherwise
+ * would make "waiting" look free.
+ */
+export interface OrderSummary {
+  /** How many orders the total covers — the number the "spent" figure belongs to. */
+  counted: number
+  /** UGX, summed from the prices and quantities as the orders were written. */
+  total: number
+  active: number
+  delivered: number
+}
+
+export function summariseBuyerOrders(
+  orders: { status?: string; productPrice?: string; quantity?: string | number }[],
+): OrderSummary {
+  const summary: OrderSummary = { counted: 0, total: 0, active: 0, delivered: 0 }
+  for (const order of orders) {
+    if (order.status === 'cancelled' || order.status === 'out_of_stock') continue
+    summary.counted += 1
+    summary.total += orderTotal(order.productPrice, order.quantity)
+    if (isActiveBuyerOrder(order.status)) summary.active += 1
+    else summary.delivered += 1
+  }
+  return summary
+}
+
 export type BuyerOrderFilter = 'all' | 'active' | 'delivered'
 
 export function matchesBuyerFilter(status: string | undefined, filter: BuyerOrderFilter): boolean {

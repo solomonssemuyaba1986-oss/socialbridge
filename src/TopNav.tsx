@@ -117,6 +117,11 @@ function TopNav({ variant = 'default' }: { variant?: 'default' | 'bag' }) {
                   📦 My Orders
                 </button>
               )}
+              {!isGuest && !isSeller && (
+                <button onClick={() => navigate('/profile')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', color: '#fff', border: '1px solid #333', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
+                  👤 Profile
+                </button>
+              )}
             </>
           )}
 

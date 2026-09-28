@@ -132,6 +132,16 @@ function BuyerHome() {
           <span style={{ color: '#555' }}>→</span>
         </button>
 
+        <button onClick={() => navigate('/profile')}
+          style={{ width: '100%', padding: '14px 16px', background: '#1a1a1a', border: '1px solid #262626', borderRadius: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px', textAlign: 'left' }}>
+          <span style={{ fontSize: '20px' }}>👤</span>
+          <span style={{ flex: 1 }}>
+            <span style={{ display: 'block', color: '#fff', fontWeight: 700, fontSize: '14px' }}>Your profile</span>
+            <span style={{ display: 'block', color: '#777', fontSize: '12px', marginTop: '2px' }}>The name sellers see, what we keep, and how to sign out</span>
+          </span>
+          <span style={{ color: '#555' }}>→</span>
+        </button>
+
         <button onClick={() => navigate(hasShop ? '/dashboard' : '/setup')}
           style={{ width: '100%', padding: '14px 16px', background: '#12210d', border: `1px solid ${green}`, borderRadius: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', textAlign: 'left' }}>
           <span style={{ fontSize: '20px' }}>🏪</span>

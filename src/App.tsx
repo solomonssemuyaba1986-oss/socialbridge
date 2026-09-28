@@ -29,6 +29,7 @@ import TermsPage from './TermsPage.tsx'
 import NearbyPage from './NearbyPage.tsx'
 import BuyerHome from './BuyerHome.tsx'
 import BuyerOrders from './BuyerOrders.tsx'
+import ProfilePage from './ProfilePage.tsx'
 import FeedbackNudge from './FeedbackNudge.tsx'
 import NotFound from './NotFound.tsx'
 import { getRole, MARKET_HOME } from './role.ts'
@@ -128,6 +129,9 @@ function App() {
       {/* The buyer's own orders — every shop, one list. The seller's screen stays at /orders.
           A real account only: an anonymous guest has no orders to show. */}
       <Route path="/my-orders" element={signedIn && !isGuest ? <BuyerOrders /> : <Navigate to="/" />} />
+      {/* The buyer's own page — who they are to us, what is kept and where it lives. Open to guests
+          too (they see what this phone holds), and the one place a buyer can sign out. */}
+      <Route path="/profile" element={<ProfilePage />} />
       <Route path="/onboarding" element={<Onboarding />} />
       {/* Sign-in has its own route now that "/" is the market. */}
       <Route path="/signin" element={<SignIn />} />
