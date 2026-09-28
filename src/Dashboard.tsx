@@ -11,6 +11,8 @@ import SellerTabs from './SellerTabs'
 import { variantLabel } from './productSheetUtils'
 import { getStoreAgeLabel } from './useSellerStats'
 import { resolveSellerLocation, type GeoSource, type Place } from './place'
+import ViewHistory from './ViewHistory'
+import { useViewHistory } from './useViewHistory'
 
 interface Seller {
   businessName: string
@@ -106,6 +108,13 @@ function Dashboard() {
   }
 
   const { orders, loading: ordersLoading } = useSellerOrders()
+  /**
+   * What this seller looked at while shopping the market — the very same device-local list Browse
+   * keeps (`rachett_history_browse`), shown here so a seller finds it on their own home instead of
+   * only on `/browse`. Nothing is fetched and nothing is written: it is a read of this phone's
+   * own record. Live, because it is the same hook instance pattern Browse uses.
+   */
+  const history = useViewHistory('browse')
 
   // Waiting = orders you haven't worked on yet (not confirmed, out of stock, or needs details).
   const pendingOrders = orders.filter(o => !['fulfilled', 'out_of_stock', 'needs_details'].includes(o.status || ''))
@@ -205,6 +214,18 @@ function Dashboard() {
     </div>
   )
 
+  /**
+   * A history row, opened the way this app already opens a product from a card: its own shop.
+   * The row is offered as the product *now* (`ViewHistory` re-reads it first, and drops a row whose
+   * product is gone), and a listing we can no longer place gets a search in the market rather than
+   * a tap that does nothing.
+   */
+  const openFromHistory = (product: { sellerSlug?: string; name?: string }) => {
+    const slug = String(product.sellerSlug || '')
+    if (slug) { navigate(`/store/${slug}`); return }
+    navigate(`/browse?q=${encodeURIComponent(String(product.name || ''))}`)
+  }
+
   const storeLink = `${window.location.origin}/store/${seller.slug}`
   return (
     <div className="rt-page rt-shell" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', display: 'flex' }}>
@@ -267,6 +288,17 @@ function Dashboard() {
           </div>
         </div>
         <div className="rt-container" style={{ maxWidth: '100%', margin: '0', padding: 0 }}>
+
+        {/* Things you looked at in the market. The strip renders nothing at all when the list is
+            empty, so a seller who never shops sees no dead shelf on their work screen. */}
+        {history.count > 0 && (
+          <div style={{ marginBottom: '24px' }}>
+            <p style={{ margin: '0 0 4px', color: '#888', fontSize: 12, fontWeight: 800, letterSpacing: '0.4px', textTransform: 'uppercase' }}>
+              You were looking at
+            </p>
+            <ViewHistory history={history} onOpen={openFromHistory} />
+          </div>
+        )}
 
         {showWelcome && auth.currentUser?.displayName && (
           <div style={{ background: '#1a2a1a', border: `1px solid ${green}`, borderRadius: '12px', padding: '16px 20px', marginBottom: '24px', textAlign: 'center' }}>
