@@ -1,4 +1,17 @@
 export const CATEGORIES = {
+  // The house line — ours, not a seller's. Deliberately first: it is the front door of the market.
+  //
+  // ⚠️ The sub-list must never be empty. Store setup *requires* a subcategory
+  // (`notify.productSubcategoryRequired`, StorePage's product form), so a category a seller can
+  // pick but cannot finish is a dead end. Still being planned: add the real subcategories here as
+  // they are decided, and every picker follows — the Browse chips, Nearby, store setup, bulk
+  // upload and product editing all read this one object.
+  "Rachett Essentials": [
+    "Everyday Essentials",
+    "Bundles & Sets",
+    "Gift Picks",
+    "Limited Drops"
+  ],
   "Fashion": [
     "Tops & Shirts",
     "Bottoms & Pants",
