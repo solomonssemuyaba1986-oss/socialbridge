@@ -199,12 +199,40 @@ export function isPaymentNotConfiguredError(err: unknown): boolean {
 }
 
 /**
- * Every way a payment can refuse to start, said in plain words. The seller's own wording is kept
- * when the server had something specific to say (an already-paid order, a missing price).
+ * Said when the request never reached a function at all. The SDK reports that as `internal` — the
+ * same code it uses for a real server bug — so the only honest thing to say is that we could not
+ * ask, and that nothing was taken.
+ */
+const UNREACHABLE_PAYMENT_MESSAGE =
+  'We could not reach the payment service just now. Nothing has been charged — please try again in a moment.'
+
+/**
+ * Is the server's `message` actually words, or is it the error code handed back with a space in it?
+ *
+ * A callable that was never reached gives `{ code: 'internal', message: 'internal' }` — the SDK's
+ * fallback for a dead request, printed verbatim by the old `|| message` fallback, so a buyer read
+ * the single word "internal". Anything a machine wrote (lower case, underscored, or the SDK's own
+ * "Firebase: …" wrapper) is treated as no wording at all.
+ */
+function isReadableMessage(message: string): boolean {
+  const words = message.trim()
+  if (!words || words.includes('_')) return false
+  if (/^firebase\b/i.test(words)) return false
+  if (!/[A-Z]/.test(words)) return false
+  if (/[.!?]/.test(words)) return true
+  return words.split(/\s+/).length >= 2
+}
+
+/**
+ * Every way a payment can refuse to start, said in plain words. The server's own wording is kept
+ * when it had something specific to say (an already-paid order, a missing price) — never a code.
  */
 export function paymentErrorMessage(err: unknown): string {
   const { code, message } = errorParts(err)
   if (isPaymentNotConfiguredError(err)) return PAYMENT_NOT_CONFIGURED_MESSAGE
+  // Our own sentences win where we know exactly what happened; the server's are kept where the
+  // server is the only one who knows.
+  const words = isReadableMessage(message) ? message : ''
   switch (code) {
     case 'unauthenticated':
       return 'Sign in to pay for this order.'
@@ -213,12 +241,18 @@ export function paymentErrorMessage(err: unknown): string {
     case 'not-found':
       return 'We could not find that order.'
     case 'invalid-argument':
-      return message || 'We could not start that payment.'
+      return words || 'We could not start that payment.'
     case 'failed-precondition':
-      return message || 'This order cannot be paid right now.'
+      return words || 'This order cannot be paid right now.'
     case 'unavailable':
       return 'We could not reach the payment service. Check your internet and try again.'
+    case 'deadline-exceeded':
+      return 'That took too long, or was interrupted. Nothing has been charged — please try again.'
+    case 'internal':
+    case 'unknown':
+    case '':
+      return UNREACHABLE_PAYMENT_MESSAGE
     default:
-      return message || 'We could not start that payment. Please try again.'
+      return words || 'We could not start that payment. Please try again.'
   }
 }

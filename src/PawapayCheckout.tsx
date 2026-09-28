@@ -18,6 +18,7 @@ import { auth, db } from './firebase'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { COUNTRY_CODES } from './countryCodes'
 import { startPawapayDeposit, checkPawapayPayment, paymentErrorMessage } from './pawapayService'
+import { methodWords } from './orderPayment'
 
 const green = '#adff2f'
 const POLL_MS = 3000
@@ -103,6 +104,9 @@ export default function PawapayCheckout({
   const [paidWith, setPaidWith] = useState('')
   const [note, setNote] = useState('')
   const pollRef = useRef<number | null>(null)
+  // How many times in a row the status question has failed. A dropped question and a server that
+  // cannot be asked look identical from here — three in a row means the second.
+  const failedChecksRef = useRef(0)
 
   const qty = quantityNumber(quantity)
   const unit = priceNumber(productPrice)
@@ -151,10 +155,12 @@ export default function PawapayCheckout({
   const startWatching = (depositId: string) => {
     stopPolling()
     let tries = 0
+    failedChecksRef.current = 0
     pollRef.current = window.setInterval(async () => {
       tries += 1
       try {
         const check = await checkPawapayPayment({ depositId })
+        failedChecksRef.current = 0
         if (check.note) setNote(check.note)
         if (check.paid) {
           stopPolling()
@@ -170,6 +176,14 @@ export default function PawapayCheckout({
         }
       } catch (err) {
         console.warn('Payment check failed:', err)
+        failedChecksRef.current += 1
+        // "Waiting for your network…" is a lie when we are the ones who cannot be reached: we would
+        // keep saying it for three minutes while the buyer stares at a phone that never rang.
+        if (failedChecksRef.current >= 3) {
+          stopPolling()
+          setNote('We cannot check this payment right now. If your phone showed a charge, nothing is lost — this order updates on its own as soon as the network confirms.')
+          return
+        }
       }
       if (tries >= POLL_MAX_TRIES) {
         stopPolling()
@@ -229,7 +243,7 @@ export default function PawapayCheckout({
           <div style={{ width: 56, height: 56, borderRadius: '50%', background: green, color: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: 26, fontWeight: 800 }}>✓</div>
           <p style={{ margin: '0 0 4px', color: '#fff', fontWeight: 800, fontSize: 17 }}>Payment confirmed ✓</p>
           <p style={{ margin: 0, color: '#888', fontSize: 13, lineHeight: 1.5 }}>
-            {paidWith ? `Paid with ${paidWith}. ` : ''}The seller will contact you to confirm delivery.
+            {paidWith ? `Paid with ${methodWords(paidWith) || 'mobile money'}. ` : ''}The seller will contact you to confirm delivery.
           </p>
           {note && <p style={{ margin: '10px 0 0', color: '#ffb020', fontSize: 12, lineHeight: 1.5 }}>{note}</p>}
         </div>

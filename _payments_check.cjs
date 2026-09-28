@@ -332,6 +332,50 @@ check('the CLI no longer keeps a second, stricter copy of that summary', () => {
   assert.ok(cli.includes('safeSummary'), 'so a surprise shape cannot take --config down')
 })
 
+check('every status word the server hands the app is a word, not a code', () => {
+  const statuses = ['COMPLETED', 'FAILED', 'REJECTED', 'ACCEPTED', 'SUBMITTED', 'UNKNOWN_ERROR', 'WHAT', '']
+  for (const raw of statuses) {
+    const reading = rules.mapDepositStatus(raw)
+    if (!reading) continue
+    assert.ok(reading.label.length > 0, `"${raw}" has no label at all`)
+    assert.strictEqual(reading.label.includes('_'), false, `"${reading.label}" is a code, not a word`)
+    assert.ok(/[A-Z]/.test(reading.label), `"${reading.label}" is not something a person wrote`)
+  }
+})
+
+check('the money the server records is money the seller can see', () => {
+  // The bug this pins: every one of these fields was written onto the order and not one of them was
+  // read by the seller's screen, so a buyer who had really paid still read the word "Pending".
+  const fs = require('fs')
+  const server = fs.readFileSync(path.join(__dirname, 'functions', 'index.js'), 'utf8')
+  const orderType = fs.readFileSync(path.join(__dirname, 'src', 'useSellerOrders.ts'), 'utf8')
+  const paymentWords = fs.readFileSync(path.join(__dirname, 'src', 'orderPayment.ts'), 'utf8')
+  const ordersScreen = fs.readFileSync(path.join(__dirname, 'src', 'OrderHistory.tsx'), 'utf8')
+  const dash = fs.readFileSync(path.join(__dirname, 'src', 'Dashboard.tsx'), 'utf8')
+
+  const writtenOntoTheOrder = [
+    'paymentProcessor', 'paymentStatus', 'paymentDepositId', 'paymentProvider', 'paymentMethod',
+    'paymentAmount', 'paymentCurrency', 'paymentNote', 'paymentInitiatedAt', 'paymentUpdatedAt',
+    'paymentAttempts', 'paidAt',
+  ]
+  for (const field of writtenOntoTheOrder) {
+    assert.ok(server.includes(field), `${field} is no longer written by either payment flow`)
+    assert.ok(orderType.includes(field), `the seller's order type must carry ${field}, or it cannot be read`)
+  }
+
+  // And the ones that are *about the money* must be turnable into words, by the module that does it.
+  for (const field of ['paymentStatus', 'paymentMethod', 'paymentAmount', 'paymentCurrency', 'paymentNote', 'paidAt']) {
+    assert.ok(paymentWords.includes(field), `${field} never reaches the words the seller reads`)
+  }
+
+  // Reading them is not enough — the screen has to actually show them. This is the half of the bug
+  // that no amount of correct server code could have fixed.
+  assert.ok(ordersScreen.includes("from './orderPayment'"), 'the orders screen must use those words')
+  assert.ok(ordersScreen.includes('paymentSummary('), 'and show what was paid')
+  assert.ok(ordersScreen.includes('paymentBadge('), 'and say when money is — or is not — in')
+  assert.ok(dash.includes('paidCount('), 'and the dashboard must count the ones already paid')
+})
+
 acheck('the deposit we send is the one pawaPay accepts, and its envelope is peeled', async () => {
   // Two bugs that each stopped every deposit, and neither of which is visible from our own code:
   //

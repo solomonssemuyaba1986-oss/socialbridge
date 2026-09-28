@@ -333,9 +333,46 @@ check('until the keys are set, everyone is told the same thing', () => {
     client.paymentErrorMessage({ code: 'functions/failed-precondition', message: 'This order is already paid.' }),
     'This order is already paid.'
   )
-  assert.strictEqual(client.paymentErrorMessage({ message: 'Firebase: internal error' }), 'internal error')
+  // The leak this pins: `internal` is what the SDK reports when a callable never answered at all —
+  // offline, a cross-origin refusal, or a function that was never deployed. It is a code, not an
+  // explanation, and the old `|| message` fallback handed it to the buyer as the error text.
+  assert.strictEqual(
+    client.paymentErrorMessage({ code: 'functions/internal', message: 'internal' }),
+    'We could not reach the payment service just now. Nothing has been charged — please try again in a moment.'
+  )
+  assert.strictEqual(
+    client.paymentErrorMessage({ message: 'Firebase: internal error' }),
+    'We could not reach the payment service just now. Nothing has been charged — please try again in a moment.'
+  )
   assert.ok(client.paymentErrorMessage(null).length > 0)
   assert.strictEqual(client.paymentErrorMessage({ message: 'Firebase: internal error' }).startsWith('Firebase'), false)
+
+  // Whatever goes wrong, the answer is words: never a code, never a machine token, never the SDK's
+  // own "Firebase: …" wrapper, never a placeholder.
+  const everyFailure = [
+    { code: 'functions/internal', message: 'internal' },
+    { code: 'internal', message: 'internal' },
+    { code: 'functions/unavailable', message: 'unavailable' },
+    { code: 'functions/deadline-exceeded', message: 'deadline-exceeded' },
+    { code: 'functions/unknown', message: '' },
+    { message: 'Firebase: internal error' },
+    { code: 'functions/not-found', message: 'not-found' },
+    { code: 'functions/invalid-argument', message: 'INVALID_ARGUMENT' },
+    { code: 'functions/failed-precondition', message: '' },
+    null,
+    undefined,
+    {},
+    'boom',
+  ]
+  for (const err of everyFailure) {
+    const words = client.paymentErrorMessage(err)
+    const named = JSON.stringify(err)
+    assert.strictEqual(typeof words, 'string')
+    assert.ok(words.trim().split(/\s+/).length >= 3, `that is not something to read: ${words} (${named})`)
+    assert.strictEqual(words.includes('_'), false, `a code leaked: ${words}`)
+    assert.strictEqual(/^\s*(undefined|null|NaN)\b/.test(words), false, `a placeholder leaked: ${words}`)
+    assert.strictEqual(words.toLowerCase().includes('firebase'), false, `the SDK wrapper leaked: ${words}`)
+  }
 })
 
 check('UGX is what this market pays in, and it is found from the country', () => {

@@ -22,6 +22,24 @@ export interface SellerOrder {
   /** The colour/size the buyer chose in the details sheet, when they chose one. */
   color?: string
   size?: string
+  /**
+   * What the online payment recorded about the money. Both flows write these onto the order
+   * (`functions/index.js`), and until now nothing read them — a buyer who had paid still showed as
+   * "Pending". `orderPayment.ts` is what turns them into words; the harnesses pin the two together.
+   */
+  paymentProcessor?: string
+  paymentStatus?: string
+  paymentDepositId?: string
+  paymentProvider?: string
+  paymentMethod?: string
+  paymentAmount?: number
+  paymentCurrency?: string
+  paymentNote?: string
+  paymentInitiatedAt?: { toDate?: () => Date } | null
+  paymentUpdatedAt?: { toDate?: () => Date } | null
+  paymentAttempts?: number
+  /** Set with `status: 'paid'` by the server when the money landed — never by the seller. */
+  paidAt?: { toDate?: () => Date } | null
 }
 
 export function isUnread(order: SellerOrder): boolean {

@@ -4,6 +4,7 @@ import { doc, getDoc, collection, getDocs, updateDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 import { useSellerOrders } from './useSellerOrders'
+import { paidCount } from './orderPayment'
 import { notify } from './notifications'
 import LoadingScreen from './LoadingScreen'
 import Sidebar from './Sidebar'
@@ -118,6 +119,9 @@ function Dashboard() {
 
   // Waiting = orders you haven't worked on yet (not confirmed, out of stock, or needs details).
   const pendingOrders = orders.filter(o => !['fulfilled', 'out_of_stock', 'needs_details'].includes(o.status || ''))
+// Some of what is "waiting for you" is money that has already arrived. Saying so on the card is the
+// difference between a seller seeing a chore and a seller seeing a sale.
+const paidPending = paidCount(pendingOrders)
 
   // Spotlight — dims the screen ONLY when a genuinely NEW pending order arrives.
   // Baseline survives page revisits, so existing pending orders never re-trigger it.
@@ -324,6 +328,7 @@ function Dashboard() {
             <div>
               <p style={{ margin: '0 0 4px', color: green, fontWeight: '800', fontSize: '15px' }}>
                 {pendingOrders.length} order{pendingOrders.length !== 1 ? 's' : ''} waiting for you
+                {paidPending > 0 ? ` · ${paidPending} already paid` : ''}
               </p>
               <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>
                 Tap to open and see who ordered what

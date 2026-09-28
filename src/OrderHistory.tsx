@@ -9,6 +9,7 @@ import ConfirmDialog from './ConfirmDialog'
 import Sidebar from './Sidebar'
 import SellerTabs from './SellerTabs'
 import { variantLabel } from './productSheetUtils'
+import { paymentBadge, paymentSummary, paidCount } from './orderPayment'
 
 const green = '#adff2f'
 
@@ -17,10 +18,17 @@ function formatDate(createdAt: SellerOrder['createdAt']): string {
   return 'Just now'
 }
 
-function statusLabel(status?: string): { text: string; color: string; bg: string } {
+function statusLabel(order: SellerOrder): { text: string; color: string; bg: string } {
+  const status = order.status
   if (status === 'fulfilled') return { text: '✓ Confirmed', color: green, bg: '#1a2a1a' }
   if (status === 'out_of_stock') return { text: 'Out of Stock', color: '#ff4444', bg: '#2a1a1a' }
   if (status === 'needs_details') return { text: 'Need Details', color: '#888', bg: '#222' }
+  // The money gets a badge of its own: a buyer who has really paid is not "Pending", and one whose
+  // payment is still on its way should not look identical to one who has not tried.
+  const badge = paymentBadge(order)
+  if (badge?.tone === 'paid') return { text: badge.text, color: green, bg: '#1a2a1a' }
+  if (badge?.tone === 'waiting') return { text: badge.text, color: '#ffb020', bg: '#241d0a' }
+  if (badge?.tone === 'failed') return { text: badge.text, color: '#ff4444', bg: '#2a1a1a' }
   return { text: 'Pending', color: '#888', bg: '#222' }
 }
 
@@ -119,6 +127,9 @@ function OrderHistory() {
 
   const selected = filtered.find(o => o.id === selectedId) ?? null
   const pendingCount = orders.filter(o => o.status === 'pending' || !o.status || o.status === 'paid' || o.status === 'awaiting_payment').length
+  // A paid order still needs the seller's Confirm, so it stays in this list — but the money it
+  // carries is counted out loud, because that is the number this page is opened for.
+  const paidAlreadyCount = paidCount(orders)
   const outOfStockCount = orders.filter(o => o.status === 'out_of_stock').length
 
   if (loading) {
@@ -140,7 +151,9 @@ function OrderHistory() {
           <div>
             <h1 style={{ margin: 0, fontSize: '20px', fontWeight: '800' }}>Orders</h1>
             <p style={{ margin: '4px 0 0', color: '#888', fontSize: '13px' }}>
-              {pendingCount} pending — manage, confirm, and update every order.
+              {paidAlreadyCount > 0
+                ? `${pendingCount} pending — ${paidAlreadyCount} already paid.`
+                : `${pendingCount} pending — manage, confirm, and update every order.`}
             </p>
           </div>
           <button onClick={() => navigate('/dashboard')}
@@ -187,9 +200,11 @@ function OrderHistory() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {filtered.map(o => {
-                const st = statusLabel(o.status)
+                const st = statusLabel(o)
                 const isSelected = selectedId === o.id
                 const pm = platformMeta(o.sourcePlatform)
+                // What the money says about this order — empty unless it is actually in.
+                const payLine = paymentSummary(o)
                 return (
                   <div key={o.id}>
                     <div
@@ -227,6 +242,9 @@ function OrderHistory() {
                         </div>
                       </div>
                       <p style={{ margin: '8px 0 0', color: '#444', fontSize: '11px' }}>{formatDate(o.createdAt)}</p>
+                      {payLine && (
+                        <p style={{ margin: '6px 0 0', color: green, fontSize: '12px', fontWeight: '700' }}>{payLine}</p>
+                      )}
                     </div>
 
                     {isSelected && selected && (
@@ -240,6 +258,12 @@ function OrderHistory() {
                         <p style={{ margin: '0 0 4px', color: green, fontSize: '13px', fontWeight: '700' }}>
                           Total: UGX {orderTotal(o.productPrice, o.quantity).toLocaleString()}
                         </p>
+                        {payLine && (
+                          <p style={{ margin: '0 0 4px', color: green, fontSize: '13px', fontWeight: '700' }}>{payLine}</p>
+                        )}
+                        {o.paymentNote && (
+                          <p style={{ margin: '0 0 4px', color: '#ffb020', fontSize: '12px' }}>{o.paymentNote}</p>
+                        )}
                         <p style={{ margin: '0 0 16px', color: '#555', fontSize: '12px' }}>Placed {formatDate(o.createdAt)}</p>
 
                         {/* Status Action Buttons */}
