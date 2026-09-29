@@ -6,7 +6,7 @@ export const CATEGORIES = {
   // pick but cannot finish is a dead end. Still being planned: add the real subcategories here as
   // they are decided, and every picker follows — the Browse chips, Nearby, store setup, bulk
   // upload and product editing all read this one object.
-  "Rachett Essentials": [
+  "rachett essentials": [
     "Everyday Essentials",
     "Bundles & Sets",
     "Gift Picks",
