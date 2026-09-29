@@ -2,32 +2,55 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { setRole, clearRole, MARKET_HOME } from './role'
 import { useBuyerName } from './useBuyerName'
+import { useDemographics } from './useDemographics'
 import NameStrip from './NameStrip'
+import AgeGenderAsk from './AgeGenderAsk'
 
 function Onboarding() {
   const navigate = useNavigate()
   /** Who we call them — the same name system the Inbox, checkout and comments use. */
   const myName = useBuyerName()
-  /** 'choose' is the three cards; 'name' is the one question that follows a buyer's choice. */
-  const [step, setStep] = useState<'choose' | 'name'>('choose')
+  /** And what we show them — the age group and gender every recommendation is built on. */
+  const myDemographics = useDemographics()
+  /**
+   * 'choose' is the three cards; 'name' is the first question that follows a buyer's choice, and
+   * 'about' is the second. Both are required, and neither is ever asked twice.
+   */
+  const [step, setStep] = useState<'choose' | 'name' | 'about'>('choose')
+
+  /**
+   * The door into the market from here.
+   *
+   * Two questions stand between choosing and browsing, and only the ones this person has not
+   * already answered: what sellers should call them, then the two things that make a
+   * recommendation possible. The moment both are on record the door opens straight away — asking a
+   * settled question again is worse than not asking a new one, so an account that answered months
+   * ago walks straight through.
+   */
+  const nextUnanswered = () => {
+    if (!myName.loading && myName.needsAsk) {
+      setStep('name')
+      return
+    }
+    if (!myDemographics.loading && myDemographics.needsAsk) {
+      setStep('about')
+      return
+    }
+    navigate(MARKET_HOME)
+  }
 
   /**
    * Choosing a way in. The name ask belongs *here*, at the moment of choosing, because this is where
    * a visitor becomes a person on rachett — and whatever they answer is what sellers, the Inbox and
    * every order form will call them from then on.
    *
-   * While the account is still loading we go straight through: asking somebody who answered months
-   * ago is worse than not asking somebody new. A seller's own name is their business name, asked on
-   * the store setup screen, so that card leads straight there.
+   * A seller's own name is their business name, and their age and gender are asked on the store
+   * setup screen, so that card leads straight there.
    */
   const choose = (role: 'buyer' | 'looking') => {
     if (role === 'buyer') setRole('buyer')
     else clearRole()
-    if (myName.loading || !myName.needsAsk) {
-      navigate(MARKET_HOME)
-      return
-    }
-    setStep('name')
+    nextUnanswered()
   }
 
   if (step === 'name') {
@@ -40,10 +63,52 @@ function Onboarding() {
         </p>
         <div style={{ width: '100%', maxWidth: '460px' }}>
           {/* forceOpen: this *is* the ask, and it moves the screen on however they answer it. */}
-          <NameStrip buyerName={myName} surface="onboarding" forceOpen onDone={() => navigate(MARKET_HOME)} />
+          <NameStrip
+            buyerName={myName}
+            surface="onboarding"
+            forceOpen
+            onDone={() => {
+              // The name is behind them (answered, or tapped Later) — one question still stands.
+              if (!myDemographics.loading && myDemographics.needsAsk) setStep('about')
+              else navigate(MARKET_HOME)
+            }}
+          />
         </div>
         {!myName.loading && !myName.uid && (
           <p style={{ color: '#666', fontSize: 12, marginTop: 2, maxWidth: '460px', textAlign: 'center', lineHeight: 1.6 }}>
+            You are browsing without an account, so this stays on this phone — and it follows you if you sign in later.
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  /**
+   * Question two, and the reason this screen exists at all: recommendations need *some* idea of who
+   * is asking. It cannot be walked past — there is no Later on this screen — but "Prefer not to say"
+   * is one of the answers to each question, so nobody is talked into a fact that is not theirs.
+   */
+  if (step === 'about') {
+    return (
+      <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+        <p style={{ color: '#aaa', marginBottom: '8px', fontSize: '14px' }}>Welcome to rachett</p>
+        <h1 style={{ color: '#fff', fontSize: 28, fontWeight: 800, marginBottom: '8px', textAlign: 'center' }}>
+          What should we show you?
+        </h1>
+        <p style={{ color: '#888', marginBottom: '24px', fontSize: 15, textAlign: 'center', maxWidth: '460px' }}>
+          Two questions, once. They are what turns the market's front page into yours.
+        </p>
+        <div style={{ width: '100%', maxWidth: '460px' }}>
+          <AgeGenderAsk
+            demographics={myDemographics}
+            surface="onboarding"
+            mark
+            ctaLabel="Start shopping"
+            onDone={() => navigate(MARKET_HOME)}
+          />
+        </div>
+        {!myDemographics.loading && !myDemographics.uid && (
+          <p style={{ color: '#666', fontSize: 12, marginTop: 12, maxWidth: '460px', textAlign: 'center', lineHeight: 1.6 }}>
             You are browsing without an account, so this stays on this phone — and it follows you if you sign in later.
           </p>
         )}

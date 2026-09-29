@@ -23,6 +23,9 @@ import { auth } from './firebase'
 import { useBag } from './useBag'
 import { useBuyerName } from './useBuyerName'
 import { useBuyerOrders } from './useBuyerOrders'
+import { useDemographics } from './useDemographics'
+import { demographicsSummary } from './demographics'
+import AgeGenderAsk from './AgeGenderAsk'
 import { nameLabel } from './buyerName'
 import { summariseBuyerOrders } from './buyerOrderUtils'
 import { avatarColor, initialOf } from './avatar'
@@ -76,6 +79,8 @@ function ProfilePage() {
   const navigate = useNavigate()
   const user = auth.currentUser
   const myName = useBuyerName()
+  /** The other half of what we know about them — the two things a recommendation needs. */
+  const myDemographics = useDemographics()
   const { count: bagCount } = useBag()
   const { orders, loading: ordersLoading } = useBuyerOrders()
   /** The two device-only lists, counted. Nothing is fetched — these are reads of this phone. */
@@ -83,6 +88,8 @@ function ProfilePage() {
   const nearbyLooks = useViewHistory('nearby').count
 
   const [editingName, setEditingName] = useState(false)
+  /** The age & gender editor, next to the name one: both are answers a person can change. */
+  const [editingAbout, setEditingAbout] = useState(false)
   const [confirmSignOut, setConfirmSignOut] = useState(false)
 
   /** Anonymous accounts are guests: they can shop, but nothing of theirs is on our servers. */
@@ -147,6 +154,33 @@ function ProfilePage() {
         {editingName && (
           <NameStrip buyerName={myName} surface="profile" forceOpen onDone={() => setEditingName(false)} />
         )}
+
+        {/* Age & gender: the two things a recommendation is built on, and the one place they can be
+            corrected. Reading it back to the person is the whole point — the answer is theirs. */}
+        <div style={card}>
+          <p style={cardTitle}>Age &amp; gender</p>
+          <p style={smallPrint}>{demographicsSummary(myDemographics.state)}</p>
+          {editingAbout ? (
+            <>
+              <AgeGenderAsk
+                demographics={myDemographics}
+                surface="profile"
+                ctaLabel="Save"
+                title="Change your answers"
+                blurb="Both are used to pick what we show you, and neither is ever shown to a seller."
+                onDone={() => setEditingAbout(false)}
+              />
+              <button onClick={() => setEditingAbout(false)}
+                style={{ ...rowButton, textAlign: 'center', marginTop: 8 }}>
+                Close without saving
+              </button>
+            </>
+          ) : (
+            <button onClick={() => setEditingAbout(true)} style={rowButton}>
+              {myDemographics.answered ? 'Change your answer →' : 'Answer the two questions →'}
+            </button>
+          )}
+        </div>
 
         {isGuest && (
           <div style={{ background: '#1a1a2e', border: '1px solid #3333aa', borderRadius: 14, padding: 16, marginBottom: 14 }}>
@@ -215,6 +249,7 @@ function ProfilePage() {
           <p style={cardTitle}>What we keep, and where</p>
           <p style={smallPrint}>Every field, item by item, is listed in the project's data-collection document.</p>
           <Where what="Your name" where="On your account, and this phone remembers the last name it gave a seller so no form ever starts blank. Changing it above updates both." />
+          <Where what="Age & gender" where="On your own account, as a group rather than a birthday. It is what picks what we show you — and it is never written onto an order, onto a shop, or anywhere a seller can read." />
           <Where what="Orders" where="With the seller you bought from — they own the record of the sale. Your own copy of them is what My Orders gathers." />
           <Where what="Chats" where="With the seller you messaged: one thread per shop, shared by the two of you." />
           <Where what="Delivery details" where="The name, area and notes a delivery needs are kept on that order itself, so a seller can still read them next week." />

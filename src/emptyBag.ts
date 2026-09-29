@@ -15,9 +15,12 @@
  *  - **Never a hole where a shelf should be.** If nothing qualifies nearby we widen out rather than
  *    show an empty rail; if nothing qualifies at all, the page keeps its plain "Browse stores" state.
  *
- * Age/gender ("people like you bought…") is deliberately absent: we do not collect either yet, and
- * guessing at it would be inventing a fact about a person. When §3 of DATA_COLLECTION.md is filled
- * in, the seam is `bagSuggestions`'s options — one more filter, not a rewrite.
+ * Age/gender ("people like you bought…") is deliberately absent *here*: we now hold both — the
+ * one-time ask lives in `demographics.ts` (`users/{uid}.ageBand` / `gender`) — but nothing yet
+ * connects a person's band to what a product is *for*, and inventing that connection would be a
+ * fact about a person we never asked. The sentence needs two halves: `recommendationAudience()`
+ * (who is asking) and an `audience` on the product (who it is for). When the second exists, this
+ * module gains one filter — not a rewrite.
  */
 import type { ViewEntry } from './history'
 

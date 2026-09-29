@@ -36,6 +36,14 @@ export const EVENT_PROPS = {
   buyer_name_prompt_shown: ['hasSuggestion', 'surface'],
   buyer_name_saved: ['source', 'wasSuggestion', 'surface'],
   buyer_name_skipped: ['surface'],
+
+  // ── Who a person is ──────────────────────────────────────────────────────────────────────
+  // The one-time age & gender ask. It is required, so these two events *are* the funnel: asked
+  // once, answered once, and `changed` is true when somebody corrected an answer they had already
+  // given. The values are categories ("25-34", "female") — the same rule as everywhere else in
+  // this file: never a name, a number or anything that identifies a person (DATA_COLLECTION §8).
+  demographics_prompt_shown: ['surface'],
+  demographics_answered: ['ageBand', 'gender', 'surface', 'changed'],
   store_created: ['sellerId', 'slug', 'country', 'hasLogo', 'logoSource'],
   phone_verification_sent: ['country', 'method'],
   phone_verified: ['country', 'method'],

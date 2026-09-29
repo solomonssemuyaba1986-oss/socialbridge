@@ -32,6 +32,7 @@ import BuyerHome from './BuyerHome.tsx'
 import BuyerOrders from './BuyerOrders.tsx'
 import ProfilePage from './ProfilePage.tsx'
 import FeedbackNudge from './FeedbackNudge.tsx'
+import DemographicsGate from './DemographicsGate.tsx'
 import NotFound from './NotFound.tsx'
 import { getRole, MARKET_HOME } from './role.ts'
 import { SellerLiveProvider } from './sellerLive.tsx'
@@ -118,6 +119,9 @@ function App() {
       <NetworkGuard />
       {/* "What didn't you like?" — asks once, after the app has actually been used. */}
       <FeedbackNudge />
+      {/* Age & gender — one time, and it cannot be walked past: it is what recommendations are
+          built on. A card rather than an overlay, so it never covers a half-filled order. */}
+      <DemographicsGate />
       {location.pathname !== '/terms' && <TopNav variant={location.pathname === '/bag' ? 'bag' : 'default'} />}
       <Routes>
       {/* Market-first: the PRODUCTS are the front door. A seller with a shop gets their

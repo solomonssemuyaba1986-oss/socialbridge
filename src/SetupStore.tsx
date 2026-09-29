@@ -8,6 +8,8 @@ import { COUNTRY_CODES, type CountryCode } from './countryCodes'
 import { formatFull, lengthHint, lengthRange, validatePhone } from './phone'
 import { trackEvent } from './analytics'
 import StoreLogoPicker from './StoreLogoPicker'
+import AgeGenderAsk from './AgeGenderAsk'
+import { useDemographics } from './useDemographics'
 import {
   placeLabel,
   resolveSellerLocation,
@@ -87,6 +89,16 @@ function SetupStore() {
   // still create the shop. It is never part of the "needed" list below, and it can never
   // block Continue.
   const [logoUrl, setLogoUrl] = useState(() => readSetupDraft().logoUrl || '')
+  /**
+   * About the *person*, not the shop.
+   *
+   * Age group and gender are what every recommendation is built on, so this screen does not let a
+   * seller past without them — and "Prefer not to say" is one of the answers to each, so required
+   * never means a forced answer. They are written to the seller's own `users/{uid}` (or kept on this
+   * phone until the account exists), never to the shop document: a shop does not have an age, and no
+   * buyer should ever be handed one.
+   */
+  const myDemographics = useDemographics()
   const initialPhone = auth.currentUser?.phoneNumber || ''
   const initialCountry = COUNTRY_CODES.find(c => initialPhone.startsWith(c.dialCode))
     || COUNTRY_CODES.find(c => c.dialCode === (readSetupDraft().dialCode || ''))
@@ -416,6 +428,15 @@ function SetupStore() {
       }, 80)
       return
     }
+    // Required: the two questions about *them*. The Create button is already disabled without them,
+    // but a disabled button is not a rule — this is.
+    if (!myDemographics.answered) {
+      showSubmitError('Answer the two questions about you, then tap Create My Shop again.')
+      window.setTimeout(() => {
+        document.getElementById('setup-field-demographics')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 80)
+      return
+    }
     setLoading(true)
     setErrors({})
     try {
@@ -674,6 +695,8 @@ function SetupStore() {
   if (!businessName.trim() || storeHandle.length < 3) missing.push({ label: 'Shop name & link', step: 1, anchor: 'setup-field-name' })
   if (!bio.trim()) missing.push({ label: 'What do you sell?', step: 1, anchor: 'setup-field-bio' })
   if (!nationality) missing.push({ label: 'Country', step: 2, anchor: 'setup-field-country' })
+  // Required, and the one thing on this screen that is about the person rather than the shop.
+  if (!myDemographics.answered) missing.push({ label: 'Your age group & gender', step: 2, anchor: 'setup-field-demographics' })
   if (!signedInUid) missing.push({ label: 'How to create your shop (Google · Apple · Facebook · phone)', step: 2, anchor: 'setup-field-account' })
   if (!whatsappIsValid) missing.push({ label: 'Phone number', step: 2, anchor: 'setup-field-phone' })
   else if (!phoneIsProven) missing.push({ label: 'Verify your phone number', step: 2, anchor: 'setup-field-phone' })
@@ -932,6 +955,35 @@ function SetupStore() {
         )}
 
 
+        {/* ②-bis: about the person. Required, like the phone number — and asked here, before the
+            last step, so nothing is sprung on them under the Create button. */}
+        {step === 2 && (
+          <>
+        <h2 style={{ fontSize: '19px', fontWeight: '800', margin: '0 0 6px', color: '#1a1a1a' }}>About you</h2>
+        <p style={{ fontSize: '14px', color: '#666', margin: '0 0 12px', lineHeight: 1.5 }}>
+          Not about your shop — about you. These two are what let rachett show your products to the
+          people most likely to want them, so they are required.
+        </p>
+        <div id="setup-field-demographics" style={{ marginBottom: '20px' }}>
+          {/* Nothing is preselected from a box that has not answered yet — the account's own
+              answers (if any) are read first, so a second visit is not a blank form. */}
+          {myDemographics.loading ? (
+            <p style={{ fontSize: '13px', color: '#888', margin: 0 }}>Checking what we already have…</p>
+          ) : (
+            <AgeGenderAsk
+              demographics={myDemographics}
+              surface="setup"
+              tone="light"
+              mark
+              ctaLabel="Save"
+              title="Your age group and how you identify"
+              blurb="Saved on your own account. A buyer never sees it, and nobody sees it on your shop."
+            />
+          )}
+        </div>
+          </>
+        )}
+
         {step === 2 && (
           <>
         {/* ③ LAST — and the gate in front of Create My Shop. Prove the number, get the shop.
@@ -1104,7 +1156,9 @@ function SetupStore() {
               ? 'Create My Shop unlocks once your account is made — start at the top ↑'
               : !whatsappIsValid
                 ? 'Add the phone number above ↑'
-                : 'Verify your phone number above ↑'}
+                : !phoneIsProven
+                  ? 'Verify your phone number above ↑'
+                  : 'Answer the two questions about you above ↑'}
           </p>
         )}
           </>

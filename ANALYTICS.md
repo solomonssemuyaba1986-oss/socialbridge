@@ -8,7 +8,7 @@ search demand, product performance, seller responsiveness and acquisition.
 
 | File | What it owns |
 |---|---|
-| `src/analytics/taxonomy.ts` | **The source of truth** — 63 event names and the exact properties each may carry |
+| `src/analytics/taxonomy.ts` | **The source of truth** — 65 event names and the exact properties each may carry |
 | `src/analytics/core.ts` | Batch shape, batching rules, route normalisation (pure — no Firebase) |
 | `src/analytics/identity.ts` | Session id, device (anonymous) id, first touch, opt-out (pure — injectable storage) |
 | `src/analytics/client.ts` | Queue → batch → one Firestore write; flush triggers; offline buffer |
@@ -63,7 +63,7 @@ bounded offline buffer (200, oldest dropped) and never break the UI.
 - **Opt-out** — `localStorage.rachett_analytics_off = '1'` silences every writer
   (see `setAnalyticsOptOut`). Nothing is queued or sent in that state.
 
-## The events (90)
+## The events (92)
 
 ✅ = wired in the app today · ⏳ = reserved name, add the call when the feature or
 the page needs it.
@@ -82,6 +82,8 @@ the page needs it.
 | `buyer_name_prompt_shown` | hasSuggestion, surface | ✅ (the one-time name ask — Inbox / checkout / comment form) |
 | `buyer_name_saved` | source, wasSuggestion, surface | ✅ (`source` = google · email · self) |
 | `buyer_name_skipped` | surface | ✅ (tapped "Later" — asked once, never again) |
+| `demographics_prompt_shown` | surface | ✅ (the one-time age & gender ask — onboarding · setup · profile · the gate) |
+| `demographics_answered` | ageBand, gender, surface, changed | ✅ (categories only — `25-34`, `female`; `undisclosed` = "prefer not to say"; `changed` = they corrected an earlier answer) |
 | `store_created` | sellerId, slug, country, hasLogo, logoSource | ✅ |
 | `phone_verification_sent` | country, method | ✅ |
 | `phone_verified` | country, method | ✅ |
