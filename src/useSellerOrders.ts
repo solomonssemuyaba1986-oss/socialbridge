@@ -40,6 +40,24 @@ export interface SellerOrder {
   paymentAttempts?: number
   /** Set with `status: 'paid'` by the server when the money landed — never by the seller. */
   paidAt?: { toDate?: () => Date } | null
+  /**
+   * Stamped by every status change. The seller may only write a return decision onto an order that
+   * is already `fulfilled`, so on a delivered order the last `updatedAt` *is* the delivery date —
+   * which is what the seven days are counted from (`returnView.deliveredAtMsOf`).
+   */
+  updatedAt?: { toDate?: () => Date } | null
+  /**
+   * ↩️ The return: the buyer's request, and the seller's answer to it. The seller writes only
+   * `returnState`, `returnNote` and `returnDecidedAt` (`firestore.rules`) — never `updatedAt`,
+   * so answering a return cannot move the delivery date it is counted from.
+   */
+  returnState?: string
+  returnReason?: string
+  returnFault?: string
+  returnNote?: string
+  returnRequestedAt?: number
+  returnUpdatedAt?: number
+  returnDecidedAt?: number
 }
 
 export function isUnread(order: SellerOrder): boolean {

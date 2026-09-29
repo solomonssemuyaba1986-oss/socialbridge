@@ -25,6 +25,10 @@ import LikePill from './LikePill'
 import LovePrompt from './LovePrompt'
 import { notify } from './notifications'
 import { trackEvent } from './analytics'
+import { returnIsOpen, returnStateWords } from './returnPolicy'
+import { returnLineForOrder } from './returnView'
+import { useNow } from './useNow'
+import ReturnSheet from './ReturnSheet'
 
 /** In plain words — `pending`, `paid` and `awaiting_payment` mean nothing to a buyer. */
 const FILTERS: { key: BuyerOrderFilter; label: string }[] = [
@@ -38,6 +42,14 @@ const TONES: Record<OrderTone, { bg: string; fg: string; border: string }> = {
   amber: { bg: '#241f0c', fg: '#ffcc33', border: '#4a3d12' },
   red: { bg: '#241010', fg: '#ff6b6b', border: '#4a1d1d' },
   grey: { bg: '#1a1a1a', fg: '#888', border: '#333' },
+}
+
+/** ↩️ A return speaks in its own tones (`returnStateWords`) — waiting, good, bad or done. */
+const RETURN_TONES: Record<'waiting' | 'good' | 'bad' | 'done', { bg: string; fg: string; border: string }> = {
+  waiting: TONES.amber,
+  good: TONES.green,
+  bad: TONES.red,
+  done: TONES.grey,
 }
 
 export interface ShopInfo {
@@ -101,6 +113,8 @@ function BuyerOrders() {
   /** Order ids we just commented on, so the row says so without another read. */
   const [commented, setCommented] = useState<string[]>([])
   const [reviewBusy, setReviewBusy] = useState('')
+  /** The order whose ↩️ sheet is open — the return, and the way out to rachett care. */
+  const [returnTarget, setReturnTarget] = useState<BuyerOrder | null>(null)
   const uid = auth.currentUser?.uid || ''
 
   /**
@@ -226,7 +240,14 @@ function BuyerOrders() {
   return (
     <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '20px 16px 60px' }}>
       <div style={{ maxWidth: 720, margin: '0 auto' }}>
-        <h1 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 800 }}>📦 My Orders</h1>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+          <h1 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 800 }}>📦 My Orders</h1>
+          {/* The policy, the tickets, and where a return goes when the seller goes quiet. */}
+          <button onClick={() => navigate('/returns')}
+            style={{ padding: '8px 12px', background: '#1a1a1a', color: '#ffcc33', border: '1px solid #4a3d12', borderRadius: 10, fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            ↩️ Returns & care
+          </button>
+        </div>
         <p style={{ margin: '0 0 16px', color: '#888', fontSize: 13 }}>
           {loading
             ? 'Loading your orders…'
@@ -270,6 +291,7 @@ function BuyerOrders() {
             onChat={() => navigate('/inbox')}
             onLoadMore={loadMore}
             onReview={(order) => void openReview(order)}
+            onReturn={setReturnTarget}
             reviewBusyId={reviewBusy}
             reviewedIds={commented}
           />
@@ -297,6 +319,18 @@ function BuyerOrders() {
           }}
         />
       )}
+
+      {/* ↩️ One order's return: the seven days, the reasons, the 48-hour clock — and one tap to
+          rachett care once the seller's time is up. The shop's name rides along, because a photo
+          sent from here lands in the buyer↔seller chat. */}
+      {returnTarget && (
+        <ReturnSheet
+          order={returnTarget}
+          shopName={shops.get(returnTarget.sellerId)?.name}
+          returnTo="/my-orders"
+          onClose={() => setReturnTarget(null)}
+        />
+      )}
     </div>
   )
 }
@@ -319,6 +353,8 @@ interface OrdersBodyProps {
   onLoadMore: () => void
   /** Opens the comment form for a delivered order. */
   onReview: (order: BuyerOrder) => void
+  /** Opens the ↩️ sheet — the return policy, and the one tap out to rachett care. */
+  onReturn: (order: BuyerOrder) => void
   /** The order whose comment form is being prepared, if any. */
   reviewBusyId: string
   /** Orders commented on in this session — so the row can say so without another read. */
@@ -342,9 +378,13 @@ function OrdersBody({
   onChat,
   onLoadMore,
   onReview,
+  onReturn,
   reviewBusyId,
   reviewedIds,
 }: OrdersBodyProps) {
+  /** One clock for the whole list: a running return's 48 hours should not freeze at load. */
+  const now = useNow()
+
   return (
     <>
       <div className="rt-filters" style={{ display: 'flex', gap: 8, marginBottom: 16, overflowX: 'auto' }}>
@@ -386,12 +426,14 @@ function OrdersBody({
                 askLove={order.id === promptedOrderId}
                 placedMs={times.createdAt}
                 changedMs={times.updatedAt}
+                now={now}
                 isNew={isOrderNew(times, seenAt)}
                 onOpenShop={() => onOpenShop(order)}
                 onBuyAgain={() => onBuyAgain(order)}
                 onToggleLove={() => onToggleLove(order)}
                 onChat={onChat}
                 onReview={() => onReview(order)}
+                onReturn={() => onReturn(order)}
                 reviewBusy={reviewBusyId === order.id}
                 reviewed={reviewedIds.includes(order.id)}
               />
@@ -422,6 +464,8 @@ interface OrderRowProps {
   /** Milliseconds — when it was ordered, and when it last changed. */
   placedMs: number
   changedMs: number
+  /** Right now, in ms — what a running return's 48 hours are measured against. */
+  now: number
   /** Changed after this person last looked at the list. */
   isNew: boolean
   onOpenShop: () => void
@@ -430,6 +474,8 @@ interface OrderRowProps {
   onChat: () => void
   /** Opens the comment form — only ever shown on a delivered order. */
   onReview: () => void
+  /** Opens the ↩️ sheet: the return, or the way out to rachett care. */
+  onReturn: () => void
   /** A read is in flight for this row (finding a comment they may have already written). */
   reviewBusy?: boolean
   /** They just commented on this order in this session. */
@@ -445,12 +491,14 @@ function OrderRow({
   askLove,
   placedMs,
   changedMs,
+  now,
   isNew,
   onOpenShop,
   onBuyAgain,
   onToggleLove,
   onChat,
   onReview,
+  onReturn,
   reviewBusy,
   reviewed,
 }: OrderRowProps) {
@@ -461,6 +509,10 @@ function OrderRow({
   const quantity = Number(order.quantity) || 1
   const total = orderTotal(order.productPrice, order.quantity)
   const delivered = order.status === 'fulfilled'
+  /** ↩️ The return on this order, if any: its words, its tone, and whether it is still running. */
+  const returnWords = returnStateWords(order.returnState, 'buyer')
+  const returnTone = RETURN_TONES[returnWords?.tone || 'waiting']
+  const liveReturn = returnIsOpen(order.returnState)
 
   return (
     <div style={{ background: '#1a1a1a', border: '1px solid #222', borderRadius: 14, padding: 14 }}>
@@ -525,6 +577,24 @@ function OrderRow({
           {reviewBusy ? 'Checking…' : reviewed ? '✓ Your comment' : '💬 Leave a comment'}
         </button>
       )}
+
+      {/* ↩️ Where a return stands, and the way in. On a delivery that went wrong this is the first
+          thing a buyer looks for, so it is offered on every order — the sheet explains the rest. */}
+      {returnWords && (
+        <p style={{ margin: '10px 0 0', padding: '7px 9px', borderRadius: 8, background: returnTone.bg, border: `1px solid ${returnTone.border}`, color: returnTone.fg, fontSize: 12, lineHeight: 1.5 }}>
+          {returnLineForOrder(order, now)}
+        </p>
+      )}
+      <button
+        onClick={onReturn}
+        style={{ width: '100%', marginTop: 10, padding: '10px', background: liveReturn ? '#241f0c' : '#222', color: liveReturn ? '#ffcc33' : '#fff', border: `1px solid ${liveReturn ? '#4a3d12' : '#333'}`, borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+      >
+        {liveReturn
+          ? '↩️ Return in progress — open it'
+          : delivered
+            ? '↩️ Return or get help'
+            : '🧭 Something wrong with this order?'}
+      </button>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
         <button

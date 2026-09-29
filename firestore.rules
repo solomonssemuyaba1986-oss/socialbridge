@@ -100,9 +100,50 @@ service cloud.firestore {
           && request.resource.data.buyerUid == request.auth.uid
           && request.resource.data.buyerUid != sellerId
           && request.resource.data.status == 'pending';
+        // The seller's own half: moving an order along, and deciding a return once it is delivered.
+        // The two are separate on purpose — a delivered order is closed to everything except the
+        // return decision, so nothing can walk back out of "fulfilled" by accident.
         allow update: if request.auth.uid == sellerId
-          && resource.data.status in ['pending', 'paid', 'awaiting_payment', 'needs_details']
-          && request.resource.data.status in ['fulfilled', 'out_of_stock', 'needs_details'];
+          && (
+            (resource.data.status in ['pending', 'paid', 'awaiting_payment', 'needs_details']
+             && request.resource.data.status in ['fulfilled', 'out_of_stock', 'needs_details'])
+            || (
+              resource.data.status == 'fulfilled'
+              && request.resource.data.diff(resource.data).affectedKeys()
+                   .hasOnly(['returnState', 'returnNote', 'returnDecidedAt'])
+              && request.resource.data.returnState in ['photos_needed', 'approved', 'declined', 'refunded', 'completed']
+              && (!('returnNote' in request.resource.data) || request.resource.data.returnNote.size() <= 300)
+            )
+          );
+        // ↩️ The buyer's half of a return. Only these six fields, only on their own delivered order,
+        // only while no seller decision is standing, and the request time is write-once so the
+        // 48-hour clock cannot be restarted. Every value is checked here, not in the app: the buyer
+        // is the side with a reason to bend the truth. `returnFault` is *derived* from the reason,
+        // so a change of mind cannot be filed as the seller's fault to move the shipping cost.
+        allow update: if request.auth != null
+          && resource.data.buyerUid == request.auth.uid
+          && resource.data.status == 'fulfilled'
+          && resource.data.get('returnState', '') in ['', 'requested', 'photos_sent', 'canceled']
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['returnState', 'returnReason', 'returnFault', 'returnNote',
+                         'returnRequestedAt', 'returnUpdatedAt'])
+          && request.resource.data.returnState in ['requested', 'photos_sent', 'canceled']
+          && request.resource.data.returnReason in ['damaged', 'wrong_item', 'not_as_described',
+                                                    'missing_parts', 'never_arrived', 'too_late',
+                                                    'changed_mind', 'other']
+          && (
+            (request.resource.data.returnReason in ['damaged', 'wrong_item', 'not_as_described',
+                                                    'missing_parts', 'never_arrived', 'too_late']
+             && request.resource.data.returnFault == 'seller')
+            || (request.resource.data.returnReason in ['changed_mind', 'other']
+                && request.resource.data.returnFault in ['seller', 'buyer'])
+          )
+          && (!('returnNote' in request.resource.data) || request.resource.data.returnNote.size() <= 300)
+          && request.resource.data.returnRequestedAt is number
+          && (
+            resource.data.get('returnRequestedAt', 0) == 0
+            || request.resource.data.returnRequestedAt == resource.data.get('returnRequestedAt', 0)
+          );
         allow delete: if request.auth.uid == sellerId;
       }
 
@@ -154,6 +195,23 @@ service cloud.firestore {
     match /feedback/{feedbackId} {
       allow create: if request.auth != null;
       allow read, update, delete: if false;
+    }
+
+    // ── 🛡️ Rachett care tickets ───────────────────────────────────────────
+    // A complaint is written by its author and readable by *nobody else* — not the seller it is
+    // about, not another buyer, not a curious onlooker. That is the whole design: a buyer should
+    // never have to weigh "will this get me my money back" against "will this annoy the seller".
+    // Nothing here is ever posted into a chat, and nothing is editable — a ticket is a record.
+    match /careTickets/{ticketId} {
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.source == 'care'
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() <= 900
+        && request.resource.data.status == 'open';
+      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
     }
 
     match /recoveries/{docId} {

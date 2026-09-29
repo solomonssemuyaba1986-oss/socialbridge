@@ -63,7 +63,7 @@ bounded offline buffer (200, oldest dropped) and never break the UI.
 - **Opt-out** — `localStorage.rachett_analytics_off = '1'` silences every writer
   (see `setAnalyticsOptOut`). Nothing is queued or sent in that state.
 
-## The events (68)
+## The events (90)
 
 ✅ = wired in the app today · ⏳ = reserved name, add the call when the feature or
 the page needs it.
@@ -102,6 +102,7 @@ the page needs it.
 | `nearby_store_opened` | sellerId, slug, distanceKm | ⏳ |
 | `search_performed` | query, surface, resultCount, zeroResult, category, sortBy | ✅ (Browse + Nearby — fired by the 🔍 button, the phone's Search key, Enter, or a recent search) |
 | `search_suggestion_clicked` | query, suggestion, kind, surface | ✅ (Browse + Nearby type-ahead) |
+| `search_correction_tapped` | query, suggestion, surface | ✅ (Browse — the “did you mean” button in the empty state, corrected against words real listings carry) |
 | `recent_search_clicked` | query, surface | ⏳ |
 | `history_entry_opened` | surface, bucket | ✅ (opening something from your own history strip — Browse or Nearby, `bucket` = today · yesterday · past 3 days · this week · last week · this month · last month) |
 | `history_cleared` | surface, count | ✅ ("Clear history" — count is what was wiped) |
@@ -153,6 +154,13 @@ the page needs it.
 | `store_shared` | sellerId, channel, surface | ⏳ |
 | `qr_viewed` | sellerId | ⏳ |
 | `feedback_submitted` | category, role, source | ✅ (the form, and now the after-use ask) |
+| `care_ticket_sent` | issue, topic, photos, hasOrder | ✅ (a care ticket actually landed — `careTickets/`, author-readable only) |
+| `care_sheet_viewed` | hasOrder, issue | ✅ (the sheet was opened — the top of the care funnel) |
+| `return_sheet_viewed` | orderId, canOpen | ✅ (`canOpen` = the policy let them start one; `false` is the interesting half) |
+| `return_requested` | orderId, reason, fault | ✅ (the buyer's order got a return on it) |
+| `return_updated` | orderId, state | ✅ (photo sent · withdrawn — the buyer's own two states) |
+| `return_decided` | orderId, state, hasNote | ✅ (the seller answered: photos_needed · approved · declined · refunded · completed) |
+| `returns_viewed` | count, openReturns | ✅ (`/returns` — the policy page, with the buyer's own returns on it) |
 | `feedback_prompt_shown` | actions | ✅ (how much they'd used it when the question appeared) |
 | `feedback_prompt_dismissed` | actions | ✅ ("Later" — the answer rate is measurable) |
 | `error_shown` | kind, message | ⏳ |

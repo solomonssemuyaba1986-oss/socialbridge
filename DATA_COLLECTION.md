@@ -443,7 +443,7 @@ read through the report script or the console.
   or 900 KB. `expireAt` is written 400 days out, and nothing is deleted until you
   set a TTL policy on that field (see ANALYTICS.md → Retention).
 
-**Where the detail lives:** `ANALYTICS.md` — the full 63-event taxonomy, what each
+**Where the detail lives:** `ANALYTICS.md` — the full event taxonomy, what each
 property means, which events are wired today, and how to run
 `npm run analytics:report`.
 

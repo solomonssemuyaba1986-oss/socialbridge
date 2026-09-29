@@ -42,6 +42,22 @@ export interface BuyerOrder {
   createdAt?: unknown
   /** Stamped every time the seller changes the status — see `OrderHistory.updateOrderStatus`. */
   updatedAt?: unknown
+
+  /**
+   * ↩️ The return on this order. Written by the buyer (`returnPolicy.returnPatch` /
+   * `buyerReturnPatch`) or by the seller (their decision, `sellerReturnPatch`).
+   *
+   * `firestore.rules` accepts these names and no others on an order, and a return carries no
+   * timestamp of ours — `returnRequestedAt` is the buyer's clock, written once, and it is the
+   * seller's 48 hours. `returnNote` is the seller's own words when they ask, approve or refuse.
+   */
+  returnState?: string
+  returnReason?: string
+  returnFault?: string
+  returnNote?: string
+  returnRequestedAt?: number
+  returnUpdatedAt?: number
+  returnDecidedAt?: number
 }
 
 /** How many orders the first screen carries, and how many more each tap adds. */

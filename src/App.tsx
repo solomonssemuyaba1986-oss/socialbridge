@@ -25,6 +25,7 @@ import Splash from './Splash.tsx'
 import LoadingScreen from './LoadingScreen.tsx'
 import RecoverPage from './RecoverPage.tsx'
 import HelpPage from './HelpPage.tsx'
+import ReturnsPage from './ReturnsPage.tsx'
 import TermsPage from './TermsPage.tsx'
 import NearbyPage from './NearbyPage.tsx'
 import BuyerHome from './BuyerHome.tsx'
@@ -153,6 +154,9 @@ function App() {
       <Route path="/feedback" element={<FeedbackPage />} />
       <Route path="/recover" element={<RecoverPage />} />
       <Route path="/help" element={<HelpPage />} />
+      {/* ↩️ Returns & rachett care — the whole policy in plain words, plus this buyer's own running
+          returns and tickets. Open to guests on purpose: the promise is not a members' club. */}
+      <Route path="/returns" element={<ReturnsPage />} />
       <Route path="/terms" element={<TermsPage />} />
       {/* Any unmatched URL — previously rendered nothing but the top nav. */}
       <Route path="*" element={<NotFound />} />

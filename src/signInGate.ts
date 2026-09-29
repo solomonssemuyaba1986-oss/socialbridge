@@ -11,7 +11,7 @@ import { trackEvent } from './analytics'
  * The action itself is kept in sessionStorage (survives the sign-in round trip,
  * including a full-page redirect sign-in) and is consumed exactly once.
  */
-export type PendingAction = 'order' | 'message' | 'inbox' | 'like'
+export type PendingAction = 'order' | 'message' | 'inbox' | 'like' | 'care'
 
 export interface PendingIntent {
   action: PendingAction
@@ -84,7 +84,9 @@ export function consumePendingAction<T extends { id: string }>(
 ): void {
   const pending = peekPendingIntent()
   if (!pending) return
-  if (pending.action === 'inbox') {
+  if (pending.action === 'inbox' || pending.action === 'care') {
+    // Neither has a sheet of its own: the return path puts them back where they were (the inbox,
+    // or `/returns`), which is what they asked for in the first place.
     clearPendingIntent()
     return
   }

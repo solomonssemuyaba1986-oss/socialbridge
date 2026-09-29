@@ -21,6 +21,7 @@ const TITLES: Record<PendingAction, string> = {
   message: 'Sign in to message this seller',
   inbox: 'Sign in to open your inbox',
   like: 'Sign in to love this product',
+  care: 'Sign in to finish this',
 }
 
 const NOTES: Record<PendingAction, string> = {
@@ -28,6 +29,7 @@ const NOTES: Record<PendingAction, string> = {
   message: 'Chats live in your account, so you get the seller’s reply even if you close the app.',
   inbox: 'Your chats and order updates are saved to your account.',
   like: 'One like per account is what makes the number trustworthy — the same 22 for everyone. We bring you straight back to it.',
+  care: 'Returns and care tickets are written onto your own order, so they need an account — and we bring you straight back here.',
 }
 
 /**

@@ -81,6 +81,18 @@ const FAQ_SECTIONS: FaqSection[] = [
     topic: 'bag',
     items: [
       {
+        q: 'How do I return something?',
+        a: 'Open My Orders, find the order the seller marked delivered, and tap ↩️. You have 7 days from the day it was marked delivered, and if the item arrived wrong, damaged, incomplete or not at all, the seller covers the trip back — that is their fault, whatever the item is. The whole policy, in plain words, is at Returns & care.',
+      },
+      {
+        q: 'The seller is not answering my return',
+        a: 'Every return starts a 48-hour clock, and you can see it on the order itself. When it runs out, the order hands you one tap straight to rachett care — the order, your reason and the dates travel with it, so you stop chasing.',
+      },
+      {
+        q: 'How do I complain about a seller?',
+        a: 'Open Returns & care on the order, or from the top of My Orders, and pick what happened: the message is written for you from the real order. A person answers within 24 hours, and the seller never sees it — nothing is posted into your chat, so you never have to choose between being honest and keeping the peace.',
+      },
+      {
         q: 'How do I add items to my bag?',
         a: 'Tap the 🛍️ button on any product while browsing, or on any store page. Items stay in your bag across pages and sync to your account when you sign in.',
       },
@@ -335,6 +347,12 @@ function HelpPage() {
           <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 800 }}>Still stuck?</h3>
           <p style={{ margin: '0 0 16px', color: '#888', fontSize: 13 }}>Talk to the support team, or send us feedback.</p>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => navigate('/returns')}
+              style={{ background: 'transparent', color: '#ffcc33', border: '1px solid #4a3d12', padding: '12px 20px', borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: 14 }}
+            >
+              ↩️ Returns & care
+            </button>
             {SUPPORT_WHATSAPP && (
               <a
                 href={`https://wa.me/${SUPPORT_WHATSAPP}`}

@@ -10,6 +10,17 @@ import Sidebar from './Sidebar'
 import SellerTabs from './SellerTabs'
 import { variantLabel } from './productSheetUtils'
 import { paymentBadge, paymentSummary, paidCount } from './orderPayment'
+import {
+  MAX_RETURN_NOTE,
+  returnIsOpen,
+  returnReason,
+  returnStateWords,
+  sellerAnswerWords,
+  sellerDecisionProblem,
+  sellerReturnPatch,
+  type SellerReturnState,
+} from './returnPolicy'
+import { useNow } from './useNow'
 
 const green = '#adff2f'
 
@@ -51,12 +62,53 @@ function orderTotal(price: string, quantity: number | string): number {
   return unit * qty
 }
 
+/**
+ * ↩️ The seller's side of the policy: every answer that is an answer.
+ *
+ * Approve, ask for a photo, or refuse with a reason — the three the 48-hour clock accepts. The
+ * states themselves come from `returnPolicy.ts` (`SELLER_RETURN_STATES`), and `firestore.rules`
+ * refuses anything else, so this list can only ever offer what the write will accept.
+ */
+function returnActions(state: string | undefined): { state: SellerReturnState; label: string }[] {
+  switch (state) {
+    case 'requested':
+    case 'photos_sent':
+      return [
+        { state: 'photos_needed', label: '📷 Ask for a photo' },
+        { state: 'approved', label: '✓ Approve the return' },
+        { state: 'declined', label: '✕ Decline — with a reason' },
+      ]
+    case 'photos_needed':
+      return [
+        { state: 'approved', label: '✓ Approve the return' },
+        { state: 'declined', label: '✕ Decline — with a reason' },
+      ]
+    case 'approved':
+      // The item is on its way back: the last two words are how it ended.
+      return [
+        { state: 'refunded', label: '💸 Money sent back' },
+        { state: 'completed', label: '✓ Item back — done' },
+      ]
+    case 'declined':
+      // A decision is not a wall: the seller may look again.
+      return [{ state: 'approved', label: '✓ Approve after all' }]
+    default:
+      return []
+  }
+}
+
 function OrderHistory() {
   const navigate = useNavigate()
   const { orders, loading, userId } = useSellerOrders()
   const [filter, setFilter] = useState<'all' | 'pending' | 'fulfilled' | 'out_of_stock'>('pending')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<SellerOrder | null>(null)
+  /** What the seller has typed under each return, keyed by order id — one box per return. */
+  const [returnNotes, setReturnNotes] = useState<Record<string, string>>({})
+  /** A refusal without a reason is a wall, so the words are checked before the write. */
+  const [returnProblem, setReturnProblem] = useState<{ id: string; text: string } | null>(null)
+  const [returnBusy, setReturnBusy] = useState(false)
+  const now = useNow()
 
   const updateOrderStatus = async (orderId: string, status: string) => {
     if (!userId) return
@@ -102,6 +154,35 @@ function OrderHistory() {
         productPrice: order.productPrice,
         quantity: String(order.quantity ?? '1'),
       })
+    }
+  }
+
+  /**
+   * The seller's answer to a return. `firestore.rules` accepts exactly three fields on a delivered
+   * order — `returnState`, `returnNote`, `returnDecidedAt` — and **nothing else**, so no `updatedAt`
+   * rides along: answering a return must never move the delivery date the seven days are counted
+   * from. `sellerReturnPatch` builds those three, and throws on any state that is not the seller's.
+   */
+  const decideReturn = async (order: SellerOrder, state: SellerReturnState) => {
+    if (!userId) return
+    const note = returnNotes[order.id] || ''
+    const problem = sellerDecisionProblem(state, note)
+    if (problem) {
+      setReturnProblem({ id: order.id, text: problem })
+      return
+    }
+    setReturnBusy(true)
+    setReturnProblem(null)
+    try {
+      const patch: Record<string, unknown> = { ...sellerReturnPatch(state, Date.now(), note) }
+      await updateDoc(doc(db, 'sellers', userId, 'orders', order.id), patch)
+      trackEvent('return_decided', { orderId: order.orderId || order.id, state, hasNote: note.trim() !== '' })
+      setReturnNotes(prev => ({ ...prev, [order.id]: '' }))
+    } catch (err) {
+      console.error('Return decision failed:', err)
+      setReturnProblem({ id: order.id, text: 'That did not go through. Check your connection and try again.' })
+    } finally {
+      setReturnBusy(false)
     }
   }
 
@@ -205,6 +286,13 @@ function OrderHistory() {
                 const pm = platformMeta(o.sourcePlatform)
                 // What the money says about this order — empty unless it is actually in.
                 const payLine = paymentSummary(o)
+                // ↩️ A return is a clock the seller is on, not a detail — so it gets its own line.
+                const sellerNow = returnStateWords(o.returnState, 'seller')
+                const reasonNow = returnReason(o.returnReason)
+                const returnClock = returnIsOpen(o.returnState)
+                  ? sellerAnswerWords(Number(o.returnRequestedAt) || 0, now)
+                  : null
+                const actions = o.status === 'fulfilled' ? returnActions(o.returnState) : []
                 return (
                   <div key={o.id}>
                     <div
@@ -239,6 +327,11 @@ function OrderHistory() {
                           <span style={{ background: st.bg, color: st.color, padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600' }}>
                             {st.text}
                           </span>
+                          {sellerNow && (
+                            <div style={{ marginTop: '6px', color: returnClock?.late ? '#ff4444' : '#ffb020', fontSize: '11px', fontWeight: '700' }}>
+                              {sellerNow.icon} {sellerNow.text}{returnClock?.late ? ' · late' : ''}
+                            </div>
+                          )}
                         </div>
                       </div>
                       <p style={{ margin: '8px 0 0', color: '#444', fontSize: '11px' }}>{formatDate(o.createdAt)}</p>
@@ -281,6 +374,51 @@ function OrderHistory() {
                               style={{ padding: '10px', background: 'transparent', color: '#888', border: '1px solid #333', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
                               Need Details
                             </button>
+                          </div>
+                        )}
+
+                        {/* ↩️ The buyer's return, and the seller's half of the promise: answer
+                            within 48 hours. Silence is not an answer — it hands the whole thing to
+                            rachett care, with the order and the reason attached. */}
+                        {o.status === 'fulfilled' && o.returnState && (
+                          <div style={{ background: '#101010', border: '1px solid #333', borderRadius: '10px', padding: '12px', marginBottom: '8px' }}>
+                            <p style={{ margin: '0 0 4px', color: green, fontSize: '13px', fontWeight: '800' }}>
+                              {sellerNow?.icon} {sellerNow?.text}
+                            </p>
+                            <p style={{ margin: '0 0 4px', color: '#ddd', fontSize: '12px' }}>
+                              {reasonNow?.label || 'A return'}
+                              {' · '}
+                              {reasonNow?.fault === 'buyer' ? 'the buyer covers the trip back' : 'you cover the trip back'}
+                            </p>
+                            {o.returnNote && (
+                              <p style={{ margin: '0 0 4px', color: '#aaa', fontSize: '12px', fontStyle: 'italic' }}>“{o.returnNote}”</p>
+                            )}
+                            {returnClock?.text && (
+                              <p style={{ margin: '0 0 8px', color: returnClock.late ? '#ff4444' : '#888', fontSize: '12px', lineHeight: 1.5 }}>{returnClock.text}</p>
+                            )}
+
+                            {actions.length > 0 && (
+                              <>
+                                <textarea
+                                  value={returnNotes[o.id] || ''}
+                                  maxLength={MAX_RETURN_NOTE}
+                                  onChange={e => setReturnNotes(prev => ({ ...prev, [o.id]: e.target.value }))}
+                                  placeholder="A note for the buyer: what you need, or why you are refusing."
+                                  style={{ width: '100%', minHeight: '58px', padding: '10px', borderRadius: '8px', border: '1px solid #333', background: '#0f0f0f', color: '#fff', fontSize: '12px', resize: 'vertical', boxSizing: 'border-box' }}
+                                />
+                                <div className="rt-order-actions" style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
+                                  {actions.map(a => (
+                                    <button key={a.state} onClick={() => void decideReturn(o, a.state)} disabled={returnBusy}
+                                      style={{ flex: '1 1 auto', padding: '10px', background: a.state === 'declined' ? 'transparent' : green, color: a.state === 'declined' ? '#ff4444' : '#000', border: a.state === 'declined' ? '1px solid #ff4444' : 'none', borderRadius: '8px', cursor: returnBusy ? 'wait' : 'pointer', fontSize: '12px', fontWeight: '700' }}>
+                                      {a.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                            {returnProblem?.id === o.id && (
+                              <p style={{ margin: '8px 0 0', color: '#ff4444', fontSize: '12px', lineHeight: 1.5 }}>{returnProblem.text}</p>
+                            )}
                           </div>
                         )}
 

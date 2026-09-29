@@ -68,6 +68,27 @@ export const EVENT_PROPS = {
   search_suggestion_clicked: ['query', 'suggestion', 'kind', 'surface'],
   recent_search_clicked: ['query', 'surface'],
   search_cleared: ['surface', 'hadQuery'],
+  // The dead end, handled: nothing matched what they typed and they tapped the correction we offered
+  // from a real listing ("sneekers" → "sneakers"). The clearest signal that search failed and recovered.
+  search_correction_tapped: ['query', 'suggestion', 'surface'],
+
+  // ── Care (the tickets that make the return policy real) ──────────────────
+  care_ticket_sent: ['issue', 'topic', 'photos', 'hasOrder'],
+  // The top of the care funnel: how many reached the sheet, and whether they had an order to hang
+  // the ticket on. (Whether it *landed* is `care_ticket_sent`, fired by `careTickets.ts`.)
+  care_sheet_viewed: ['hasOrder', 'issue'],
+
+  // ── Returns (the policy in `returnPolicy.ts`, wired to the screens) ──────
+  // `return_sheet_viewed` carries the one number worth watching: `canOpen`. A buyer who reaches the
+  // sheet and is told no is not a failure of the buyer — it is the window, a missing delivery date
+  // or a seller decision, and each of those is our problem to see.
+  return_sheet_viewed: ['orderId', 'canOpen'],
+  return_requested: ['orderId', 'reason', 'fault'],
+  // The buyer's own two states, and nothing else: photo sent, or the request withdrawn.
+  return_updated: ['orderId', 'state'],
+  // The seller's half: photos_needed · approved · declined · refunded · completed.
+  return_decided: ['orderId', 'state', 'hasNote'],
+  returns_viewed: ['count', 'openReturns'],
 
   // ── History (Browse's own list and Nearby's own list — never merged, never an account) ──
   // `bucket` is the interval it was opened from: today · yesterday · past 3 days · this week ·

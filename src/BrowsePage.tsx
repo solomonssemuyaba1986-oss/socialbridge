@@ -37,6 +37,7 @@ import StoreCard from './StoreCard'
 import Fuse from 'fuse.js'
 import SearchSuggest from './SearchSuggest'
 import { buildSuggestions, type Suggestion } from './useSuggestions'
+import { rankProducts, searchLine, emptySearchHelp, vocabularyFrom } from './searchRank'
 
 interface Product {
   id: string
@@ -101,6 +102,8 @@ function BrowsePage() {
   )
 
   const [filtered, setFiltered] = useState<Product[]>([])
+  /** The words the market here really uses — what a mistyped search is corrected to. */
+  const searchVocabulary = useMemo(() => vocabularyFrom(products), [products])
   const [activeCategory, setActiveCategory] = useState('All')
   const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get('q') || '')
   /** Type-ahead dropdown: open while typing, navigable with ↑/↓, picked with Enter. */
@@ -770,6 +773,9 @@ function BrowsePage() {
     })
   }, [stores, products, search])
 
+  /** The dead end, handled: a correction built from real listings, or an honest next step. */
+  const searchHelp = useMemo(() => emptySearchHelp(search, searchVocabulary), [search, searchVocabulary])
+
   // Trending & recommended — what's actually moving (orders + sales)
   const popularProducts = useMemo(() => {
     return [...products]
@@ -858,18 +864,13 @@ function BrowsePage() {
       return price >= minP && price <= maxP
     })
 
-    // Fuzzy search
+    // Search: every word has to match, best match first, and something you can buy today before
+    // something you cannot. (This also hands back a copy, so the sorts below never reorder `products`.)
     if (search.trim()) {
-      const fuse = new Fuse(result, {
-        keys: ['name', 'description', 'businessName', 'subCategory'],
-        threshold: 0.3,
-        includeScore: true
-      })
-      const searchResults = fuse.search(search)
-      result = searchResults.map(r => r.item)
+      result = rankProducts(result, search)
     }
 
-    // Apply sorting
+    // Apply sorting — relevance is kept as the tie-break, because a sort in JavaScript is stable
     if (sortBy === 'price-asc') {
       result.sort((a, b) => {
         const priceA = Number(String(a.price).replace(/,/g, '')) || 0
@@ -925,7 +926,8 @@ function BrowsePage() {
             )}
           </SearchBar>
         </div>
-        {/* Result count — always on screen while searching, even at zero */}
+        {/* Result count — always on screen while searching, even at zero. The words come from
+            `searchLine`, handed the same number the grid below is about to draw. */}
         {search.trim() && (
           <p style={{ margin: '14px 0 0', color: '#888', fontSize: 13 }}>
             {loading ? (
@@ -933,9 +935,8 @@ function BrowsePage() {
             ) : (
               <>
                 🔍 <strong style={{ color: filtered.length > 0 ? green : '#fff', fontSize: 15 }}>
-                  {filtered.length} result{filtered.length === 1 ? '' : 's'}
+                  {searchLine(filtered.length, search)}
                 </strong>
-                {' for '}<strong style={{ color: '#fff' }}>“{search.trim()}”</strong>
                 {storeMatches.length > 0 && (
                   <>
                     {' · '}<strong style={{ color: '#fff', fontSize: 15 }}>{storeMatches.length}</strong>
@@ -1105,6 +1106,35 @@ function BrowsePage() {
                     ? '😕 Nothing matched that — here are some you may like 👇'
                     : '😕 Nothing here yet — here are some you may like 👇'}
             </p>
+
+            {/* Never a dead end: the correction is tapped, not retyped, and it always comes from a
+                word something here really carries (`emptySearchHelp`). */}
+            {search.trim() && (
+              <div style={{ textAlign: 'center', marginBottom: 20 }}>
+                <p style={{ margin: '0 0 12px', color: '#ddd', fontSize: 14, fontWeight: 700 }}>
+                  {searchHelp.title}
+                </p>
+                {searchHelp.suggestion && (
+                  <button
+                    onClick={() => {
+                      trackEvent('search_correction_tapped', {
+                        query: search.trim(),
+                        suggestion: searchHelp.suggestion,
+                        surface: 'browse',
+                      })
+                      setSearch(searchHelp.suggestion)
+                      saveRecentSearch(searchHelp.suggestion)
+                    }}
+                    style={{ padding: '10px 20px', marginBottom: 12, background: green, color: '#000', border: 'none', borderRadius: 999, fontWeight: 800, cursor: 'pointer', fontSize: 14 }}
+                  >
+                    🔍 Search “{searchHelp.suggestion}” instead
+                  </button>
+                )}
+                <p style={{ margin: 0, color: '#666', fontSize: 12, lineHeight: 1.6, maxWidth: 480, marginLeft: 'auto', marginRight: 'auto' }}>
+                  {searchHelp.note}
+                </p>
+              </div>
+            )}
 
             {(search.trim() || minPrice || maxPrice) && (
               <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 20 }}>

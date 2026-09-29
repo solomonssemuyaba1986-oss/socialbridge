@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState, useCallback, type ReactNode } fro
 import { useNavigate } from 'react-router-dom'
 import { collection, getDocs } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
-import Fuse from 'fuse.js'
 import { db, auth } from './firebase'
 import { haversineKm } from './geo'
 import { formatDistance, isApproximatePin, placeLabel, type GeoSource, type Place } from './place'
@@ -26,6 +25,7 @@ import ViewHistory from './ViewHistory'
 import { useViewHistory } from './useViewHistory'
 import { useRotatingPlaceholder } from './useRotatingPlaceholder'
 import { buildSuggestions, type Suggestion } from './useSuggestions'
+import { rankProducts, didYouMean, vocabularyFrom } from './searchRank'
 import { consumePendingAction, requireSignIn } from './signInGate'
 import { useProductLikes } from './useProductLikes'
 import { notify } from './notifications'
@@ -421,16 +421,24 @@ function NearbyPage() {
     return seededShuffle(pool, shuffleSeed).slice(0, RAIL_LIMIT)
   }, [matching, popular, hero, shuffleSeed, hasNewest])
 
+  /**
+   * The search itself — the same ranking Browse uses (`src/searchRank.ts`), so a word that finds
+   * something in one surface finds it in the other: every word must match, best match first, and
+   * something you can buy today before something you cannot.
+   */
   const searchResults = useMemo(() => {
     const term = search.trim()
     if (!term) return []
-    const fuse = new Fuse(matching, {
-      keys: ['name', 'description', 'businessName', 'category', 'subCategory'],
-      threshold: 0.4,
-      ignoreLocation: true,
-    })
-    return fuse.search(term).map(r => r.item)
+    return rankProducts(matching, term)
   }, [matching, search])
+
+  /** The words real listings here carry — what a mistyped search gets corrected to. */
+  const searchVocabulary = useMemo(() => vocabularyFrom(matching), [matching])
+  /**
+   * The correction, straight from `didYouMean` (Browse shows it through `emptySearchHelp`'s title and
+   * note; here the empty state has its own words, because it can also offer a wider radius).
+   */
+  const [correction = ''] = useMemo(() => didYouMean(search, searchVocabulary), [search, searchVocabulary])
 
   const searching = search.trim().length > 0
 
@@ -916,6 +924,22 @@ function NearbyPage() {
               <p style={{ color: '#888', fontSize: '14px', margin: '0 0 4px' }}>
                 Nothing matching “{search.trim()}”{area ? ` within ${range} km` : ' yet'}.
               </p>
+              {/* One tap on the word they probably meant — corrected against real listings, not a guess. */}
+              {correction && (
+                <button
+                  onClick={() => {
+                    trackEvent('search_correction_tapped', {
+                      query: search.trim(),
+                      suggestion: correction,
+                      surface: 'nearby',
+                    })
+                    setSearch(correction)
+                  }}
+                  style={{ padding: '10px 18px', marginBottom: 12, background: green, color: '#000', border: 'none', borderRadius: '999px', fontWeight: '800', cursor: 'pointer', fontSize: '13px' }}
+                >
+                  🔍 Search “{correction}” instead
+                </button>
+              )}
               <p style={{ color: '#555', fontSize: '12px', margin: '0 0 16px' }}>
                 Try another word{activeCategory !== 'All' ? ', another category' : ''}, or widen your range.
               </p>
