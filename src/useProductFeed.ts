@@ -21,6 +21,14 @@ export interface FeedProduct extends DocumentData {
 interface Options {
   /** How many products each page carries. */
   pageSize?: number
+  /**
+   * Whether to load at all. Defaults to true, so every existing caller is unchanged.
+   *
+   * A page that only *sometimes* wants the catalogue says so here: the empty bag shows what is
+   * being bought, and a bag with something in it shows its own items and pays no reads for a feed
+   * it will never draw.
+   */
+  enabled?: boolean
 }
 
 /** How many stores we walk per page when running on the fallback path. */
@@ -73,11 +81,11 @@ function readCache(): FeedCache | null {
   return feedCache
 }
 
-export function useProductFeed({ pageSize = 24 }: Options = {}) {
+export function useProductFeed({ pageSize = 24, enabled = true }: Options = {}) {
   const cached = readCache()
   const [products, setProducts] = useState<FeedProduct[]>(() => cached?.rows ?? [])
   /** Only a genuine cold start counts as "loading" — a cached page refreshes quietly. */
-  const [loading, setLoading] = useState(() => !cached)
+  const [loading, setLoading] = useState(() => enabled && !cached)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(() => cached?.hasMore ?? true)
   const [error, setError] = useState('')
@@ -194,11 +202,13 @@ export function useProductFeed({ pageSize = 24 }: Options = {}) {
   }, [readFeedPage, readFallbackPage])
 
   useEffect(() => {
+    // Nothing is asked for until somebody wants it: a disabled feed must never cost a read.
+    if (!enabled) return
     // Kick the first page off just after the effect body — setting state straight
     // inside an effect triggers cascading renders.
     const timer = window.setTimeout(() => { void load(true) }, 0)
     return () => window.clearTimeout(timer)
-  }, [load])
+  }, [load, enabled])
 
   const loadMore = useCallback(() => { void load(false) }, [load])
   const reload = useCallback(() => { void load(true) }, [load])

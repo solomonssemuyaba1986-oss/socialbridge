@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { formatBagCount, green, productImages, type CardProduct } from './productCardUtils'
-import { CARD_IMAGE_WIDTH, sizedImage } from './cloudinaryUrl'
+import { useDataSaver } from './dataSaverLive'
 import LikePill from './LikePill'
 import { useImpression } from './analytics/useImpression'
 
@@ -56,6 +56,7 @@ function ProductCard({
   // Counts one `product_impression` the moment this card is half on screen.
   const cardRef = useRef<HTMLDivElement | null>(null)
   useImpression(cardRef, { productId: p.id, sellerId: p.sellerId }, { surface })
+  const saver = useDataSaver()
   const [imgIndex, setImgIndex] = useState(0)
   const swipeStart = useRef<{ x: number; y: number } | null>(null)
   const suppressClick = useRef(false)
@@ -115,8 +116,10 @@ function ProductCard({
 
         {imgs.length <= 1 ? (
           <img
-            src={imgs[0] || 'https://placehold.co/300x200/1a1a1a/333333'}
+            src={saver.image(imgs[0] || 'https://placehold.co/300x200/1a1a1a/333333')}
             alt={p.name}
+            /* The saver already decided the width; the browser still gets told it may wait. */
+            loading="lazy" decoding="async"
             style={{ width: '100%', height: 160, objectFit: 'cover', display: 'block', opacity: p.outOfStock ? 0.5 : 1 }}
           />
         ) : (
@@ -145,7 +148,7 @@ function ProductCard({
             {imgs.map((img, i) => (
               <img
                 key={`${p.id}-${i}`}
-                src={sizedImage(img, CARD_IMAGE_WIDTH)}
+                src={saver.image(img)}
                 alt={p.name}
                 draggable={false}
                 /* The photo on screen loads now; the ones behind a swipe wait until they are asked for.

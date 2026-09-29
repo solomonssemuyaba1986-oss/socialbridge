@@ -8,6 +8,7 @@
  *
  *   - `f_auto` — WebP or AVIF where the phone can decode it, JPEG where it cannot;
  *   - `q_auto` — the smallest quality that still looks right (Cloudinary measures it, we do not guess);
+ *     `q_auto:eco` when the data saver is on, which aims lower on purpose (`dataSaver.ts`);
  *   - `c_limit` — never scale *up*, and never crop a product the buyer came to see;
  *   - `w_<width>` — the width that actually lands on this screen.
  *
@@ -18,12 +19,21 @@
  * and `blob:` previews, and any older host must keep working exactly as they did. Pure — no React,
  * no network — so a stray URL can never take a page down.
  */
+import type { ImageBudget } from './dataSaver'
+
 const UPLOAD = '/image/upload/'
 
 /** The width a card photo is actually drawn at: 400 covers a 2× phone without waste. */
 export const CARD_IMAGE_WIDTH = 400
 
-export function sizedImage(url: string, width: number = CARD_IMAGE_WIDTH): string {
+/** `auto` lets Cloudinary measure the quality; `eco` tells it to aim lower from the start. */
+export type ImageQuality = 'auto' | 'eco'
+
+export function sizedImage(
+  url: string,
+  width: number = CARD_IMAGE_WIDTH,
+  quality: ImageQuality = 'auto',
+): string {
   if (!url || typeof url !== 'string') return url
   const marker = url.indexOf(UPLOAD)
   if (marker === -1) return url
@@ -36,5 +46,15 @@ export function sizedImage(url: string, width: number = CARD_IMAGE_WIDTH): strin
   // A junk width must not become `w_NaN` and break the image; 400 is what a card wants.
   const safe = Number.isFinite(width) ? Math.round(width) : CARD_IMAGE_WIDTH
   const w = Math.max(40, Math.min(1600, safe))
-  return `${head}f_auto,q_auto,c_limit,w_${w}/${rest}`
+  const q = quality === 'eco' ? 'q_auto:eco' : 'q_auto'
+  return `${head}f_auto,${q},c_limit,w_${w}/${rest}`
+}
+
+/**
+ * The same rewrite, driven by a data-saver budget, so that the width and the quality a screen asks
+ * for can never drift apart from the setting that chose them.
+ */
+export function budgetedImage(url: string, budget: ImageBudget, size: 'card' | 'full' = 'card'): string {
+  const width = size === 'full' ? budget.fullWidth : budget.cardWidth
+  return sizedImage(url, width, budget.quality)
 }

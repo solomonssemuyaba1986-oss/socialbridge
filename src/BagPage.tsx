@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type ChangeEvent } from 'react'
+import { useState, useRef, useEffect, useMemo, type CSSProperties, type ChangeEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { collection, getDocs, query, where, doc, onSnapshot } from 'firebase/firestore'
 import { db, auth } from './firebase'
@@ -19,10 +19,49 @@ import { formatCount } from './productCardUtils'
 import { variantLabel } from './productSheetUtils'
 import { useBuyerName } from './useBuyerName'
 import { nameLabel } from './buyerName'
+import { useProductFeed } from './useProductFeed'
+import { useSellerDirectory } from './useSellerDirectory'
+import { useViewHistory } from './useViewHistory'
+import { useBuyerLocation } from './useBuyerLocation'
+import { distanceToSeller } from './browseSort'
+import { useDataSaver } from './dataSaverLive'
+import {
+  BOUGHT_NEAR_TITLE,
+  bagHref,
+  bagSuggestions,
+  boughtWords,
+  emptyBagBlurb,
+  emptyBagRails,
+  mergeRecent,
+  wantsFallbackShelf,
+  type BagFeedProduct,
+} from './emptyBag'
 
 const green = '#adff2f'
 const SUPPORT_WHATSAPP = (import.meta.env.VITE_SUPPORT_WHATSAPP || '256703174968').trim()
 const SUPPORT_EMAIL = 'rachettcommerce@gmail.com'
+
+/**
+ * The small cards an empty bag offers: their own trail on the left of the page, then what is moving.
+ * One card shape for both, so the two rails read as one shelf rather than two widgets.
+ */
+const shelfCardStyle: CSSProperties = {
+  display: 'flex', flexDirection: 'column', gap: 2, padding: 0, background: '#1a1a1a',
+  border: '1px solid #222', borderRadius: 12, overflow: 'hidden', cursor: 'pointer',
+  textAlign: 'left', color: '#fff', fontFamily: 'sans-serif',
+}
+const shelfImageStyle: CSSProperties = {
+  width: '100%', height: 104, objectFit: 'cover', background: '#222', display: 'block',
+}
+const shelfNameStyle: CSSProperties = {
+  padding: '8px 10px 0', fontSize: 13, fontWeight: 700, lineHeight: 1.35,
+  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+}
+const shelfPriceStyle: CSSProperties = { padding: '0 10px', fontSize: 12, fontWeight: 800, color: green }
+const boughtPillStyle: CSSProperties = {
+  alignSelf: 'flex-start', margin: '6px 10px 10px', padding: '3px 9px', background: green, color: '#000',
+  borderRadius: 999, fontSize: 11, fontWeight: 800, lineHeight: 1.4,
+}
 
 interface BagTarget {
   id: string
@@ -98,6 +137,69 @@ function BagPage() {
   const [previewImageIndex, setPreviewImageIndex] = useState(0)
   const [fullPreview, setFullPreview] = useState(false)
   const previewSwipeStart = useRef<{ x: number; y: number } | null>(null)
+
+  /**
+   * What an empty bag offers instead of nothing.
+   *
+   * Their own trail first — both surfaces, merged, kept on this phone and costing no reads. Only if
+   * that trail cannot fill the rail we are about to draw do we fetch the catalogue (`wantShelf`),
+   * and only if they have an area on the phone is it worth asking where the shops are.
+   */
+  const saver = useDataSaver()
+  const browseHistory = useViewHistory('browse')
+  const nearbyHistory = useViewHistory('nearby')
+  const recent = useMemo(
+    () => mergeRecent([browseHistory.entries, nearbyHistory.entries]),
+    [browseHistory.entries, nearbyHistory.entries],
+  )
+  const buyerLocation = useBuyerLocation()
+  const buyerArea = buyerLocation.area
+  const empty = count === 0
+  const wantShelf = empty && wantsFallbackShelf(recent.length)
+  // Nothing is read for a bag with something in it, and no area means no distance can be known.
+  const { products: shelfRows } = useProductFeed({ enabled: wantShelf })
+  const shops = useSellerDirectory(wantShelf && Boolean(buyerArea))
+  const suggestions = useMemo(() => {
+    if (!wantShelf) return []
+    return bagSuggestions(shelfRows as BagFeedProduct[], {
+      // Their own rail sits directly above this one — never offer back what they just looked at.
+      seen: new Set(recent.map(entry => entry.productId)),
+      distanceOf: buyerArea
+        ? product => distanceToSeller(String(product.sellerId || ''), buyerArea, shops.geo)
+        : undefined,
+      // A product document carries neither its shop's slug nor its name; the directory does.
+      storeOf: sellerId => shops.stores.get(sellerId),
+    })
+  }, [wantShelf, shelfRows, recent, buyerArea, shops])
+  const shelfIsNear = suggestions.some(s => s.why === BOUGHT_NEAR_TITLE)
+  const emptyRails = emptyBagRails({
+    recentCount: recent.length,
+    suggestionCount: suggestions.length,
+    near: shelfIsNear,
+  })
+
+  /**
+   * Did the empty bag actually rescue the visit? One event per shape of the shelf — if it grows
+   * while they sit there (their history loading, then the catalogue landing) that is a real second
+   * shape, but a re-render is not. And an empty shelf is not fired at all: a page that offered
+   * nothing is a different fact from a page that offered a shelf nobody touched.
+   */
+  const shelfShapeRef = useRef('')
+  useEffect(() => {
+    if (!empty) {
+      shelfShapeRef.current = ''
+      return
+    }
+    const shape = `${recent.length}|${suggestions.length}|${shelfIsNear}`
+    if (shelfShapeRef.current === shape) return
+    shelfShapeRef.current = shape
+    if (recent.length === 0 && suggestions.length === 0) return
+    trackEvent('bag_empty_shelf_shown', {
+      recentCount: recent.length,
+      suggestionCount: suggestions.length,
+      near: shelfIsNear,
+    })
+  }, [empty, recent.length, suggestions.length, shelfIsNear])
 
   // Reset the preview carousel whenever a different product is opened
   useEffect(() => {
@@ -405,15 +507,66 @@ function BagPage() {
   }
 
   if (count === 0) {
+    const railsCopy = { recentCount: recent.length, suggestionCount: suggestions.length, near: shelfIsNear }
     return (
-      <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', fontFamily: 'sans-serif', color: '#fff' }}>
-        <p style={{ fontSize: '48px', margin: '0 0 16px' }}>🛍️</p>
-        <h2 style={{ fontWeight: '800', margin: '0 0 8px', fontSize: '22px' }}>Your bag is empty</h2>
-        <p style={{ color: '#888', fontSize: '14px', margin: '0 0 24px', textAlign: 'center' }}>Browse stores and tap 🛍️ on any product to save it here.</p>
-        <button onClick={() => navigate('/browse')}
-          style={{ padding: '14px 32px', background: green, color: '#000', border: 'none', borderRadius: '12px', fontWeight: '800', cursor: 'pointer', fontSize: '15px' }}>
-          Browse Stores
-        </button>
+      <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '20px' }}>
+        <div style={{ maxWidth: '640px', margin: '0 auto' }}>
+          {/* Nothing saved yet — so the top of the page says what it *can* offer, and offers it. */}
+          <div style={{ textAlign: 'center', padding: '26px 0 4px' }}>
+            <p style={{ fontSize: '48px', margin: '0 0 16px' }}>🛍️</p>
+            <h2 style={{ fontWeight: '800', margin: '0 0 8px', fontSize: '22px' }}>Your bag is empty</h2>
+            <p style={{ color: '#888', fontSize: '14px', margin: '0 0 24px' }}>{emptyBagBlurb(railsCopy)}</p>
+            <button onClick={() => navigate('/browse')}
+              style={{ padding: '14px 32px', background: green, color: '#000', border: 'none', borderRadius: '12px', fontWeight: '800', cursor: 'pointer', fontSize: '15px' }}>
+              Browse Stores
+            </button>
+          </div>
+
+          {emptyRails.map(rail => (
+            <section key={rail.kind} style={{ marginTop: '26px' }}>
+              <p style={{ margin: '0 0 2px', color: '#fff', fontWeight: '800', fontSize: '15px' }}>{rail.title}</p>
+              <p style={{ margin: '0 0 12px', color: '#888', fontSize: '12px' }}>{rail.blurb}</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(138px, 1fr))', gap: '12px' }}>
+                {rail.kind === 'recent'
+                  ? recent.map(entry => (
+                    <button key={entry.productId} type="button"
+                      onClick={() => {
+                        trackEvent('bag_empty_recent_opened', { productId: entry.productId, hasSlug: Boolean(entry.sellerSlug) })
+                        const href = bagHref({ id: entry.productId }, entry.sellerSlug)
+                        if (href) navigate(href)
+                      }}
+                      style={shelfCardStyle}>
+                      {entry.imageUrl
+                        ? <img src={saver.image(entry.imageUrl)} alt="" loading="lazy" decoding="async" style={shelfImageStyle} />
+                        : <span aria-hidden="true" style={{ ...shelfImageStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>🛍️</span>}
+                      <span style={shelfNameStyle}>{entry.name}</span>
+                      {entry.price ? <span style={shelfPriceStyle}>UGX {entry.price}</span> : null}
+                    </button>
+                  ))
+                  : suggestions.map(suggestion => (
+                    <button key={suggestion.id} type="button"
+                      onClick={() => {
+                        trackEvent('bag_empty_suggestion_opened', { productId: suggestion.id, why: suggestion.why })
+                        navigate(suggestion.href)
+                      }}
+                      style={shelfCardStyle}>
+                      {suggestion.imageUrl
+                        ? <img src={saver.image(suggestion.imageUrl)} alt="" loading="lazy" decoding="async" style={shelfImageStyle} />
+                        : <span aria-hidden="true" style={{ ...shelfImageStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>🛍️</span>}
+                      <span style={shelfNameStyle}>{suggestion.name}</span>
+                      {suggestion.price ? <span style={shelfPriceStyle}>UGX {suggestion.price}</span> : null}
+                      <span style={{ color: '#777', fontSize: 11, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {suggestion.businessName}
+                      </span>
+                      {boughtWords(suggestion.bought) && (
+                        <span style={boughtPillStyle}>{boughtWords(suggestion.bought)}</span>
+                      )}
+                    </button>
+                  ))}
+              </div>
+            </section>
+          ))}
+        </div>
       </div>
     )
   }
@@ -443,7 +596,7 @@ function BagPage() {
               <div key={item.productId}
                 style={{ background: '#1a1a1a', borderRadius: '12px', padding: '14px', border: isMissing ? '1px solid #333' : '1px solid #222', display: 'flex', gap: '14px', alignItems: 'center', opacity: isMissing ? 0.85 : 1 }}>
                 <div style={{ position: 'relative', flexShrink: 0 }}>
-                  <img src={lv.imageUrl || 'https://placehold.co/80/1a1a1a/333333'} alt={lv.name}
+                  <img src={saver.image(lv.imageUrl) || 'https://placehold.co/80/1a1a1a/333333'} alt={lv.name}
                     style={{ width: '72px', height: '72px', borderRadius: '8px', objectFit: 'cover', cursor: 'pointer', filter: isMissing ? 'grayscale(80%)' : 'none' }}
                     onClick={() => setPreviewItem(item)} />
                   {(lv.images.length || 0) > 1 && (

@@ -5,14 +5,16 @@
  *   Move-Item -Force _dsbuild/returnPolicy.js _dsbuild/returnPolicy.cjs
  *   node _return_policy_check.cjs
  *
- * Pins the promises a seven-day return policy is actually judged on: the clock starts at delivery
- * and not at payment, a fault is returnable whatever the item is, a seller who refuses has to say
- * why, and silence ends the seller's turn instead of the buyer's patience.
+ * Pins the promises an 86-day (just under three months) return policy is actually judged on: the
+ * clock starts at delivery and not at payment, the day the window closes is printed as a real
+ * calendar date, a fault is returnable whatever the item is, a seller who refuses has to say why,
+ * and silence ends the seller's turn instead of the buyer's patience.
  */
 const assert = require('assert')
 const path = require('path')
 const {
   RETURN_WINDOW_DAYS,
+  RETURN_WINDOW_PLAIN,
   SELLER_ANSWER_HOURS,
   MAX_RETURN_NOTE,
   DAY_MS,
@@ -27,6 +29,8 @@ const {
   returnWindowEndsAt,
   durationWords,
   returnWindowWords,
+  returnWindowClosesOnWords,
+  returnWindowShortWords,
   canOpenReturn,
   returnPatch,
   buyerReturnPatch,
@@ -55,17 +59,32 @@ const deliveredDaysAgo = n => ({
   subCategory: 'Furniture',
 })
 
-check('the window is seven days, counted from delivery', () => {
-  assert.strictEqual(RETURN_WINDOW_DAYS, 7)
-  assert.strictEqual(returnWindowEndsAt(NOW, 7), NOW + days(7))
+check('the window is 86 days, counted from delivery', () => {
+  assert.strictEqual(RETURN_WINDOW_DAYS, 86)
+  assert.strictEqual(RETURN_WINDOW_PLAIN, 'just under three months')
+  assert.strictEqual(returnWindowEndsAt(NOW, RETURN_WINDOW_DAYS), NOW + days(86))
   assert.strictEqual(returnWindowEndsAt(0), 0)          // unknown delivery date is never guessed
-  assert.strictEqual(returnWindowWords(NOW, NOW).daysLeft, 7)
-  assert.strictEqual(returnWindowWords(NOW, NOW + days(6)).daysLeft, 1)
-  assert.strictEqual(returnWindowWords(NOW, NOW + days(6)).open, true)
-  const closed = returnWindowWords(NOW, NOW + days(8))
+  assert.strictEqual(returnWindowWords(NOW, NOW).daysLeft, 86)
+  assert.strictEqual(returnWindowWords(NOW, NOW + days(85)).daysLeft, 1)
+  assert.strictEqual(returnWindowWords(NOW, NOW + days(85)).open, true)
+  const closed = returnWindowWords(NOW, NOW + days(87))
   assert.strictEqual(closed.open, false)
   assert.strictEqual(closed.daysLeft, 0)
   assert.ok(closed.text.includes('closed'))
+})
+
+check('the window is printed as a real date, not only as a countdown', () => {
+  // 12 Feb 2026 + 86 days lands in the first week of May 2026; the exact day moves with the
+  // reader's own timezone, which is the point — it is a date they can check, not our arithmetic.
+  const closes = returnWindowClosesOnWords(NOW)
+  assert.match(closes, /^\d{1,2} May 2026$/)
+  assert.strictEqual(returnWindowClosesOnWords(0), '')   // no delivery date, so no date claimed
+  const open = returnWindowWords(NOW, NOW)
+  assert.ok(open.text.includes(closes))
+  assert.ok(open.text.includes('open until'))
+  assert.ok(returnWindowWords(NOW, NOW + days(87)).text.includes(closes))
+  assert.strictEqual(returnWindowShortWords(), 'the 86 days')
+  assert.ok(returnStateWords('canceled', 'buyer').note.includes('the 86 days'))
 })
 
 check('a delivery date we do not have is said out loud, not invented', () => {
@@ -104,7 +123,7 @@ check('a live return cannot be started twice', () => {
 })
 
 check('after the window, the answer is "get help", not a locked door', () => {
-  const late = canOpenReturn(deliveredDaysAgo(9), NOW)
+  const late = canOpenReturn(deliveredDaysAgo(RETURN_WINDOW_DAYS + 2), NOW)
   assert.strictEqual(late.ok, false)
   assert.ok(late.text.includes('get help'))
 })
@@ -213,10 +232,12 @@ check('every state says what it means, to the person reading it', () => {
 
 check('the top of the sheet says what to do before the form is filled in', () => {
   const open = returnOpeningLine(deliveredDaysAgo(2), NOW)
-  assert.ok(open.includes('5 days left'))
+  assert.ok(open.includes(`${RETURN_WINDOW_DAYS - 2} days left`))
+  assert.ok(open.includes('open until'))
+  assert.ok(open.includes(returnWindowClosesOnWords(NOW - days(2))))
   assert.ok(open.includes(String(SELLER_ANSWER_HOURS)))
-  const shut = returnOpeningLine(deliveredDaysAgo(10), NOW)
-  assert.strictEqual(shut, canOpenReturn(deliveredDaysAgo(10), NOW).text)
+  const shut = returnOpeningLine(deliveredDaysAgo(RETURN_WINDOW_DAYS + 4), NOW)
+  assert.strictEqual(shut, canOpenReturn(deliveredDaysAgo(RETURN_WINDOW_DAYS + 4), NOW).text)
 })
 
 check('the order row carries the clock, so nobody has to count days', () => {
@@ -233,8 +254,11 @@ check('the promise and the limits are shown, in full, on the page', () => {
   assert.ok(RETURN_PROMISE.length >= 5)
   const promise = RETURN_PROMISE.map(item => `${item.title} ${item.body}`).join(' ')
   assert.ok(promise.includes(`${RETURN_WINDOW_DAYS} days`))
+  assert.ok(promise.includes(RETURN_WINDOW_PLAIN))      // the number and the plain words, together
   assert.ok(promise.includes(`${SELLER_ANSWER_HOURS} hours`))
   assert.ok(promise.includes('Always returnable'))
+  assert.ok(promise.includes('calendar day'))           // the closing date is promised, not implied
+  assert.ok(!/\b7 days\b|\bseven days\b/.test(promise), 'the old window is still being quoted')
   assert.ok(RETURN_LIMITS.length >= 2)                 // the honest limits are never hidden
   for (const item of RETURN_PROMISE.concat(RETURN_LIMITS)) {
     assert.ok(item.icon && item.title && item.body)

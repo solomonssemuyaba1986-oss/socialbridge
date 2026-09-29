@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db, auth } from './firebase'
+import { RETURN_WINDOW_DAYS, RETURN_WINDOW_PLAIN } from './returnPolicy'
 
 const green = '#adff2f'
 const SUPPORT_WHATSAPP = (import.meta.env.VITE_SUPPORT_WHATSAPP || '').trim()
@@ -82,7 +83,7 @@ const FAQ_SECTIONS: FaqSection[] = [
     items: [
       {
         q: 'How do I return something?',
-        a: 'Open My Orders, find the order the seller marked delivered, and tap ↩️. You have 7 days from the day it was marked delivered, and if the item arrived wrong, damaged, incomplete or not at all, the seller covers the trip back — that is their fault, whatever the item is. The whole policy, in plain words, is at Returns & care.',
+        a: `Open My Orders, find the order the seller marked delivered, and tap ↩️. You have ${RETURN_WINDOW_DAYS} days (${RETURN_WINDOW_PLAIN}) from the day it was marked delivered — and the order prints the exact date your window closes, so there is nothing to work out. If the item arrived wrong, damaged, incomplete or not at all, the seller covers the trip back — that is their fault, whatever the item is. The whole policy, in plain words, is at Returns & care.`,
       },
       {
         q: 'The seller is not answering my return',

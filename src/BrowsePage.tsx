@@ -25,7 +25,20 @@ import { consumePendingAction, requireSignIn } from './signInGate'
 import SignInPrompt from './SignInPrompt'
 import FloatingBag from './FloatingBag'
 import { formatCount, toMillis } from './productCardUtils'
-import { CARD_IMAGE_WIDTH, sizedImage } from './cloudinaryUrl'
+import {
+  NEARBY_NO_AREA_HINT,
+  SORT_KEYS,
+  SORT_LABELS,
+  nearbyNeedsArea,
+  sellerDirectoryFrom,
+  sortProducts,
+  sortWords,
+  type Point,
+  type SortKey,
+} from './browseSort'
+import { useBuyerLocation } from './useBuyerLocation'
+import { primeSellerDirectory } from './useSellerDirectory'
+import { useDataSaver } from './dataSaverLive'
 import { useProductLikes } from './useProductLikes'
 import LikePill from './LikePill'
 import SearchBar from './SearchBar'
@@ -110,7 +123,11 @@ function BrowsePage() {
   const [showSuggest, setShowSuggest] = useState(false)
   const [activeSuggest, setActiveSuggest] = useState(-1)
   const loading = feedLoading
-  const [sortBy, setSortBy] = useState<'relevance' | 'price-asc' | 'price-desc' | 'newest' | 'popular'>('relevance')
+  const [sortBy, setSortBy] = useState<SortKey>('relevance')
+  /** Where each shop is, joined from the seller documents — the only thing "Nearby" needs. */
+  const [sellerGeo, setSellerGeo] = useState<Map<string, Point>>(new Map())
+  /** The buyer's own area: kept on this phone (useBuyerLocation), asked for only by the Nearby sort. */
+  const { area: buyerArea, status: buyerAreaStatus, detect: detectBuyerArea } = useBuyerLocation()
   const [minPrice, setMinPrice] = useState('')
   const [maxPrice, setMaxPrice] = useState('')
   const [hideOutOfStock, setHideOutOfStock] = useState(true)
@@ -218,6 +235,8 @@ function BrowsePage() {
   const cardSwipeStartRef = useRef<{ id: string; x: number; y: number } | null>(null)
   const swipeSuppressRef = useRef(false)
   const [cardImgIndex, setCardImgIndex] = useState<Record<string, number>>({})
+  /** Every card photo on this page goes through the saver: the width and the quality are its call. */
+  const saver = useDataSaver()
   const guestFileRef = useRef<HTMLInputElement | null>(null)
   const [guestImageUrl, setGuestImageUrl] = useState('')
   const [guestUploading, setGuestUploading] = useState(false)
@@ -405,7 +424,7 @@ function BrowsePage() {
     const imgs = getSurveyImages(p)
     if (imgs.length <= 1) {
       return (
-        <img src={sizedImage(imgs[0] || 'https://placehold.co/300x200/1a1a1a/333333', CARD_IMAGE_WIDTH)} alt={p.name}
+        <img src={saver.image(imgs[0] || 'https://placehold.co/300x200/1a1a1a/333333')} alt={p.name}
           loading="lazy" decoding="async"
           style={{ width: '100%', height, objectFit: 'cover', opacity: p.outOfStock ? 0.5 : 1 }} />
       )
@@ -435,7 +454,7 @@ function BrowsePage() {
         }}
         style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', cursor: 'pointer', position: 'relative' }}>
         {imgs.map((img, i) => (
-          <img key={`${p.id}-${i}`} src={sizedImage(img, CARD_IMAGE_WIDTH)} alt={p.name} draggable={false}
+          <img key={`${p.id}-${i}`} src={saver.image(img)} alt={p.name} draggable={false}
             /* The couple of photos actually on screen come down now; the ones behind a swipe wait to be
                asked for. On a feed of four-photo products that is most of the data saved. */
             loading={i === 0 ? 'eager' : 'lazy'} decoding="async"
@@ -817,6 +836,23 @@ function BrowsePage() {
           const s = d.data()
           return [d.id, { slug: s.slug || '', businessName: s.businessName || '', logoUrl: s.logoUrl || '' }]
         })))
+        // Where each shop is, for the "Nearby" sort — and how to open it and what it is called, which
+        // the empty bag needs. Shops without a real pin (or with a placeholder zero) are simply left
+        // out: an absent distance beats an invented one. The rule lives in
+        // `browseSort.sellerDirectoryFrom`, so Browse, Nearby and the empty bag cannot drift.
+        const directory = sellerDirectoryFrom(linkable.map(d => {
+          const s = d.data()
+          return {
+            id: d.id,
+            geo: (s as { geo?: { lat?: unknown; lng?: unknown } }).geo,
+            slug: s.slug,
+            businessName: s.businessName,
+          }
+        }))
+        setSellerGeo(directory.geo)
+        // We have just read the shops anyway: leave them behind so the next page that needs them
+        // (an empty bag, Nearby) pays no reads of its own for the same documents.
+        primeSellerDirectory(directory)
       } catch (err) {
         console.error('Browse page: could not load stores:', err)
       }
@@ -870,28 +906,12 @@ function BrowsePage() {
       result = rankProducts(result, search)
     }
 
-    // Apply sorting — relevance is kept as the tie-break, because a sort in JavaScript is stable
-    if (sortBy === 'price-asc') {
-      result.sort((a, b) => {
-        const priceA = Number(String(a.price).replace(/,/g, '')) || 0
-        const priceB = Number(String(b.price).replace(/,/g, '')) || 0
-        return priceA - priceB
-      })
-    } else if (sortBy === 'price-desc') {
-      result.sort((a, b) => {
-        const priceA = Number(String(a.price).replace(/,/g, '')) || 0
-        const priceB = Number(String(b.price).replace(/,/g, '')) || 0
-        return priceB - priceA
-      })
-    } else if (sortBy === 'newest') {
-      // Real newest-first using the product's createdAt (older items go last).
-      result.sort((a, b) => (toMillis(b.createdAt) ?? 0) - (toMillis(a.createdAt) ?? 0))
-    } else if (sortBy === 'popular') {
-      result.sort((a, b) => (b.orderCount || 0) - (a.orderCount || 0))
-    }
+    // Apply sorting — the shared module keeps relevance as the tie-break (a sort in JavaScript
+    // is stable), and it hands back a copy, so `products` is never reordered underneath us.
+    result = sortProducts(result, sortBy, { buyer: buyerArea, sellerGeo })
 
     setFiltered(result)
-  }, [activeCategory, search, products, sortBy, minPrice, maxPrice, hideOutOfStock, ownerFilter, mySlug])
+  }, [activeCategory, search, products, sortBy, minPrice, maxPrice, hideOutOfStock, ownerFilter, mySlug, buyerArea, sellerGeo])
 
   return (
     <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
@@ -1029,12 +1049,39 @@ function BrowsePage() {
             trackEvent('sort_changed', { sortBy: next, surface: 'browse' })
           }}
           style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #333', background: '#1a1a1a', color: '#fff', cursor: 'pointer', fontSize: '13px' }}>
-          <option value="relevance">Sort: Relevance</option>
-          <option value="price-asc">Sort: Price (Low → High)</option>
-          <option value="price-desc">Sort: Price (High → Low)</option>
-          <option value="popular">Sort: Most Popular</option>
-          <option value="newest">Sort: Newest</option>
+          {SORT_KEYS.map(key => (
+            <option key={key} value={key}>{SORT_LABELS[key]}</option>
+          ))}
         </select>
+
+        {/* What the chosen sort means, in one line — and, for Nearby only, the one ask we make. */}
+        {(nearbyNeedsArea(sortBy, Boolean(buyerArea)) || sortWords(sortBy)) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', width: '100%' }}>
+            {nearbyNeedsArea(sortBy, Boolean(buyerArea)) ? (
+              <>
+                <span style={{ color: '#888', fontSize: '12px' }}>{NEARBY_NO_AREA_HINT}</span>
+                <button
+                  type="button"
+                  onClick={() => detectBuyerArea()}
+                  disabled={buyerAreaStatus === 'locating'}
+                  style={{
+                    padding: '5px 12px',
+                    borderRadius: '999px',
+                    border: `1px solid ${green}`,
+                    background: 'transparent',
+                    color: green,
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: buyerAreaStatus === 'locating' ? 'wait' : 'pointer',
+                  }}>
+                  {buyerAreaStatus === 'locating' ? 'Finding you…' : 'Use my location'}
+                </button>
+              </>
+            ) : (
+              <span style={{ color: '#666', fontSize: '12px' }}>{sortWords(sortBy)}</span>
+            )}
+          </div>
+        )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <label style={{ color: '#888' }}>Price: UGX</label>

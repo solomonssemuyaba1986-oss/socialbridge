@@ -6,8 +6,10 @@
  *
  *  1. **"Returns are fine print."** Every rule here is said out loud in plain words, on the order
  *     itself, at the moment the buyer needs it (`RETURN_PROMISE`, rendered at `/returns`).
- *  2. **"Seven days from what?"** The clock starts when the order was marked delivered
- *     (`deliveredAt`), which is a date the seller wrote and the buyer can see — not a guess.
+ *  2. **"86 days from what?"** The clock starts when the order was marked delivered
+ *     (`deliveredAt`), which is a date the seller wrote and the buyer can see — not a guess. The
+ *     day it closes is printed as a calendar date (`returnWindowClosesOnWords`), so nobody has to
+ *     do arithmetic on a promise.
  *  3. **"They refused because it was underwear."** Hygiene items and perishables genuinely cannot be
  *     resold — so a change of mind on them is refused, and said so up front. But a **wrong,
  *     damaged, missing or undelivered** item is always returnable, whatever it is. That is the
@@ -23,7 +25,17 @@
  * Pure (no Firebase, no React) so all of it is checked in Node: `_return_policy_check.cjs`.
  */
 
-export const RETURN_WINDOW_DAYS = 7
+/**
+ * 86 days — just under three months — counted from the day the seller marked the order delivered.
+ *
+ * The number is 86 and not 90 on purpose: a window that ends on the same calendar day as the
+ * purchase three months later is one nobody can remember, and one a seller can argue about. The
+ * exact figure is what the code counts, the plain words are what a buyer reads, and both are shown
+ * side by side (`RETURN_PROMISE`) — a promise nobody can check is not a promise.
+ */
+export const RETURN_WINDOW_DAYS = 86
+/** The same window in the words a person would use out loud. */
+export const RETURN_WINDOW_PLAIN = 'just under three months'
 /** How long a seller has to answer a return request before rachett care can take it over. */
 export const SELLER_ANSWER_HOURS = 48
 export const RETURN_PAGE = '/returns'
@@ -176,7 +188,7 @@ export function returnStateWords(state: unknown, side: 'buyer' | 'seller' = 'buy
     case 'refunded':
       return { icon: '💸', text: 'Refunded', note: 'The money is back on its way to you.', tone: 'done' }
     case 'canceled':
-      return { icon: '↩️', text: 'You withdrew this return', note: 'You can start it again while the 7 days last.', tone: 'done' }
+      return { icon: '↩️', text: 'You withdrew this return', note: `You can start it again while ${returnWindowShortWords()} last.`, tone: 'done' }
     case 'completed':
       return { icon: '✓', text: 'Return completed', note: 'Item back, money back. Thank you.', tone: 'done' }
     default:
@@ -186,10 +198,30 @@ export function returnStateWords(state: unknown, side: 'buyer' | 'seller' = 'buy
 
 // ── the window ───────────────────────────────────────────────────────────────
 
-/** When the 7 days are up: delivery date + the window. */
+/** When the 86 days are up: delivery date + the window. */
 export function returnWindowEndsAt(deliveredAtMs: number, days = RETURN_WINDOW_DAYS): number {
   if (!deliveredAtMs) return 0
   return deliveredAtMs + days * DAY_MS
+}
+
+/** "the 86 days" — how the window is named inside a sentence. */
+export function returnWindowShortWords(days = RETURN_WINDOW_DAYS): string {
+  return `the ${days} days`
+}
+
+/** Month names spelled out by hand: a locale-dependent date cannot be pinned in a Node check. */
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/**
+ * The day the window closes, written out ("20 May 2026"). A countdown is only true if the buyer
+ * trusts our arithmetic; a date they can check against their own calendar is evidence. Empty when
+ * we do not know the delivery date — the same honest silence as everywhere else here.
+ */
+export function returnWindowClosesOnWords(deliveredAtMs: number, days = RETURN_WINDOW_DAYS): string {
+  if (!deliveredAtMs) return ''
+  const at = new Date(returnWindowEndsAt(deliveredAtMs, days))
+  if (Number.isNaN(at.getTime())) return ''
+  return `${at.getDate()} ${MONTH_NAMES[at.getMonth()]} ${at.getFullYear()}`
 }
 
 /** "2 days", "6 hours", "20 minutes" — never "0 days" or a negative. */
@@ -219,19 +251,20 @@ export function returnWindowWords(
     }
   }
   const endsAt = returnWindowEndsAt(deliveredAtMs, days)
+  const closesOn = returnWindowClosesOnWords(deliveredAtMs, days)
   const msLeft = endsAt - nowMs
   if (msLeft <= 0) {
     return {
       open: false,
       daysLeft: 0,
-      text: `The ${days}-day return window closed ${durationWords(-msLeft)} ago — get help instead and we will look at it.`,
+      text: `The ${days}-day return window closed on ${closesOn} (${durationWords(-msLeft)} ago) — get help instead and we will look at it.`,
     }
   }
   const daysLeft = Math.max(1, Math.ceil(msLeft / DAY_MS))
   return {
     open: true,
     daysLeft,
-    text: `${daysLeft} day${daysLeft === 1 ? '' : 's'} left to return this (${days} days from delivery).`,
+    text: `${daysLeft} day${daysLeft === 1 ? '' : 's'} left to return this — open until ${closesOn} (${days} days from delivery).`,
   }
 }
 
@@ -379,8 +412,13 @@ export interface PromiseItem {
 export const RETURN_PROMISE: PromiseItem[] = [
   {
     icon: '📅',
-    title: `${RETURN_WINDOW_DAYS} days, counted from the day it arrives`,
-    body: 'The clock starts when the seller marks your order delivered — a date you can see on the order — not the day you paid. No arguments about when it began.',
+    title: `${RETURN_WINDOW_DAYS} days (${RETURN_WINDOW_PLAIN}) — counted from the day it arrives`,
+    body: `The clock starts when the seller marks your order delivered — a date you can see on the order — not the day you paid. The order also prints the calendar day your window closes ${RETURN_WINDOW_DAYS} days later, so there is no arithmetic to do and no argument about when it began.`,
+  },
+  {
+    icon: '🧾',
+    title: 'The long window costs you nothing',
+    body: 'It is not an extended warranty, there is no fee to use it and nothing to register. Same policy, same price — just stated for as long as it actually is.',
   },
   {
     icon: '↩️',
@@ -429,7 +467,11 @@ export const RETURN_LIMITS: PromiseItem[] = [
 /** One line for the top of the return sheet — the thing a buyer needs to know before the form. */
 export function returnOpeningLine(order: ReturnableOrder, nowMs: number): string {
   const { ok, text } = canOpenReturn(order, nowMs)
-  if (ok) return `You have ${returnWindowWords(order.deliveredAtMs || 0, nowMs).daysLeft} days left — pick the reason below, the seller has ${SELLER_ANSWER_HOURS} hours to answer.`
+  if (ok) {
+    const closesOn = returnWindowClosesOnWords(order.deliveredAtMs || 0)
+    const left = returnWindowWords(order.deliveredAtMs || 0, nowMs).daysLeft
+    return `You have ${left} day${left === 1 ? '' : 's'} left — open until ${closesOn}. Pick the reason below, the seller has ${SELLER_ANSWER_HOURS} hours to answer.`
+  }
   return text
 }
 

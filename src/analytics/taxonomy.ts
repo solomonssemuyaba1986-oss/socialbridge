@@ -133,6 +133,13 @@ export const EVENT_PROPS = {
   bag_cleared: ['size'],
   bag_abandoned: ['size', 'idleMinutes'],
   checkout_started: ['size', 'sellerCount'],
+  // The empty bag, which used to be the only screen in the app that just said "no".
+  // `shown` says what the page managed to offer (`near` = the shelf came from shops within reach of
+  // their area), and the two taps separate the shelves that mean different things: their own trail
+  // working vs. us having to choose for them.
+  bag_empty_shelf_shown: ['recentCount', 'suggestionCount', 'near'],
+  bag_empty_recent_opened: ['productId', 'hasSlug'],
+  bag_empty_suggestion_opened: ['productId', 'why'],
 
   // ── Messaging ────────────────────────────────────────────────────────────
   conversation_opened: ['conversationId', 'counterpartRole', 'threadType', 'unread'],

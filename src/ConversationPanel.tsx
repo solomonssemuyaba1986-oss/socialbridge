@@ -12,6 +12,7 @@ import { useBuyerName } from './useBuyerName'
 import { nameLabel } from './buyerName'
 import ProductPreview from './ProductPreview'
 import LovePrompt from './LovePrompt'
+import PawapayCheckout, { type Stage } from './PawapayCheckout'
 
 const green = '#adff2f'
 
@@ -60,6 +61,13 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
   const [orderMessage, setOrderMessage] = useState('')
   const [orderSuccess, setOrderSuccess] = useState(false)
   const [orderRef, setOrderRef] = useState('')
+  /**
+   * The quantity the order was actually placed for. The form's own box is cleared once the order is
+   * in, so without this the payment step would price a 3-item order as a 1-item one.
+   */
+  const [placedQuantity, setPlacedQuantity] = useState('1')
+  /** Where the payment step has got to, or null if the buyer has not opened it. */
+  const [payStage, setPayStage] = useState<Stage | null>(null)
   const [feedbackMessage, setFeedbackMessage] = useState('')
   const [feedbackType, setFeedbackType] = useState<'success' | 'error' | 'info'>('success')
   const [feedbackVisible, setFeedbackVisible] = useState(false)
@@ -118,6 +126,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
       }
 
       setOrderRef(orderId || '')
+      setPlacedQuantity(quantity)
       setOrderSuccess(true)
       showFeedback(notify.orderSent, 'success')
 
@@ -134,15 +143,24 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
         quantity,
       })
 
-      setTimeout(() => {
-        setBuyerNameOrder(''); setQuantity('1'); setDeliveryArea(''); setOrderMessage('')
-        setShowOrderModal(false)
-        setOrderSuccess(false)
-      }, 2500)
+      // The order is in. The sheet now stays open on the "pay" step instead of closing itself —
+      // a buyer who placed the order from inside the chat used to have no way to pay for it at all.
+      setBuyerNameOrder(''); setQuantity('1'); setDeliveryArea(''); setOrderMessage('')
     } catch (err) {
       console.error('Order error:', err)
       showFeedback(notify.orderFailed, 'error')
     }
+  }
+
+  /** Close the order sheet — and start it clean, unless a payment prompt is still live on a phone. */
+  const closeOrderSheet = () => {
+    if (payStage === 'waiting') return
+    setShowOrderModal(false)
+    setOrderSuccess(false)
+    setOrderRef('')
+    setPlacedQuantity('1')
+    setPayStage(null)
+    setBuyerNameOrder(''); setQuantity('1'); setDeliveryArea(''); setOrderMessage('')
   }
 
   // Role-based quick replies: sellers see seller replies, buyers see buyer questions
@@ -534,17 +552,36 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
 
       {/* Order Modal */}
       {showOrderModal && (
-        <div className="rt-modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
-          <div className="rt-modal-box" style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222', textAlign: 'center' }}>
+        <div className="rt-modal-overlay" onClick={closeOrderSheet}
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div className="rt-modal-box" onClick={e => e.stopPropagation()}
+            style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222', textAlign: 'center' }}>
             {orderSuccess ? (
               <div>
                 <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '28px', color: '#000', fontWeight: '800' }}>
                   ✓
                 </div>
                 <h3 style={{ color: '#fff', fontWeight: '800', fontSize: '18px', margin: '0 0 8px' }}>Order Placed!</h3>
-                <p style={{ color: '#888', fontSize: '14px', margin: 0 }}>
-                  Ref: <span style={{ color: green, fontWeight: '800' }}>{orderRef || 'RT-...'}</span> — {sellerName || 'the seller'} will confirm in your Inbox.
+                <p style={{ color: '#888', fontSize: '14px', margin: '0 0 16px' }}>
+                  Ref: <span style={{ color: green, fontWeight: '800' }}>{orderRef || 'RT-...'}</span> — pay now to lock it in, or {sellerName || 'the seller'} will confirm in your Inbox.
                 </p>
+                {/* Pay, right here. The order already exists, so the amount comes from the server's
+                    own reading of it — this is the same step Browse shows after its order form. */}
+                {orderRef && (
+                  <PawapayCheckout
+                    sellerId={sellerId}
+                    sellerName={sellerName || 'Seller'}
+                    productName={productName || ''}
+                    productPrice={productPrice || ''}
+                    quantity={placedQuantity}
+                    orderDocId={orderRef}
+                    onStageChange={setPayStage}
+                  />
+                )}
+                <button type="button" onClick={closeOrderSheet}
+                  style={{ width: '100%', marginTop: '14px', padding: '12px', background: 'transparent', color: '#888', border: '1px solid #333', borderRadius: '10px', cursor: payStage === 'waiting' ? 'default' : 'pointer', fontSize: '14px', fontWeight: '700' }}>
+                  {payStage === 'waiting' ? 'Close — the payment carries on to my phone' : 'Close'}
+                </button>
               </div>
             ) : (
               <>
@@ -569,7 +606,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
                   style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
                   Place Order
                 </button>
-                <button onClick={() => { setShowOrderModal(false); setBuyerNameOrder(''); setQuantity('1'); setDeliveryArea(''); setOrderMessage(''); }}
+                <button onClick={closeOrderSheet}
                   style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
                   Cancel
                 </button>

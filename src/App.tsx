@@ -35,6 +35,7 @@ import FeedbackNudge from './FeedbackNudge.tsx'
 import NotFound from './NotFound.tsx'
 import { getRole, MARKET_HOME } from './role.ts'
 import { SellerLiveProvider } from './sellerLive.tsx'
+import { DataSaverProvider } from './dataSaverLive.tsx'
 import NetworkGuard from './NetworkGuard.tsx'
 
 function BulkUploadWrapper() {
@@ -110,7 +111,10 @@ function App() {
   const sellerOnly = signedIn && !isGuest
 
   return (
-    <SellerLiveProvider>
+    /* The data saver wraps everything: one setting, read by the feed, the shop pages, the sheets and
+       the profile — so turning it off in Settings really does turn it off everywhere. */
+    <DataSaverProvider>
+      <SellerLiveProvider>
       <NetworkGuard />
       {/* "What didn't you like?" — asks once, after the app has actually been used. */}
       <FeedbackNudge />
@@ -162,6 +166,7 @@ function App() {
       <Route path="*" element={<NotFound />} />
       </Routes>
     </SellerLiveProvider>
+    </DataSaverProvider>
   )
 }
 

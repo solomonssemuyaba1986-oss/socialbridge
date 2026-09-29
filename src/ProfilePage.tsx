@@ -30,6 +30,7 @@ import { getRememberedUser } from './userMemory'
 import { useViewHistory } from './useViewHistory'
 import ConfirmDialog from './ConfirmDialog'
 import NameStrip from './NameStrip'
+import DataSaverCard from './DataSaverCard'
 
 const green = '#adff2f'
 
@@ -205,6 +206,10 @@ function ProfilePage() {
           <Where what="Looks" where="The two lists are kept apart on purpose: one answers “what was I shopping for”, the other “what is around me”. The strip sits above each page's search bar." />
           <button onClick={() => navigate('/browse')} style={{ ...rowButton, marginTop: 10 }}>🔍 Back to the market →</button>
         </div>
+
+        {/* The one thing on this page that changes how every other page behaves — and it belongs here,
+            next to the other device-local facts, because that is exactly what it is. */}
+        <DataSaverCard />
 
         <div style={card}>
           <p style={cardTitle}>What we keep, and where</p>

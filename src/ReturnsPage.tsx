@@ -9,6 +9,7 @@ import {
   RETURN_PAGE,
   RETURN_PROMISE,
   RETURN_WINDOW_DAYS,
+  RETURN_WINDOW_PLAIN,
   SELLER_ANSWER_HOURS,
   returnIsOpen,
 } from './returnPolicy'
@@ -38,9 +39,9 @@ interface CareOpen {
  * ↩️ Returns & rachett care — the page a buyer opens when something went wrong.
  *
  * Two halves, and each one is a promise said out loud rather than fine print:
- *  - the **policy** (`RETURN_PROMISE` / `RETURN_LIMITS` straight out of `returnPolicy.ts`): seven
- *    days from the day it was marked delivered, faults always returnable, who pays for the trip,
- *    and the two things we honestly cannot do;
+ *  - the **policy** (`RETURN_PROMISE` / `RETURN_LIMITS` straight out of `returnPolicy.ts`): 86 days
+ *    (just under three months) from the day it was marked delivered, faults always returnable, who
+ *    pays for the trip, and the two things we honestly cannot do;
  *  - the **state of play**: the returns running on this buyer's orders, and their own care tickets
  *    with the 24-hour clock on them.
  *
@@ -124,7 +125,8 @@ function ReturnsPage() {
           <div style={{ ...CARD, marginBottom: 18 }}>
             <p style={{ ...MUTED, margin: '0 0 12px' }}>
               Nothing is being returned. A return starts on the order itself — open My Orders, find the one that
-              was delivered, and tap ↩️. The seven days are counted from the day the seller marked it delivered.
+              was delivered, and tap ↩️. The {RETURN_WINDOW_DAYS} days ({RETURN_WINDOW_PLAIN}) are counted from the day
+              the seller marked it delivered, and that same order prints the exact date your window closes.
             </p>
             {uid ? (
               <button onClick={() => navigate('/my-orders')} style={PRIMARY}>Go to My Orders</button>
@@ -194,7 +196,8 @@ function ReturnsPage() {
         </div>
 
         <p style={{ margin: '20px 0 0', color: '#555', fontSize: 12, lineHeight: 1.7 }}>
-          {RETURN_WINDOW_DAYS} days from the day it was delivered · the seller answers in {SELLER_ANSWER_HOURS} hours ·
+          {RETURN_WINDOW_DAYS} days ({RETURN_WINDOW_PLAIN}) from the day it was delivered — and the order itself prints
+          the calendar day that closes · the seller answers in {SELLER_ANSWER_HOURS} hours ·
           a person answers a care ticket within {CARE_SLA_HOURS} hours.
         </p>
       </div>

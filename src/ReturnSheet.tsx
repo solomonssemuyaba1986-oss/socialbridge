@@ -14,6 +14,7 @@ import {
   returnOpeningLine,
   returnPatch,
   returnStateWords,
+  returnWindowShortWords,
   returnReason as reasonWords,
   sellerAnswerWords,
   whoPaysReturn,
@@ -149,7 +150,7 @@ function ReturnSheet({ order, shopName = '', returnTo, onClose }: ReturnSheetPro
     try {
       // Re-opening a return that was withdrawn: the rules take the request time **once** — the
       // 48-hour clock cannot be restarted — so the same moment goes back and the seller's clock
-      // picks up where it left off. That is what "start it again while the 7 days last" means.
+      // picks up where it left off. That is what "start it again while the 86 days last" means.
       const storedAt = orderMs(order.returnRequestedAt)
       const patch: Record<string, unknown> = {
         ...returnPatch({ reason: chosen.value, note, nowMs: storedAt || Date.now() }),
@@ -382,12 +383,12 @@ function ReturnSheet({ order, shopName = '', returnTo, onClose }: ReturnSheetPro
       <ConfirmDialog
         open={confirmWithdraw}
         title="Withdraw this return?"
-        message="The order stands as it is, and the seller stops holding it. You can start it again while the 7 days last."
+        message={`The order stands as it is, and the seller stops holding it. You can start it again while ${returnWindowShortWords()} last.`}
         confirmLabel="Withdraw it"
         cancelLabel="Keep it running"
         onConfirm={() => {
           setConfirmWithdraw(false)
-          void markMine('canceled', 'Return withdrawn. The order stands — you can start it again while the 7 days last.')
+          void markMine('canceled', `Return withdrawn. The order stands — you can start it again while ${returnWindowShortWords()} last.`)
         }}
         onClose={() => setConfirmWithdraw(false)}
       />

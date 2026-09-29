@@ -12,7 +12,7 @@
  */
 import { useEffect, useState, type CSSProperties } from 'react'
 import { green } from './productCardUtils'
-import { sizedImage } from './cloudinaryUrl'
+import { useDataSaver } from './dataSaverLive'
 import { timeAgo } from './reviewUtils'
 import { bucketLabelFor, type HistoryGroup, type ViewEntry } from './history'
 import { fetchHistoryProduct, type ViewHistoryApi } from './useViewHistory'
@@ -31,11 +31,12 @@ type Props<T> = {
 
 /** The photo, or a stand-in. A view with no image is still a view — never a broken frame. */
 function Thumb({ entry, size = 28 }: { entry: ViewEntry; size?: number }) {
+  const saver = useDataSaver()
   const box: CSSProperties = {
     width: size, height: size, flexShrink: 0, objectFit: 'cover', background: '#222',
     borderRadius: size >= 40 ? 10 : '50%',
   }
-  if (entry.imageUrl) return <img src={sizedImage(entry.imageUrl, 140)} alt="" loading="lazy" decoding="async" style={box} />
+  if (entry.imageUrl) return <img src={saver.image(entry.imageUrl)} alt="" loading="lazy" decoding="async" style={box} />
   return (
     <span aria-hidden="true" style={{ ...box, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size >= 40 ? 18 : 13 }}>
       🛍️
