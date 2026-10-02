@@ -495,10 +495,10 @@ function SetupStore() {
         geo: resolved.geo,
         place: resolved.place,
         geoSource: resolved.geoSource,
-        // Proven for real: Firebase confirmed the code (a phone sign-in proves it in the same
-        // breath; a social account proves it at the verify step). Never again can a shop be
-        // saved with an unverified number — the gate above refuses.
-        phoneVerified: liveProven,
+        // Deliberately *not* `phoneVerified`: the seller no longer owns that claim, and the rules
+        // refuse a document that carries it (see `firestore.rules`). The proof the gate above
+        // checked was already written to `trust/{uid}` by the server — that document is what the
+        // 🟢 badge reads (`useSellerStats.ts`), and it is the one a browser cannot write.
         showWhatsapp,
         recoveryEmail,
         recoveryEmailVerified: !isPhoneSignIn,

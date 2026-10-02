@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { doc, onSnapshot, collection, query, getDocs } from 'firebase/firestore'
 import { db } from './firebase'
+import { TRUST_COLLECTION, isPhoneProven } from './trust'
 
 export type BadgeStatus = 'none' | 'active' | 'grace'
 
@@ -161,6 +162,14 @@ export function useSellerStats(sellerId: string | null) {
   })
   const [loading, setLoading] = useState(true)
 
+  /**
+   * The server's proof of the phone number, or null for a seller who has never verified.
+   *
+   * This is the document the 🟢 badge now rests on, and the reason it can be trusted is that no
+   * browser can write it — see `firestore.rules` and `trust.ts`.
+   */
+  const [trustProof, setTrustProof] = useState<{ phoneProven?: unknown } | null>(null)
+
   const [sellerFields, setSellerFields] = useState<{
     phoneVerified?: boolean
     nationality?: string
@@ -188,7 +197,9 @@ export function useSellerStats(sellerId: string | null) {
       const age = computeStoreAge(data.createdAt)
 
       setSellerFields({
-        phoneVerified: data.phoneVerified || false,
+        // Strict on purpose: `"true"` is not `true`, and the fallback below must not be fooled by
+        // a value that merely looks like a proof.
+        phoneVerified: data.phoneVerified === true,
         nationality: data.nationality || undefined,
         location: data.location || undefined,
         idDocumentPath: data.idDocumentPath || undefined,
@@ -234,9 +245,17 @@ export function useSellerStats(sellerId: string | null) {
       setLoading(false)
     })
 
+    // The proof, from the one place a browser cannot write. For a shop created after the move
+    // this is the only document that carries it — the seller document may not hold the field at
+    // all any more, so a badge that only read there would go silently blank.
+    const unsubTrust = onSnapshot(doc(db, TRUST_COLLECTION, sellerId), (snap) => {
+      setTrustProof(snap.exists() ? snap.data() : null)
+    })
+
     return () => {
       unsubSeller()
       unsubStats()
+      unsubTrust()
     }
   }, [sellerId])
 
@@ -290,7 +309,10 @@ export function useSellerStats(sellerId: string | null) {
   }
 
   const realSellerConditionsMet = computeRealSellerBadge(
-    sellerFields.phoneVerified ?? false,
+    // The two possible homes for the proof, in the order they are trusted: the server's record
+    // first, the frozen pre-move field on an older shop second. `trust.ts` decides, so the rule
+    // is written down once and proved by `_trust_check.cjs`.
+    isPhoneProven({ trust: trustProof, seller: sellerFields }),
     sellerFields.nationality,
     sellerFields.location,
     sellerFields.businessName,

@@ -102,7 +102,6 @@ export default function RecoveryModal({ open, onClose }: Props) {
       if (!res.ok) {
         setError(data.error || 'Failed to send code')
       } else {
-        if (data.debugOtp) console.log('[Recovery Debug] Code:', data.debugOtp)
         setStep('phone-otp')
       }
     } catch {
@@ -119,15 +118,18 @@ export default function RecoveryModal({ open, onClose }: Props) {
       const res = await fetch(`${OTP_SERVER_URL}/api/otp/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: getFullNewPhone(), otp: phoneCode }),
+        // `code` is the name `/api/otp/verify` reads (`field(body, 'code')`) — not `otp`.
+        body: JSON.stringify({ phone: getFullNewPhone(), code: phoneCode }),
       })
       const data = await res.json()
       if (!res.ok) {
         setError(data.error || 'Invalid code')
       } else {
+        // Only the contact number is the browser's to change. The badge is not: the proof of this
+        // number lives in `trust/{uid}`, written by the server when it accepted the code, and
+        // `firestore.rules` refuses any seller write that so much as touches the old field.
         await updateDoc(doc(db, 'sellers', storeId), {
           whatsapp: selectedCountry.dialCode.replace(/[^+\d]/g, '') + newPhone,
-          phoneVerified: true,
         })
         setRecoveredVia('phone')
         setStep('done')
