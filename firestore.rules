@@ -4,7 +4,21 @@ service cloud.firestore {
 
     match /sellers/{sellerId} {
       allow read: if true;
-      allow write: if request.auth.uid == sellerId;
+
+      // A seller owns their own shop document — with one exception.
+      //
+      // `phoneVerified` used to be writable here, and that single fact is what made the 🟢 "real
+      // seller" badge forgeable: the browser could send `phoneVerified: true` by hand, with no SMS
+      // ever sent and nothing to check it against. It is now a *claim about* the seller rather than
+      // a setting they own, so they may no longer write it at all. The server is the only writer,
+      // and it records the proof in `trust/{uid}` below. The value still on old documents is left
+      // untouched — a frozen snapshot of a real Firebase phone-auth result — so shops that earned
+      // the badge before this change keep it.
+      allow create: if request.auth.uid == sellerId
+        && !request.resource.data.keys().hasAny(['phoneVerified']);
+      allow update: if request.auth.uid == sellerId
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['phoneVerified']);
+      allow delete: if request.auth.uid == sellerId;
 
       match /products/{productId} {
         allow read: if true;
@@ -217,6 +231,36 @@ service cloud.firestore {
     match /recoveries/{docId} {
       allow read, write: if false;
     }
+
+    // ── 📱 A phone number somebody actually proved ──────────────────────────────
+    //
+    // The badge asks one question that must never be answerable by the person being asked: can
+    // they receive an SMS on the number they advertise? So the answer is written where they cannot
+    // reach it. Only the server holds a service-account key, and only the server writes here — see
+    // `api/_lib/identity.js`, which does it after a code that was texted to the number came back
+    // correct.
+    match /trust/{userId} {
+      // Open to everyone, deliberately: a store page is public and shareable, and its badge has to
+      // draw for a visitor who is not signed in. That is exactly why this document must hold no
+      // phone number — only the fact of the proof, a timestamp, and which flow made it. The number
+      // itself lives nowhere the browser can read it.
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ── 🔢 One-time codes, their counters, and the number→account ledger ───────
+    //
+    // Closed to the browser without exception. `otpCodes/{phoneKey}` holds the hashed code, its
+    // salt, its expiry and the send counters; `meta/otpSends` counts the day; `phones/{phoneKey}`
+    // records which account owns a number. The client never reads or writes any of it — it asks
+    // the API to send, and to verify, and the API is the only thing that touches these.
+    // `firebase-admin` bypasses rules entirely, which is precisely the separation being drawn.
+    //
+    // The document keys are HMACs of the numbers (`phoneKey` in `api/_lib/otp.js`), so even a dump
+    // of these collections is a list of opaque strings, not a list of who signed up.
+    match /otpCodes/{phoneKey} { allow read, write: if false; }
+    match /meta/{docId}        { allow read, write: if false; }
+    match /phones/{phoneKey}   { allow read, write: if false; }
 
     match /users/{userId} {
       allow read, write: if request.auth.uid == userId;

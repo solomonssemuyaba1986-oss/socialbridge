@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "otp": "node server/index.js",
+    "otp": "node server/dev.js",
     "export:training": "node functions/export-training-data.js",
     "analytics:report": "node functions/analytics-report.js",
     "feedback:report": "node functions/feedback-report.js",
@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "firebase": "^12.13.0",
+    "firebase-admin": "^12.7.0",
     "fuse.js": "^7.3.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",

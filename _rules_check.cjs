@@ -10,6 +10,12 @@
  * the rules refuse (a dead button), or a reason the rules accept but the app never sends (a hole
  * nobody tests). Both live in this repo, so both are read here and compared — the rules as text, the
  * app as the compiled module a screen would actually call.
+ *
+ * The last section pins the 🟢 phone badge shut. It used to be forgeable in one line — the seller
+ * could write `phoneVerified` onto their own document (`firestore.rules:7`), so the browser could
+ * claim the badge by hand with no SMS ever sent. That is now refused on both halves of the write,
+ * the proof has moved to `trust/{uid}` (public to read, closed to write), and this file reads
+ * `api/_lib/identity.js` to prove the publicly readable document holds no phone number.
  */
 const assert = require('assert')
 const fs = require('fs')
@@ -30,7 +36,17 @@ const {
 } = require(path.join(__dirname, '_dsbuild', 'care.cjs'))
 
 let checks = 0
-const check = (name, fn) => { fn(); checks++; console.log('  ok  ' + name) }
+const check = (name, fn) => {
+  try {
+    fn()
+  } catch (err) {
+    // Say *which* check failed. A harness that only prints a stack trace makes you go looking.
+    err.message = `${name}\n    ${err.message}`
+    throw err
+  }
+  checks++
+  console.log('  ok  ' + name)
+}
 
 const NOW = Date.UTC(2026, 1, 12, 9, 0, 0)
 const rulesText = fs.readFileSync(path.join(__dirname, 'firestore.rules'), 'utf8')
@@ -60,6 +76,18 @@ function markerOf(text, needle) {
   const at = text.indexOf(needle)
   assert.ok(at !== -1, `firestore.rules no longer says "${needle}"`)
   return at
+}
+
+/**
+ * Rules with their commentary removed.
+ *
+ * A comment that *names* a forbidden shape is not the shape: the `sellers` block explains the bug
+ * it fixes by quoting `` `phoneVerified: true` ``, and an assertion that reads the file as-is would
+ * see the explanation and call it the crime. Comments in this file sit on their own lines, so
+ * whole-line stripping is enough — and it leaves strings (which can contain `//`) untouched.
+ */
+function withoutComments(text) {
+  return text.replace(/^\s*\/\/.*$/gm, '')
 }
 
 /** The values of one rules list: `x in ['a', 'b']` → ['a', 'b']. */
@@ -247,6 +275,90 @@ check('one writer for care tickets, and it only ever adds', () => {
     /auth\.currentUser/.test(writer) && /'signin'/.test(writer),
     'a ticket needs an account — the rules demand request.auth, so the screen is told to sign in',
   )
+})
+
+// ── the 🟢 badge that must not be self-serve ─────────────────────────────────────────────────
+
+const sellers = ruleBlock('match /sellers/{sellerId} {')
+const identitySrc = fs.readFileSync(path.join(__dirname, 'api', '_lib', 'identity.js'), 'utf8')
+
+check('a store page stays public, but a seller may no longer write their own badge', () => {
+  // The lookup on `phoneVerified` in SetupStore's save call expected this to be writable. It is not.
+  assert.ok(/allow read: if true/.test(sellers), 'the badge must draw for a visitor who is not signed in')
+
+  const create = sellers.match(/allow create: if[\s\S]*?;/)
+  const update = sellers.match(/allow update: if[\s\S]*?;/)
+  assert.ok(create && update, 'the seller document still has both halves of the write')
+  assert.ok(
+    /!\s*request\.resource\.data\.keys\(\)\.hasAny\(\['phoneVerified'\]\)/.test(create[0]),
+    'a new seller document may not carry phoneVerified at all',
+  )
+  assert.ok(
+    /!\s*request\.resource\.data\.diff\(resource\.data\)\.affectedKeys\(\)\.hasAny\(\['phoneVerified'\]\)/.test(update[0]),
+    'a write may not so much as touch phoneVerified — it is a claim about the seller, not a setting',
+  )
+  // The exception is that one field, not the shop: the seller still owns everything else.
+  assert.ok(/request\.auth\.uid == sellerId/.test(create[0]), 'the seller still creates their own document')
+  assert.ok(/request\.auth\.uid == sellerId/.test(update[0]), 'the seller still edits their own document')
+  // Nobody else may write it either — the only writer is the server, through firebase-admin.
+  // Stripped first: this block's comment *quotes* the old `phoneVerified: true` to explain the bug.
+  assert.ok(!/phoneVerified\s*:/.test(withoutComments(sellers)), 'the rules never set a value themselves')
+  // Old shops keep the badge they earned, and *why* is written down next to the rule.
+  assert.ok(markerOf(sellers, 'frozen snapshot') > 0, 'the reason old badges are left alone is recorded')
+})
+
+check('the proof lives where the person it is about cannot reach it', () => {
+  const trust = ruleBlock('match /trust/{userId} {')
+  // Public read is deliberate: a store page is shareable and its badge renders logged-out.
+  assert.ok(/allow read:\s*if true/.test(trust), 'a public store page needs a publicly readable badge')
+  assert.ok(/allow write:\s*if false/.test(trust), 'the browser may never write its own proof')
+  // And the field it reads is the new one — if these diverge, every badge silently goes blank.
+  assert.ok(!/phoneVerified/.test(withoutComments(trust)), 'the record the server writes is `phoneProven`, not the old field')
+  // The promise that makes a public read safe is written down where the read is granted.
+  assert.ok(markerOf(trust, 'must hold no') > 0, 'the reason this document may hold no number is recorded')
+})
+
+check('the codes, the day counter and the number ledger are closed to the browser', () => {
+  // One line each, on purpose: there is no rule to read, and that *is* the rule. `firebase-admin`
+  // bypasses rules entirely, so the server is the only thing that can touch them.
+  const closed = [
+    [/match \/otpCodes\/\{phoneKey\}\s*\{\s*allow read, write: if false;\s*\}/, 'the hashed code and its send counters'],
+    [/match \/meta\/\{docId\}\s*\{\s*allow read, write: if false;\s*\}/, 'the day counter'],
+    [/match \/phones\/\{phoneKey\}\s*\{\s*allow read, write: if false;\s*\}/, 'the number-to-account ledger'],
+  ]
+  closed.forEach(([pattern, what]) => {
+    assert.ok(pattern.test(rulesText), `${what} must not be reachable from the browser`)
+  })
+  // A missing `match` would be closed by default too — until somebody adds a friendly rule to it.
+  // These two are the ones whose leak would be silent, so they are named.
+  const ruleLines = withoutComments(rulesText)
+  assert.ok(!/otpCodes[\s\S]{0,60}allow (read|write): if true/.test(ruleLines))
+  assert.ok(!/phones[\s\S]{0,60}allow (read|write): if true/.test(ruleLines))
+})
+
+check('the publicly readable proof holds the fact, the time and the flow — never the number', () => {
+  const written = identitySrc.match(/collection\(TRUST\)\.doc\(uid\)\.set\(\{([\s\S]*?)\}/)
+  assert.ok(written, 'identity.js is still the module that writes the trust record')
+  const fields = [...written[1].matchAll(/(\w+):/g)].map(m => m[1]).sort()
+  assert.deepStrictEqual(
+    fields,
+    ['method', 'phoneProven', 'phoneProvenAt', 'updatedAt'],
+    'a document anyone can read may hold the proof and when it happened, and nothing more',
+  )
+  // The number is the one thing that must never appear here.
+  assert.ok(!/\be164\b/.test(written[1]), 'the number itself must not be written where the world reads')
+  assert.ok(!/phoneNumber/.test(written[1]), 'nor the Firebase Auth field that carries it')
+  // Two ways to prove a number, and the record says which one did.
+  assert.ok(/'social-link'/.test(written[1]) && /'phone-signup'/.test(written[1]))
+})
+
+check('the ledger that keeps one number to one account is keyed by an HMAC', () => {
+  // So a dump of this collection is a list of opaque strings, not a list of who signed up.
+  assert.ok(
+    /collection\(PHONES\)\.doc\(phoneKey\(e164, pepper\)\)/.test(identitySrc),
+    'the ledger key must be the HMAC from otp.js, never the number itself',
+  )
+  assert.ok(/import \{ phoneKey \} from '\.\/otp\.js'/.test(identitySrc), 'and it must be the same HMAC')
 })
 
 console.log(`\n${checks} rules checks passed`)

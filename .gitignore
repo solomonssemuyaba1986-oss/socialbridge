@@ -15,6 +15,13 @@ _dsbuild
 *.local
 .env
 
+# Server secrets — the Yoola SMS key and the Firebase service account.
+# `.env` / `*.local` above already cover every env file; these cover the key file
+# itself, whatever name the Firebase dashboard gives it when it downloads.
+.secrets/
+serviceAccountKey.json
+*firebase-adminsdk*.json
+
 # ML / AI training exports — a machine for user data, never commit it
 training-data
 

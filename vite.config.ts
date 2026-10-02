@@ -18,4 +18,13 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(`${pkg.version ?? '0.0.0'}+${buildStamp}`),
   },
+  // The phone-verification API is Vercel functions (`api/otp/*`). In production the site and the
+  // API share a domain, so the client simply calls `/api/otp/send` — no URL, no CORS. Development
+  // has no Vercel, so this proxy hands those same relative calls to `npm run otp`
+  // (`server/dev.js`) running the identical handlers. One path, both worlds.
+  server: {
+    proxy: {
+      '/api': { target: 'http://localhost:3001', changeOrigin: true },
+    },
+  },
 })
