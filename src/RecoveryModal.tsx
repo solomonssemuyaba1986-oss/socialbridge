@@ -6,9 +6,9 @@ import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/fire
 import { functions, auth, db, googleProvider } from './firebase'
 import { COUNTRY_CODES, type CountryCode } from './countryCodes'
 import { resolveLanding } from './role'
+import { sendOtp, verifyOtp } from './otpClient'
 
 const green = '#adff2f'
-const OTP_SERVER_URL = import.meta.env.VITE_OTP_SERVER_URL || 'http://localhost:3001'
 
 type Props = {
   open: boolean
@@ -92,15 +92,11 @@ export default function RecoveryModal({ open, onClose }: Props) {
       setStoreId(snap.docs[0].id)
       setStoreName(snap.docs[0].data().businessName || 'Your store')
 
-      // Send OTP to the new phone
-      const res = await fetch(`${OTP_SERVER_URL}/api/otp/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: getFullNewPhone() }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setError(data.error || 'Failed to send code')
+      // Send OTP to the new phone — through the one shared client (`src/otpClient.ts`), so every
+      // screen that verifies a number posts the same two requests in the same shape.
+      const sent = await sendOtp(getFullNewPhone())
+      if (!sent.ok) {
+        setError(sent.error)
       } else {
         setStep('phone-otp')
       }
@@ -115,15 +111,9 @@ export default function RecoveryModal({ open, onClose }: Props) {
     if (!/^\d{6}$/.test(phoneCode)) { setError('Enter the 6-digit code'); return }
     setLoading(true); setError('')
     try {
-      const res = await fetch(`${OTP_SERVER_URL}/api/otp/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // `code` is the name `/api/otp/verify` reads (`field(body, 'code')`) — not `otp`.
-        body: JSON.stringify({ phone: getFullNewPhone(), code: phoneCode }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setError(data.error || 'Invalid code')
+      const verified = await verifyOtp(getFullNewPhone(), phoneCode)
+      if (!verified.ok) {
+        setError(verified.error)
       } else {
         // Only the contact number is the browser's to change. The badge is not: the proof of this
         // number lives in `trust/{uid}`, written by the server when it accepted the code, and

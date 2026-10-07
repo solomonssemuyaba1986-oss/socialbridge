@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { auth, db, googleProvider, facebookProvider, appleProvider, createRecaptchaVerifier } from './firebase'
-import { signInWithPopup, signInWithPhoneNumber, linkWithPhoneNumber, type ConfirmationResult, type AuthProvider } from 'firebase/auth'
+import { auth, db, googleProvider, facebookProvider, appleProvider } from './firebase'
+import { signInWithCustomToken, signInWithPopup, type AuthProvider } from 'firebase/auth'
 import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore'
 import { useNavigate } from 'react-router-dom'
 import { COUNTRIES } from './countries'
 import { COUNTRY_CODES, type CountryCode } from './countryCodes'
 import { formatFull, lengthHint, lengthRange, validatePhone } from './phone'
+import { isPhoneProven, TRUST_COLLECTION } from './trust'
+import { sendOtp, verifyOtp } from './otpClient'
 import { trackEvent } from './analytics'
 import StoreLogoPicker from './StoreLogoPicker'
 import AgeGenderAsk from './AgeGenderAsk'
@@ -79,6 +81,26 @@ async function isHandleFree(handle: string): Promise<boolean | null> {
   }
 }
 
+/**
+ * Did the server write the proof the badge reads?
+ *
+ * The same document, asked the same way, as `useSellerStats.ts` — so the gate in front of "Create
+ * My Shop" and the badge a buyer sees can never disagree about a number. The browser may not write
+ * `trust/{uid}` (`firestore.rules`: `allow write: if false`), which is the whole point: a seller
+ * does not get to decide this about themselves. A missing document, a renamed collection or a
+ * failed read all answer "not proved" — never "maybe".
+ */
+async function readPhoneProof(uid: string): Promise<boolean> {
+  if (!uid) return false
+  try {
+    const snap = await getDoc(doc(db, TRUST_COLLECTION, uid))
+    return isPhoneProven({ trust: snap.exists() ? (snap.data() as { phoneProven?: unknown }) : null })
+  } catch (err) {
+    console.warn('Phone proof check failed:', err)
+    return false
+  }
+}
+
 function SetupStore() {
   const [businessName, setBusinessName] = useState(() => readSetupDraft().businessName || '')
   const [storeHandle, setStoreHandle] = useState(() => readSetupDraft().storeHandle || '')
@@ -108,7 +130,7 @@ function SetupStore() {
   const [whatsappCountrySearch, setWhatsappCountrySearch] = useState('')
   const [showWhatsappCountryDropdown, setShowWhatsappCountryDropdown] = useState(false)
   const [whatsapp, setWhatsapp] = useState(() => {
-    // A number typed earlier (or proven by Firebase phone auth) comes straight back.
+    // A number typed earlier — or already proved for this account — comes straight back.
     const saved = readSetupDraft().whatsapp
     if (saved) return saved
     return initialPhone.startsWith(initialCountry.dialCode)
@@ -130,9 +152,18 @@ function SetupStore() {
   // choose to show it on their store later from Edit Store.
   const [showWhatsapp] = useState(false)
 
-  // Phone verification — comes free from Firebase phone sign-in (one SMS, when they
-  // tap Create My Shop). Social sign-ins can earn the badge later.
-  const [phoneVerified, setPhoneVerified] = useState(!!auth.currentUser?.phoneNumber)
+  // Phone verification — our own server texts the code (`./otpClient` → `/api/otp/send`, sent by
+  // Yoola), and that same server is the only thing that can write the proof. So the browser never
+  // decides this: `provenPhone` is the number the server *said* it proved, and `serverProven` is
+  // the record it wrote. Nothing is remembered locally, so a reload cannot invent a badge.
+  const [provenPhone, setProvenPhone] = useState('')
+  /**
+   * The server's own verdict, kept with the account + number it was asked about.
+   *
+   * Keyed rather than a plain boolean so it cannot go stale: if the number on screen is not the
+   * one that was asked about, the answer is simply "not this number".
+   */
+  const [proof, setProof] = useState<{ key: string; proven: boolean }>({ key: '', proven: false })
 
   // Country-aware phone helpers. The per-country length rules live in ./phone (pure, and
   // verified in Node by `_phone_check.cjs`) — the check that used to live here only counted
@@ -161,8 +192,6 @@ function SetupStore() {
   const [createdSlug, setCreatedSlug] = useState('')
   /** Tracked separately so the UI reacts the moment sign-in succeeds. */
   const [signedInUid, setSignedInUid] = useState<string | null>(auth.currentUser?.uid || null)
-  /** Which path produced the code, so the two funnels can be told apart in the report. */
-  const [verifyMethod, setVerifyMethod] = useState<'phone-signup' | 'social-link'>('phone-signup')
   const [signingIn, setSigningIn] = useState('')
   const [signInError, setSignInError] = useState('')
   const [smsCode, setSmsCode] = useState('')
@@ -170,14 +199,19 @@ function SetupStore() {
   const [phoneBlurred, setPhoneBlurred] = useState(false)
   /** True once a code has been asked for — decides where an error belongs on screen. */
   const [codeAttempted, setCodeAttempted] = useState(false)
-  const confirmationRef = useRef<ConfirmationResult | null>(null)
 
   /**
-   * Has Firebase proved *this* number for this account? A changed number is a different
-   * number, so it stops counting as verified until a new code is confirmed.
+   * Has *this* number been proved for this account?
+   *
+   * Both sources are the server's word, never the browser's. `provenPhone` is the number
+   * `/api/otp/verify` answered with when it accepted a code in this session — the digits *it*
+   * proved, rather than the ones on screen. `serverProven` is `trust/{uid}`, the record the 🟢
+   * badge reads, and it only counts for the account + number that were actually asked about (the
+   * account's own number is the other half of that, and only the server can ever set it). A
+   * changed number is a different number, so it stops counting immediately.
    */
-  const provenNumber = auth.currentUser?.phoneNumber || ''
-  const phoneIsProven = phoneVerified || (!!provenNumber && provenNumber === getFullWhatsapp())
+  const serverProven = proof.proven && proof.key === `${signedInUid || ''}|${getFullWhatsapp()}`
+  const phoneIsProven = serverProven || (provenPhone !== '' && provenPhone === getFullWhatsapp())
   /**
    * How the shop account gets made. Google/Apple/Facebook leave the phone unproven, so they
    * get one extra step; signing in with the phone number settles it with the same code — no
@@ -193,7 +227,6 @@ function SetupStore() {
     setCodeSent(false)
     setSmsCode('')
     setCodeAttempted(false)
-    confirmationRef.current = null
   }
 
   /** Step 2 is the last step — it holds the Create button, so this only ever moves 1 → 2. */
@@ -240,6 +273,34 @@ function SetupStore() {
       if (snap.exists()) navigate('/dashboard')
     }).catch(() => {})
   }, [navigate])
+
+  /**
+   * Ask the server's record about the number on screen — once per account + number.
+   *
+   * Reloading mid-wizard (the draft keeps the number) must not cost a second SMS: if the server
+   * already proved *this* number for the account that is signed in, the section says so and the
+   * Create button stops asking. The read is skipped unless the number is a complete, valid one, so
+   * typing a number cannot hammer Firestore.
+   */
+  const proofCheckedRef = useRef('')
+  useEffect(() => {
+    const u = auth.currentUser
+    if (!signedInUid || !u || !whatsappIsValid) return
+    const number = formatFull(dialCode, whatsappCheck.digits)
+    const key = `${u.uid}|${number}`
+    if (proofCheckedRef.current === key) return
+    proofCheckedRef.current = key
+    let alive = true
+    readPhoneProof(u.uid).then((proven) => {
+      if (!alive) return
+      // `trust/{uid}` holds no number on purpose — it is public — so the account's own number,
+      // which only the server can set, says which number the record is about.
+      setProof({ key, proven: proven && (auth.currentUser?.phoneNumber || '') === number })
+    })
+    return () => {
+      alive = false
+    }
+  }, [signedInUid, whatsappIsValid, dialCode, whatsappCheck.digits])
 
   const sanitizeInput = (input: string, maxLength: number = 100): string => {
     return input.trim().slice(0, maxLength).replace(/<[^>]*>/g, '')
@@ -330,9 +391,8 @@ function SetupStore() {
     setErrors(e => ({ ...e, whatsapp: undefined }))
     setPhoneBlurred(false)
     if (digits !== whatsapp) {
-      // A different number is a different number — it cannot stay "verified", and a code sent
-      // to the old one is no longer the code we are waiting for.
-      setPhoneVerified(false)
+      // A different number is a different number — a code sent to the old one is no longer the
+      // code we are waiting for, and the server proved the old one, not this one.
       if (codeSent) resetCodeStep()
     }
   }
@@ -341,7 +401,6 @@ function SetupStore() {
     setSelectedCountry(c)
     setShowWhatsappCountryDropdown(false)
     setWhatsappCountrySearch('')
-    setPhoneVerified(false)
     resetCodeStep()
     setErrors(e => ({ ...e, whatsapp: undefined }))
   }
@@ -410,13 +469,22 @@ function SetupStore() {
       }, 80)
       return
     }
-    // Hard gate: a shop needs a phone number Firebase has actually proven. Buyers here don't
-    // know the seller — that proof is exactly what the 🟢 badge is promising them.
-    // Read it live: when this runs from inside an auth callback, the state above is a tick
-    // behind, while `auth.currentUser` is already up to date.
+    // Hard gate: a shop needs a phone number the *server* has proved — a code texted to that
+    // number, checked by our own API, recorded in `trust/{uid}`. Buyers here don't know the
+    // seller; that proof is exactly what the 🟢 badge promises them.
+    // Read it live: when this runs from inside an auth callback the state above is a tick behind,
+    // while `auth.currentUser` is already up to date — and a fresh read is the only thing a stale
+    // render cannot talk into saying yes.
     const liveUser = auth.currentUser
     const liveNumber = liveUser?.phoneNumber || ''
-    const liveProven = !!opts?.proven || phoneVerified || (!!liveNumber && liveNumber === getFullWhatsapp())
+    const liveProven = !!opts?.proven
+      // The same answer the phone step is drawing its tick from — one decision, in one place, so the
+      // screen can never say "verified" while the button below it refuses. `phoneIsProven` is this
+      // account's own `trust/{uid}`, read for *this* number (plus the number the server proved in
+      // this session, which is the same thing a tick earlier).
+      || phoneIsProven
+      || (provenPhone !== '' && provenPhone === getFullWhatsapp())
+      || (!!liveUser && liveNumber === getFullWhatsapp() && await readPhoneProof(liveUser.uid))
     if (!liveProven) {
       showSubmitError(
         whatsappIsValid
@@ -552,13 +620,14 @@ function SetupStore() {
           setSelectedCountry(match)
           setWhatsapp(phone.slice(match.dialCode.length).replace(/^0/, ''))
         }
-        // Firebase already proved this number — no need to ask twice.
-        setPhoneVerified(true)
+        // The account's own number tells us which country it is from; whether it counts as
+        // proved is `trust/{uid}` — read live in the gate below, never assumed from this object.
       }
       window.scrollTo(0, 0)
-      if (opts?.proven || u.phoneNumber) {
-        // The number is proven, so the shop can be created — finish the job for them.
-        void handleSubmit({ proven: opts?.proven })
+      if (opts?.proven) {
+        // A code was accepted in this session, so the number is proved and the server has already
+        // written the record — finish the job for them.
+        void handleSubmit({ proven: true })
       } else {
         // A social account still owes us one step: verify the phone (it comes last).
         window.setTimeout(() => {
@@ -596,20 +665,24 @@ function SetupStore() {
    * One place that records a proven number, whichever path got us here — so the event is
    * never fired twice for a single verification.
    */
-  const markPhoneVerified = (method: 'phone-signup' | 'social-link') => {
-    setPhoneVerified(true)
+  const markPhoneVerified = (method: 'phone-signup' | 'social-link', number: string) => {
+    setProvenPhone(number)
     setCodeSent(false)
     setSmsCode('')
     trackEvent('phone_verified', { country: selectedCountry.name, method })
   }
 
   /**
-   * The code step — and the reason the flow has one number, not two.
+   * Text a code — one number, one code, whatever brought them here.
    *
-   * Signed out: `signInWithPhoneNumber` creates the account AND proves the number in the same
-   * code, so this path needs no extra step at all.
-   * Signed in with Google/Apple/Facebook: `linkWithPhoneNumber` attaches this number to the
-   * account they already chose, so the shop is saved under the account they picked.
+   * The code is sent by *our* server (`/api/otp/send`, which hands it to Yoola) and checked by our
+   * server, never by a third-party sign-in: that API is also the only thing that can write
+   * `trust/{uid}`, so the badge and this button can never disagree about a number.
+   *
+   * Signed out: the code that comes back creates the account AND proves the number in one go —
+   * `/api/otp/verify` finds or makes the account for this number and signs us in as it.
+   * Signed in with Google/Apple/Facebook: the same code attaches this number to the account they
+   * already chose, so the shop is saved under the account they picked.
    *
    * The country rule has to pass FIRST — that is the fix for "it silently accepted 8 digits".
    */
@@ -621,56 +694,51 @@ function SetupStore() {
       document.getElementById('setup-field-phone')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
+    const method: 'phone-signup' | 'social-link' = auth.currentUser ? 'social-link' : 'phone-signup'
     setSigningIn('Phone')
     setSignInError('')
     setCodeAttempted(true)
     try {
-      const verifier = createRecaptchaVerifier('setup-recaptcha')
-      const current = auth.currentUser
-      const method: 'phone-signup' | 'social-link' = current ? 'social-link' : 'phone-signup'
-      const result = current
-        ? await linkWithPhoneNumber(current, getFullWhatsapp(), verifier)
-        : await signInWithPhoneNumber(auth, getFullWhatsapp(), verifier)
-      setVerifyMethod(method)
-      confirmationRef.current = result
-      setCodeSent(true)
-      trackEvent('phone_verification_sent', { country: selectedCountry.name, method })
-    } catch (err) {
-      const code = (err as { code?: string })?.code || ''
-      console.error('Phone sign-in failed:', err)
-      setSignInError(
-        code === 'auth/operation-not-allowed'
-          ? "Phone sign-in isn't switched on yet — use Google, Facebook or Apple instead."
-          : code === 'auth/invalid-phone-number'
-            ? `That number doesn't look right — ${whatsappCheck.message || 'check the country code and the number.'}`
-            : code === 'auth/provider-already-linked'
-              ? 'This account is already verified with a different number. Keep that one, or switch account.'
-              : code === 'auth/credential-already-in-use' || code === 'auth/account-exists-with-different-credential'
-                ? 'That number already belongs to a rachett account. Verify a different number, or sign in with it instead.'
-                : 'Could not send the code. Check your connection and try again.',
-      )
+      const sent = await sendOtp(getFullWhatsapp())
+      if (sent.ok) {
+        setCodeSent(true)
+        trackEvent('phone_verification_sent', { country: selectedCountry.name, method })
+      } else {
+        // Whatever the server answered — "not switched on", "give it a moment", the hour cap — is
+        // already a sentence written for the person reading it.
+        console.error('Phone code send failed:', sent.error)
+        setSignInError(sent.error)
+      }
     } finally {
       setSigningIn('')
     }
   }
 
   const confirmPhoneCode = async () => {
-    if (!confirmationRef.current) {
-      setSignInError('That code expired — request a new one.')
-      return
-    }
     setSigningIn('Phone')
     setSignInError('')
     try {
-      await confirmationRef.current.confirm(smsCode)
-      markPhoneVerified(verifyMethod)
-      // The number is proven, so the shop can be created now — `proven` covers the social
-      // link case, where `auth.currentUser.phoneNumber` may lag the promise by a tick.
+      const user = auth.currentUser
+      const method: 'phone-signup' | 'social-link' = user ? 'social-link' : 'phone-signup'
+      // Already signed in? The ID token is what tells the server *which* account this number
+      // belongs to, so the shop stays under the account they chose. Signed out, there is nobody to
+      // attach it to, and the endpoint finds or creates the account for this number instead.
+      const verified = await verifyOtp(getFullWhatsapp(), smsCode, {
+        idToken: user ? await user.getIdToken() : '',
+      })
+      if (!verified.ok) {
+        setSignInError(verified.error)
+        return
+      }
+      // A phone sign-up finishes here: the server proved the number and minted the token for the
+      // account it belongs to, and this is the one place the browser becomes that account.
+      if (!auth.currentUser) await signInWithCustomToken(auth, verified.token)
+      markPhoneVerified(method, verified.phone)
+      // `proven` covers the social case, where the state above is a tick behind the promise.
       handleAuthSuccess({ proven: true })
     } catch (err) {
-      const code = (err as { code?: string })?.code || ''
       console.error('Phone code failed:', err)
-      setSignInError(code === 'auth/invalid-verification-code' ? 'Wrong code — try again.' : 'Verification failed. Please try again.')
+      setSignInError('Verification failed. Please try again.')
     } finally {
       setSigningIn('')
     }
@@ -683,7 +751,9 @@ function SetupStore() {
       console.warn('Sign out failed:', err)
     }
     setSignedInUid(null)
-    setPhoneVerified(false)
+    setProvenPhone('')
+    setProof({ key: '', proven: false })
+    proofCheckedRef.current = ''
     resetCodeStep()
   }
 
@@ -1100,8 +1170,6 @@ function SetupStore() {
           </a>{' '}
           and we will get you set up.
         </p>
-        {/* Firebase needs this invisible reCAPTCHA slot for phone sign-in */}
-        <div id="setup-recaptcha" />
 
           </>
         )}

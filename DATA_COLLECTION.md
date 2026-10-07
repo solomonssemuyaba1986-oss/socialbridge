@@ -33,12 +33,12 @@
 | Store | Contents |
 |---|---|
 | **Firebase Auth** | Seller + buyer + anonymous accounts |
-| **Firestore** | `sellers/{uid}` (+ `products` — each with `likes/{uid}` ♥ votes —, `orders`, `messages`, `visits`, `stats`) · `users/{uid}` (+ `bag`, `likes`, `loveAnswers`) · `conversations/{id}` (+ `messages`) · `events` (**two shapes** — legacy single events, and `schemaVersion: 2` batches; see §13) · `bagCounts/{productId}` (+ `baggers`) · `feedback` · `recoveries` |
+| **Firestore** | `sellers/{uid}` (+ `products` — each with `likes/{uid}` ♥ votes —, `orders`, `messages`, `visits`, `stats`) · `users/{uid}` (+ `bag`, `likes`, `loveAnswers`) · `conversations/{id}` (+ `messages`) · `events` (**two shapes** — legacy single events, and `schemaVersion: 2` batches; see §13) · `bagCounts/{productId}` (+ `baggers`) · `feedback` · `recoveries` · `trust/{uid}` (**no PII** — the 🟢 badge; see §2.2) · `otpCodes/{phoneKey}` / `phones/{phoneKey}` / `meta/otpSends` (HMAC keys, so no readable number) |
 | **Firebase Storage** | Nothing new: National ID capture is switched off ("coming soon"), so no new files are written. IDs uploaded before this change are still at `sellers/{uid}/private/national-id.{ext}` — readable **only** by that seller (`storage.rules:11-14`). |
 | **Cloudinary** | Store logos, product photos, chat photos |
-| **OTP server** (`server/index.js`) | Phone numbers + OTP codes — **RAM only**, deleted on expiry (2 min) or restart |
+| **OTP server** (`api/otp/send.js`, `api/otp/verify.js` — Vercel serverless functions) | Phone numbers + OTP codes, held in Firestore (`otpCodes/{phoneKey}`, `phones/{phoneKey}`, `meta/otpSends` — all closed to the browser, and none holding a readable number, because the key is an HMAC of one) — and the code never in the clear: only its HMAC is written, and it expires after 5 minutes or on first use |
 | **Device (localStorage/sessionStorage)** | Drafts, bag, buyer area, remembered user, guest verification |
-| **Third parties** | Cloudinary, Africastalking, Resend, Formspree*, Nominatim/OSM, Google/Facebook/Apple |
+| **Third parties** | Cloudinary, Yoola, Resend, Formspree*, Nominatim/OSM, Google/Facebook/Apple |
 
 \* Formspree only receives anything if `VITE_FORMSPREE_ID` is set.
 
@@ -48,18 +48,22 @@
 
 ### 2.1 Account (Firebase Auth)
 
-`uid`, `email` **or** `phoneNumber` (E.164, e.g. `+256771234567`), `displayName`, `photoURL`, `providerId` (`google.com` / `facebook.com` / `apple.com` / `phone`), `emailVerified`, `creationTime`, `lastSignInTime`. Firebase also keeps its own IP/timestamp logs server-side.
+`uid`, `email` **or** `phoneNumber` (E.164, e.g. `+256771234567`), `displayName`, `photoURL`, `providerId` (`google.com` / `facebook.com` / `apple.com` / `phone`), `emailVerified`, `creationTime`, `lastSignInTime`. Firebase also keeps its own IP/timestamp logs server-side. **A shop's `phoneNumber` is written by our server, never by the browser** (`api/_lib/identity.js:70,84` — only after a code it texted came back correct), and the wizard reads it back rather than setting it.
 
 ### 2.2 `sellers/{uid}` — field dictionary
 
-Written by `SetupStore.tsx:434-466` (create), `EditStore.tsx:234-258` (edit), `Dashboard.tsx:78-82, 153-158` (recovery email + location backfill), `RecoveryModal.tsx:127-130` (phone recovery).
+Written by `SetupStore.tsx:552` (create), `EditStore.tsx:234-258` (edit), `Dashboard.tsx:78-82, 153-158` (recovery email + location backfill), `RecoveryModal.tsx:121` (phone recovery).
 
 > **Every live shop has a verified phone number (since 19 Sep 2026).** Setup checks the number
 > against its own country's length (`src/phone.ts` — Uganda 9 digits, Kenya 9, Egypt 10, …,
 > verified in Node by `_phone_check.cjs`) and then **refuses to create the shop** until a
-> Firebase SMS code for that exact number has been confirmed. Signing in with
+> code texted by *our* server to that exact number has come back correct (`api/otp/send.js` → Yoola,
+> checked by `api/otp/verify.js`, which re-runs the same per-country rule in `api/_lib/phone.js`;
+> the proof lands in `trust/{uid}`, written server-side). Signing in with
 > Google/Apple/Facebook gets one extra step (verify your phone number, last); signing in with
-> the phone number settles both with the same code, so that path has no extra step. This is what
+> the number itself settles both at once, so that path has no extra step. (The `/signin`
+> screen still opens Firebase's own phone *session* for `+number` accounts, but a session is not the
+> proof — the wizard asks our server for a code all the same.) This is what
 > the 🟢 Real Seller badge rests on — and the number stays private: `showWhatsapp` is `false`,
 > so buyers never see it.
 
@@ -70,7 +74,7 @@ Written by `SetupStore.tsx:434-466` (create), `EditStore.tsx:234-258` (edit), `D
 | `slug` | string `"aisha-fabrics"` | the store link; **never changes on rename** |
 | `aliases` | string[] (≤8) | previous business names, for search recall (EditStore.tsx:250-251) |
 | `whatsapp` | string `"+256771234567"` | contact/payout number — **PII** |
-| `phoneVerified` | boolean | **true on every shop created since 19 Sep 2026** — the setup gate will not save a store without a confirmed Firebase SMS code for this number. Only phone auth, a linked number, or OTP recovery can set it |
+| `phoneVerified` | boolean | **true on every shop created since 19 Sep 2026** — the setup gate will not save a store without a confirmed SMS code for this number, and for shops created then it still says so. **It is a Firebase-era field, though, and nothing writes it any more**: the wizard's create payload no longer names it, and `firestore.rules:18,20` refuses any write that so much as touches it — so a `true` here is history, kept for shops that proved a number before the move. The proof the badge reads now is the server-written `trust/{uid}` above |
 | `email` | string | store contact email — **PII** |
 | `recoveryEmail` | string | account-recovery anchor — **PII** |
 | `recoveryEmailVerified` | boolean | |
@@ -86,7 +90,7 @@ Written by `SetupStore.tsx:434-466` (create), `EditStore.tsx:234-258` (edit), `D
 | `logoUrl` | string (Cloudinary) | set in Setup Store step 1 (optional, one tap) or Edit Store; falls back to the provider `photoURL` at creation, and to a colour + initial tile when empty (`avatar.ts`) |
 | `idDocumentPath` | string | **Legacy — no longer written.** National ID capture is off (see §11); older stores may still carry a path. Always stripped from exports. |
 | `idStatus` | `'pending'` | **Legacy — no longer written.** Was always `'pending'` with nothing to advance it. |
-| `createdAt` | Date | when the store was created (`SetupStore.tsx:407`) — powers the "Selling since …" trust line in the sidebar and dashboard. Older stores may be missing it; `functions/backfill-store-dates.js` fills it from real evidence only (first product → first order → first visit) and records where it came from. |
+| `createdAt` | Date | when the store was created (`SetupStore.tsx:575`) — powers the "Selling since …" trust line in the sidebar and dashboard. Older stores may be missing it; `functions/backfill-store-dates.js` fills it from real evidence only (first product → first order → first visit) and records where it came from. |
 | *read but never written* | `verifiedSeller`, `realSellerBadgeEarnedAt`, `realSellerBadgeGraceUntil`, `activeSellerBadgeEarnedAt`, `activeSellerBadgeGraceUntil` | `useSellerStats.ts:198-208` — badges are recomputed client-side, never persisted |
 
 ### 2.3 Subcollections under `sellers/{uid}/`
@@ -173,7 +177,7 @@ The buyer was the one person the app never showed to themselves: their name, ord
 
 The one number it computes is money: `summariseBuyerOrders` (`buyerOrderUtils.ts`, pinned by `_orders_check.cjs`) counts every order that is not `cancelled` / `out_of_stock`, because those were never a purchase — an order still waiting on the seller **is** counted, since the buyer has committed to it.
 
-It is also the only place a **buyer** can sign out (`auth.signOut()` + a full reload). Before this, signing out existed only inside seller screens: `EditStore.tsx:325`, `SetupStore.tsx:660`, `StorePage.tsx:1329`. The bag, the looks and the device name are deliberately left alone — they are this phone's, not the account's.
+It is also the only place a **buyer** can sign out (`auth.signOut()` + a full reload). Before this, signing out existed only inside seller screens: `EditStore.tsx:325`, `SetupStore.tsx:749`, `StorePage.tsx:1329`. The bag, the looks and the device name are deliberately left alone — they are this phone's, not the account's.
 
 ---
 
@@ -220,7 +224,7 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 
 | Key | Contents | Source |
 |---|---|---|
-| `rachett_setup_draft` | Half-finished store form (name, link, bio, country, location, phone, step) | `SetupStore.tsx:29` |
+| `rachett_setup_draft` | Half-finished store form (name, link, bio, country, location, phone, step) | `SetupStore.tsx:34` |
 | `rachett_bag` | Bag items (full product snapshot + the chosen colour/size from the details sheet) | `useBag.ts:20` |
 | `rachett_buyer_area` | `{ lat, lng, place, label, source }` — **buyer's area, deliberately device-only** | `place.ts:165-175` |
 | `rachett_verified_guest` | **Legacy** — written by the removed guest OTP flow; old devices may still hold it, nothing reads or writes it now | — |
@@ -251,7 +255,7 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 | Processor | What it gets | Live? |
 |---|---|---|
 | **Cloudinary** | Shop photos/logos (cropped square ≤512px JPEG), product photos, chat photos (compressed ≤1024px JPEG) + uploader IP | ✅ `uploadImage.ts`, `StoreLogoPicker.tsx` (Setup Store + Edit Store), `BulkUpload.tsx:73-84` |
-| **Africastalking** | Phone numbers + OTP SMS text | ✅ `server/index.js:83-87` |
+| **Yoola** (the sender the phone-verification flow uses now) | Phone numbers + OTP SMS text | ✅ `api/_lib/sms.js:87`, sent by `api/otp/send.js` |
 | **Nominatim / OpenStreetMap** | Seller's typed area text **and** GPS coordinates; buyer area lookup | ✅ `place.ts:30` |
 | **Resend** | Seller's `recoveryEmail` + 6-digit code | ✅ `functions/index.js` |
 | **Google / Facebook / Apple** | OAuth identity (name, email, photo) | ✅ |

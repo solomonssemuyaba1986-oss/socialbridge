@@ -12,8 +12,14 @@
  * TypeScript value-for-value and verdict-for-verdict. Change one, and that harness fails until you
  * change the other.
  *
- * Kept deliberately tiny: the numbering plan we serve, a sane range everywhere else, and the
- * trunk-zero / pasted-international habits people actually have.
+ * The second copy is `DIAL_CODES`: `src/countryCodes.ts` is the list the picker shows, so the server
+ * must be able to *read* every dial code on it. One it cannot recognise is a seller whose own
+ * number comes back as "missing its country code" — the screen accepted it, the send endpoint
+ * refused it, and the button is dead. `_otp_check.cjs` compares the two lists and the two verdicts,
+ * so neither can drift.
+ *
+ * Kept deliberately tiny: the numbering plan we serve, every code the picker can offer, a sane range
+ * everywhere else, and the trunk-zero / pasted-international habits people actually have.
  */
 
 /** How long the national part is, per dial code. More than one entry where a country varies. */
@@ -51,8 +57,44 @@ export const PHONE_RULES = {
 /** Everything else: 6–15 digits is a plausible national number in *some* country. */
 export const FALLBACK_LENGTHS = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 
+/**
+ * Every dial code the picker can offer — the server's copy of `src/countryCodes.ts`, reduced to the
+ * digits a number starts with (`'+1-684'` is `'+1684'`).
+ *
+ * `PHONE_RULES` above is where we have a length to insist on. This is the far longer list of
+ * countries we must still be able to *read*: a number from a country with no rule is measured with
+ * `FALLBACK_LENGTHS` — the same generous range the browser uses — and Yoola has the final word on
+ * whether it can be texted. Refusing a code the picker offers is the one outcome that cannot be
+ * right, because the screen has already told the seller their number is fine.
+ */
+export const DIAL_CODES = [
+  '+1', '+7', '+20', '+27', '+30', '+31', '+32', '+33',
+  '+34', '+36', '+39', '+40', '+41', '+43', '+44', '+45',
+  '+46', '+47', '+48', '+49', '+51', '+52', '+53', '+54',
+  '+55', '+56', '+57', '+58', '+60', '+61', '+62', '+63',
+  '+64', '+65', '+66', '+81', '+82', '+84', '+86', '+90',
+  '+91', '+92', '+93', '+94', '+95', '+98', '+211', '+212',
+  '+213', '+216', '+218', '+220', '+221', '+222', '+223', '+224',
+  '+225', '+226', '+227', '+228', '+229', '+230', '+231', '+232',
+  '+233', '+234', '+235', '+236', '+237', '+238', '+240', '+241',
+  '+242', '+243', '+244', '+245', '+248', '+249', '+250', '+251',
+  '+252', '+253', '+254', '+255', '+256', '+257', '+258', '+260',
+  '+261', '+263', '+264', '+265', '+266', '+267', '+268', '+269',
+  '+291', '+297', '+351', '+352', '+353', '+354', '+355', '+356',
+  '+357', '+358', '+359', '+370', '+371', '+372', '+373', '+374',
+  '+375', '+376', '+377', '+380', '+381', '+382', '+385', '+386',
+  '+387', '+389', '+420', '+421', '+423', '+501', '+502', '+503',
+  '+504', '+505', '+506', '+507', '+509', '+591', '+592', '+593',
+  '+595', '+597', '+598', '+673', '+675', '+679', '+850', '+855',
+  '+856', '+880', '+886', '+960', '+961', '+962', '+963', '+964',
+  '+965', '+966', '+967', '+968', '+970', '+971', '+972', '+973',
+  '+974', '+975', '+976', '+977', '+992', '+993', '+994', '+995',
+  '+996', '+998', '+1242', '+1246', '+1264', '+1268', '+1345', '+1441',
+  '+1473', '+1684', '+1767', '+1809', '+1868', '+1876',
+]
+
 /** Longest first, so "+256" is never mistaken for "+2" when reading a pasted number. */
-const DIAL_CODES_BY_LENGTH = Object.keys(PHONE_RULES).sort((a, b) => b.length - a.length)
+const DIAL_CODES_BY_LENGTH = [...DIAL_CODES].sort((a, b) => b.length - a.length)
 
 export function ruleFor(dialCode) {
   return PHONE_RULES[String(dialCode || '').trim()] || null
@@ -106,6 +148,15 @@ export function validatePhone(dialCode, raw, countryName) {
  * Yoola from here. The country code is read from the front and removed, and the national part is
  * measured against that country's rule — which is exactly the check whose absence sent SMS to
  * eight-digit numbers that could never receive them.
+ *
+ * Two details decide whether a real seller gets an SMS:
+ *
+ *  - the country code is the *longest* match, so a Grenadian `+1 473 …` is read as Grenada and not
+ *    as a twelve-digit American number;
+ *  - a country we have no length rule for is measured with `FALLBACK_LENGTHS` rather than refused.
+ *    The picker offers those countries, so refusing one is a button that can never work — the
+ *    screen said yes and this said no. A number that matches no dial code at all still gets the
+ *    honest answer, because that is the case a person can actually fix.
  */
 export function validateIntl(raw) {
   const digits = String(raw || '').replace(/\D/g, '')
@@ -117,10 +168,16 @@ export function validateIntl(raw) {
   }
 
   const national = digits.slice(dial.length - 1)
-  const lengths = PHONE_RULES[dial]
+  const exactLengths = PHONE_RULES[dial]
+  const lengths = exactLengths || FALLBACK_LENGTHS
   if (!lengths.includes(national.length)) {
     const wanted = lengths.length === 1 ? `${lengths[0]} digits` : lengths.join(' or ') + ' digits'
-    return { ok: false, message: `${dial} numbers are ${wanted} — you typed ${national.length}.` }
+    return {
+      ok: false,
+      message: exactLengths
+        ? `${dial} numbers are ${wanted} — you typed ${national.length}.`
+        : `${dial} numbers are usually ${FALLBACK_LENGTHS[0]}–${FALLBACK_LENGTHS[FALLBACK_LENGTHS.length - 1]} digits — you typed ${national.length}.`,
+    }
   }
 
   return { ok: true, e164: `+${digits}`, dial, national }

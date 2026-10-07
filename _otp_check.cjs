@@ -378,6 +378,78 @@ function jsFilesUnder(dir) {
 
   // ── the same rules on both sides of the wire ───────────────────────────────────────────────
 
+  check('every country the wizard offers is one the server can read', () => {
+    // `src/countryCodes.ts` is the picker, and the picker is what a seller actually chooses from.
+    // `validateIntl` used to know only the handful of codes in PHONE_RULES, so a seller in Paraguay
+    // was told their own number was "missing its country code" a moment after the screen had
+    // accepted it. These two lists are one list; this check is what says so. Add a country to the
+    // picker and it fails until the server can read that country too.
+    const picker = [...new Set(
+      [...fs.readFileSync(path.join(__dirname, 'src', 'countryCodes.ts'), 'utf8')
+        .matchAll(/dialCode:\s*'([^']+)'/g)]
+        .map((match) => '+' + match[1].replace(/\D/g, '')),
+    )].sort()
+
+    assert.ok(picker.length > 100, `expected the whole country list, found ${picker.length} dial codes`)
+    assert.ok(
+      picker.every((dial) => /^\+\d{1,4}$/.test(dial)),
+      `a dial code could not be read: ${picker.filter((dial) => !/^\+\d{1,4}$/.test(dial)).join(', ')}`,
+    )
+    assert.deepStrictEqual(
+      [...phone.DIAL_CODES].sort(),
+      picker,
+      'src/countryCodes.ts and api/_lib/phone.js must list exactly the same dial codes',
+    )
+    // A country we measure must be a country we can read, or that rule is unreachable code.
+    Object.keys(phone.PHONE_RULES).forEach((dial) => {
+      assert.ok(phone.DIAL_CODES.includes(dial), `${dial} has a length rule but is not a readable dial code`)
+    })
+  })
+
+  check('a country we have no length rule for is measured, not refused — and the rules still bite', () => {
+    // Paraguay: a real dial code the picker offers and PHONE_RULES has no opinion about. This is the
+    // number that used to come back 400 after the screen had accepted it.
+    const paraguay = phone.validateIntl('+595981123456')
+    assert.strictEqual(paraguay.ok, true, paraguay.message)
+    assert.strictEqual(paraguay.dial, '+595')
+    assert.strictEqual(paraguay.national, '981123456')
+    assert.strictEqual(paraguay.e164, '+595981123456')
+
+    // The Caribbean codes sit under +1 and are four digits long, so the split must be longest-first:
+    // read as America, Grenada's seven digits would look like an eleven-digit number.
+    const grenada = phone.validateIntl('+14734151234')
+    assert.strictEqual(grenada.ok, true, grenada.message)
+    assert.strictEqual(grenada.dial, '+1473')
+    assert.strictEqual(grenada.national, '4151234')
+
+    // And a national part no country has is still refused — reading more countries must not mean
+    // accepting anything at all.
+    const nonsense = phone.validateIntl('+59512')
+    assert.strictEqual(nonsense.ok, false)
+    assert.ok(nonsense.message.includes('usually 6–15 digits'), nonsense.message)
+    assert.ok(nonsense.message.includes('you typed 2'), nonsense.message)
+
+    // The countries we serve are measured exactly. That check is the reason this module exists.
+    const uganda = phone.validateIntl('+256771234567')
+    assert.strictEqual(uganda.ok, true, uganda.message)
+    assert.strictEqual(uganda.e164, '+256771234567')
+    assert.strictEqual(uganda.dial, '+256')
+    assert.strictEqual(uganda.national, '771234567')
+    // One digit short of Uganda's nine, and it says so in Uganda's own words.
+    const tooShort = phone.validateIntl('+25677123456')
+    assert.strictEqual(tooShort.ok, false)
+    assert.ok(tooShort.message.includes('+256 numbers are 9 digits'), tooShort.message)
+    assert.ok(tooShort.message.includes('you typed 8'), tooShort.message)
+
+    // No country code at all is the one mistake a person can fix, so it still says exactly that.
+    const noCode = phone.validateIntl('0771234567')
+    assert.strictEqual(noCode.ok, false)
+    assert.ok(/missing its country code/.test(noCode.message), noCode.message)
+    assert.strictEqual(phone.validateIntl('').ok, false)
+    assert.strictEqual(phone.validateIntl('   ').ok, false)
+    assert.strictEqual(phone.validateIntl(null).ok, false)
+  })
+
   const clientBuild = path.join(__dirname, '_dsbuild', 'phone.cjs')
   if (!fs.existsSync(clientBuild)) {
     skip(
@@ -436,6 +508,39 @@ function jsFilesUnder(dir) {
         phone.validatePhone('+999', '777777777', 'Nowhere').ok,
         clientPhone.validatePhone('+999', '777777777', 'Nowhere').ok,
       )
+    })
+
+    check('no country the picker offers is a dead button on the server', () => {
+      // The one direction that hurts: the screen accepts the number and the endpoint refuses it, so
+      // the seller is left looking at a button that cannot work. Every country in the picker, at
+      // every length the screen would let through, has to be readable here as well. (The other
+      // direction is the strictness we want — a country with a rule of its own is still measured
+      // exactly, which the check above covers.)
+      const picker = [...new Set(
+        [...fs.readFileSync(path.join(__dirname, 'src', 'countryCodes.ts'), 'utf8')
+          .matchAll(/dialCode:\s*'([^']+)'/g)].map((match) => match[1]),
+      )]
+
+      picker.forEach((raw) => {
+        const dial = '+' + raw.replace(/\D/g, '')
+        for (let len = 1; len <= 16; len++) {
+          // One repeated digit, so the browser's "you pasted your country code" habit cannot quietly
+          // strip it: no dial code is a run of nines, and neither is a national part.
+          const national = '9'.repeat(len)
+          if (!clientPhone.validatePhone(raw, national, 'Someplace').ok) continue
+          const mine = phone.validateIntl(dial + national)
+          assert.strictEqual(
+            mine.ok,
+            true,
+            `${dial} with ${len} digits: the screen accepts what the server refuses — ${mine.message}`,
+          )
+          assert.strictEqual(
+            mine.e164,
+            dial + national,
+            `${dial} with ${len} digits: the number sent to Yoola must be the number that was typed`,
+          )
+        }
+      })
     })
   }
 

@@ -63,6 +63,7 @@ function Probe([string] $name, [string] $file, [string] $before, [string] $after
 $setup = Join-Path $root 'src\SetupStore.tsx'
 $recovery = Join-Path $root 'src\RecoveryModal.tsx'
 $trust = Join-Path $root 'src\trust.ts'
+$otp = Join-Path $root 'src\otpClient.ts'
 $CRLF = "`r`n"
 # RecoveryModal.tsx is the one source file in the repo saved with bare LF, so anchors that span a
 # line in it must not carry a carriage return.
@@ -80,11 +81,12 @@ Probe 'recovery is caught writing the badge alongside the contact number' $recov
   "          whatsapp: selectedCountry.dialCode.replace(/[^+\d]/g, '') + newPhone,${LF}          phoneVerified: true,${LF}        })" `
   'the contact number the recovery flow changes is the only thing it writes' $false
 
-# 3. the code sent under a name the endpoint never reads (the flow can only 400)
-Probe 'recovery is caught submitting the code as otp instead of code' $recovery `
-  '{ phone: getFullNewPhone(), code: phoneCode }' `
-  '{ phone: getFullNewPhone(), otp: phoneCode }' `
-  'the contact number the recovery flow changes is the only thing it writes' $false
+# 3. the code sent under a name the endpoint never reads (the flow can only 400). The body is built in
+#    the shared client now, so this is the file the probe edits.
+Probe 'the one client is caught submitting the code as otp instead of code' $otp `
+  'body: JSON.stringify({ phone, code }),' `
+  'body: JSON.stringify({ phone, otp: code }),' `
+  'the code is posted under the name the endpoint reads' $false
 
 # 4. the code on its way back to the browser
 Probe 'the client is caught logging the code again' $recovery `
@@ -104,4 +106,16 @@ Probe 'a collection renamed on one side only is caught' $trust `
   "export const TRUST_COLLECTION = 'trusted'" `
   'the collection the client reads is the one the server writes' $true
 
-Write-Host "`nall 6 probes bit, and every file came back byte-exact"
+# 7. a second door to the phone API, in a screen that should have used the first one
+Probe 'the wizard is caught knocking on the phone API directly' $setup `
+  "      const sent = await sendOtp(getFullWhatsapp())${CRLF}      if (sent.ok) {" `
+  "      const sent = await sendOtp(getFullWhatsapp())${CRLF}      fetch('/api/otp/send')${CRLF}      if (sent.ok) {" `
+  'the phone API has one door, and only src/otpClient.ts knocks on it' $false
+
+# 8. the third-party sign-in the wizard used to prove numbers with, put back
+Probe 'the wizard is caught proving a number with a third-party sign-in again' $setup `
+  "import { signInWithCustomToken, signInWithPopup, type AuthProvider } from 'firebase/auth'" `
+  "import { signInWithPhoneNumber, signInWithCustomToken, signInWithPopup, type AuthProvider } from 'firebase/auth'" `
+  'the wizard proves the number with our server, not with a third-party sign-in' $false
+
+Write-Host "`nall 8 probes bit, and every file came back byte-exact"

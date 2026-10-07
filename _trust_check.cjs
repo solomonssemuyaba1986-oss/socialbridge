@@ -18,7 +18,14 @@
  *      refuses a write that so much as *mentions* it, so one stray line took shop creation down;
  *   4. no code can reach the browser. The old dev server answered a failed send with
  *      `{ success: true, debugOtp: '123456' }` (`server/index.js:99-104`), and `RecoveryModal`
- *      still logged it on the client long after the server stopped sending it.
+ *      still logged it on the client long after the server stopped sending it;
+ *   5. the two endpoints are posted in exactly one shape, from exactly one file (`src/otpClient.ts`).
+ *      `{ phone, code }` is the shape `api/otp/verify` reads; an `otp` key is a 400 every time, and
+ *      it only ever shows up when a real person is waiting for a real text message;
+ *   6. the wizard proves the number with *our* server — never with a third-party sign-in behind a
+ *      widget — and the gate in front of Create My Shop reads that proof from `trust/{uid}`, the
+ *      same record the badge reads. A widget in the middle, or a gate that trusts a stale render,
+ *      puts the whole thing back in the browser's hands.
  */
 const assert = require('assert')
 const fs = require('fs')
@@ -206,10 +213,81 @@ check('the contact number the recovery flow changes is the only thing it writes'
     !/phoneVerified/.test(updates[0]),
     'the rules check the keys a write *touches*, so this one field refuses the whole update — recovery would stop working',
   )
-  // And it must submit the code under the name the endpoint reads, or the flow can only ever 400.
+  // The request itself is no longer written here: both screens ask `src/otpClient.ts`, so the shape
+  // exists once and the checks below are the only place that has to know what it is.
   assert.ok(
-    /\{\s*phone:\s*getFullNewPhone\(\),\s*code:\s*phoneCode\s*\}/.test(recovery),
-    "/api/otp/verify reads `field(body, 'code')` — an `otp` key is a 400 every time",
+    /await verifyOtp\(getFullNewPhone\(\),\s*phoneCode\)/.test(recovery),
+    'recovery must verify the number through src/otpClient.ts, the one client that posts the endpoints',
+  )
+})
+
+// ── the two endpoints, and the one place that posts them ──────────────────────────────────────
+
+check('the code is posted under the name the endpoint reads', () => {
+  // `api/otp/verify` reads `field(body, 'code')`. An `otp` key is a 400 every time, and a 400 here
+  // only ever shows up when a real person is waiting for a real text message — so the shape is
+  // asserted where it is written down.
+  const client = codeOnly(fs.readFileSync(path.join(__dirname, 'src', 'otpClient.ts'), 'utf8'))
+  assert.ok(
+    /\{\s*phone,\s*code\s*\}/.test(client),
+    'verify must post `{ phone, code }` — `otp` is the same request with a 400 stuck on the end of it',
+  )
+  assert.ok(/\{\s*phone\s*\}/.test(client), 'send must be asked with the number alone')
+
+  const recovery = codeOnly(fs.readFileSync(path.join(__dirname, 'src', 'RecoveryModal.tsx'), 'utf8'))
+  assert.ok(/await sendOtp\(getFullNewPhone\(\)\)/.test(recovery), 'recovery must send through src/otpClient.ts')
+  assert.ok(
+    !/api\/otp/.test(recovery),
+    'recovery must not name the endpoints itself — that is the shape living in two places',
+  )
+})
+
+check('the phone API has one door, and only src/otpClient.ts knocks on it', () => {
+  // Two screens posting the same two endpoints in their own shapes is exactly how the code ends up
+  // under `otp` in one of them, where no test can tell which. So the endpoints are named in one
+  // file, and this says which file that is.
+  const callers = srcFiles.filter((file) => /\/api\/otp\//.test(codeOnly(fs.readFileSync(file, 'utf8'))))
+  assert.deepStrictEqual(callers.map(rel), ['src/otpClient.ts'])
+})
+
+check('the wizard proves the number with our server, not with a third-party sign-in', () => {
+  // What used to be here: the wizard handed the number to Firebase (`signInWithPhoneNumber`) behind a
+  // reCAPTCHA widget, and the proof of the number lived in the browser's own session — which is why
+  // the badge could be had without an SMS ever being sent. The code now comes from our server *and*
+  // is checked by our server, and our server is the only thing that records the proof.
+  const setup = codeOnly(fs.readFileSync(path.join(__dirname, 'src', 'SetupStore.tsx'), 'utf8'))
+  assert.ok(
+    !/signInWithPhoneNumber|linkWithPhoneNumber|PhoneAuthProvider/.test(setup),
+    'the wizard must not sign the number in with a third party — a code that never left the server is the proof',
+  )
+  assert.ok(
+    !/RecaptchaVerifier|recaptcha-container|setup-recaptcha/.test(setup),
+    'a reCAPTCHA widget has no place in this flow: /api/otp/send is the send',
+  )
+  assert.ok(/await sendOtp\(/.test(setup), 'the wizard must ask our server for the code')
+  assert.ok(/await verifyOtp\(/.test(setup), 'the wizard must have our server check the code')
+  // A phone sign-up *becomes* the account the server minted the token for — the browser never
+  // decides this about itself.
+  assert.ok(
+    /await signInWithCustomToken\(auth,\s*verified\.token\)/.test(setup),
+    'the phone path must sign in with the token the server minted',
+  )
+})
+
+check('the gate in front of Create My Shop reads the proof the server wrote', () => {
+  const setup = codeOnly(fs.readFileSync(path.join(__dirname, 'src', 'SetupStore.tsx'), 'utf8'))
+  // `trust/{uid}` — the one collection the server writes the proof into, and the one the badge
+  // reads. A shop cannot be created on a number the server has not proved.
+  assert.ok(
+    /getDoc\(doc\(db,\s*TRUST_COLLECTION,\s*uid\)\)/.test(setup),
+    'the wizard must read the proof from trust/{uid}, under the uid the server wrote it for',
+  )
+  assert.ok(/await readPhoneProof\(/.test(setup), 'the gate must ask the server-written record, not a local flag')
+  // One decision, not two: the proof the phone step shows and the proof the gate demands are the same
+  // expression, so "verified" on screen can never be refused by the button below it.
+  assert.ok(
+    /const liveProven = [\s\S]{0,200}phoneIsProven/.test(setup),
+    'the gate must consult the same derived proof the phone step shows',
   )
 })
 
