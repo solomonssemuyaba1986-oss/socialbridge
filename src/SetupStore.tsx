@@ -43,6 +43,8 @@ interface SetupDraft {
   businessName?: string
   storeHandle?: string
   bio?: string
+  /** The seller's own words about themselves — optional, and shown on their store page. */
+  story?: string
   /** A logo picked during setup is kept here, so a reload cannot throw the photo away. */
   logoUrl?: string
   nationality?: string
@@ -107,6 +109,9 @@ function SetupStore() {
   const [handleAvailable, setHandleAvailable] = useState<boolean | null>(null)
   const [handleChecking, setHandleChecking] = useState(false)
   const [bio, setBio] = useState(() => readSetupDraft().bio || '')
+  // Optional, like the logo: a short, human note shown on the store page. It is a nudge, never
+  // a gate — it can never block Continue, and a shop looks right without it.
+  const [story, setStory] = useState(() => readSetupDraft().story || '')
   // Optional on purpose: the seller can give their shop a face right here, or skip it and
   // still create the shop. It is never part of the "needed" list below, and it can never
   // block Continue.
@@ -251,6 +256,7 @@ function SetupStore() {
       businessName,
       storeHandle,
       bio,
+      story,
       logoUrl,
       nationality,
       location,
@@ -263,7 +269,7 @@ function SetupStore() {
     } catch {
       // ignore storage errors
     }
-  }, [businessName, storeHandle, bio, logoUrl, nationality, location, whatsapp, selectedCountry, step, createdSlug])
+  }, [businessName, storeHandle, bio, story, logoUrl, nationality, location, whatsapp, selectedCountry, step, createdSlug])
 
   // If a signed-in user already has a store, don't let /setup overwrite it
   useEffect(() => {
@@ -421,9 +427,11 @@ function SetupStore() {
         const hit = await reverseGeocode(point)
         if (hit) {
           setPlace(hit.place)
-          setLocation(placeLabel(hit.place) || hit.label)
+          // Only fill the text if they have not written their own — a landmark they typed is
+          // more precise than a town name, and tapping 📍 must never wipe it.
+          setLocation(prev => prev.trim() ? prev : (placeLabel(hit.place) || hit.label))
         } else {
-          setLocation(`${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}`)
+          setLocation(prev => prev.trim() ? prev : `${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}`)
         }
         setLocationLoading(false)
       },
@@ -552,6 +560,7 @@ function SetupStore() {
       await setDoc(doc(db, 'sellers', user.uid), {
         businessName: cleanedName,
         bio: cleanedBio,
+        story: sanitizeInput(story, 200),
         whatsapp: fullNumber,
         logoUrl: finalLogoUrl,
         slug,
@@ -559,7 +568,9 @@ function SetupStore() {
         instagram: '',
         tiktok: '',
         nationality,
-        location: resolved.label || location.trim(),
+        // The seller's own words win. `resolveSellerLocation` still fills `geo`/`place`/
+        // `geoSource` below so Nearby keeps working, but it never overwrites what they typed.
+        location: sanitizeInput(location, 75),
         geo: resolved.geo,
         place: resolved.place,
         geoSource: resolved.geoSource,
@@ -887,6 +898,19 @@ function SetupStore() {
         {errors.bio && <p style={{ color: '#c33', fontSize: '12px', margin: '4px 0 16px' }}>{errors.bio}</p>}
         {!errors.bio && <div style={{ marginBottom: '16px' }} />}
 
+        {/* Optional, and framed as a nudge rather than a wall — the same shape as the logo.
+            The copy names both fields on purpose: they are the pair that sells the seller. */}
+        <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Your story <span style={{ color: '#888', fontWeight: '400', fontSize: '12px' }}>— optional</span></label>
+        <p style={{ fontSize: '13px', color: '#666', margin: '4px 0 8px', lineHeight: 1.5 }}>
+          Buyers trust sellers they know. Add your story and location to get more sales.
+        </p>
+        <textarea id="setup-field-story" value={story}
+          onChange={e => setStory(e.target.value.slice(0, 200))}
+          placeholder="e.g. I started this shop in 2021 with two pairs of shoes. I pack every order myself and deliver the same day around town."
+          rows={4} maxLength={200}
+          style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', marginBottom: '4px', fontSize: '15px', boxSizing: 'border-box', resize: 'none' }} />
+        <p style={{ fontSize: '11px', color: '#999', margin: '0 0 16px', textAlign: 'right' }}>{story.length}/200</p>
+
           </>
         )}
         {step === 1 && (
@@ -999,12 +1023,14 @@ function SetupStore() {
         {errors.nationality && <p style={{ color: '#c33', fontSize: '12px', margin: '4px 0 16px' }}>{errors.nationality}</p>}
         {!errors.nationality && <div style={{ marginBottom: '16px' }} />}
 
-        {/* Location */}
+        {/* Location — free text, in the seller's own words. A landmark ("opposite the energy
+            centre, shop number 5") finds a shop far more often than a town name does. */}
         <label style={{ fontSize: '14px', fontWeight: '600', color: '#333' }}>Location</label>
-        <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>Your city or district — helps buyers find you. Type manually or use auto-detect.</p>
+        <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 8px' }}>Where buyers can find you — describe it in your own words. Tap 📍 only if you want buyers to see how far they are.</p>
         <div style={{ display: 'flex', gap: '8px', marginBottom: '4px' }}>
-          <input value={location} onChange={e => { setLocation(e.target.value); setGeo(null); setPlace(null); setGeoSource(null) }}
-            placeholder="e.g. Kampala, Uganda"
+          <input value={location} onChange={e => { setLocation(e.target.value.slice(0, 75)); setGeo(null); setPlace(null); setGeoSource(null) }}
+            placeholder="e.g. Kikuubo, Kampala opposite energy centre, shop number 5"
+            maxLength={75}
             style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '15px', boxSizing: 'border-box' }} />
           <button onClick={handleUseMyLocation} disabled={locationLoading}
             title="Use my current location"
@@ -1012,6 +1038,7 @@ function SetupStore() {
             {locationLoading ? '⏳' : '📍'}
           </button>
         </div>
+        <p style={{ fontSize: '11px', color: '#999', margin: '0 0 4px', textAlign: 'right' }}>{location.length}/75</p>
         {locationLoading && <p style={{ color: '#888', fontSize: '12px', margin: '4px 0 16px' }}>Detecting your location...</p>}
         {!locationLoading && geoSource === 'gps' && (
           <p style={{ color: '#2e7d32', fontSize: '12px', fontWeight: '700', margin: '4px 0 16px' }}>✓ Exact pin saved — buyers nearby will see how far you are</p>

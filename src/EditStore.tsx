@@ -21,6 +21,7 @@ function EditStore() {
   const aliasesRef = useRef<string[]>([])
   const [businessName, setBusinessName] = useState('')
   const [bio, setBio] = useState('')
+  const [story, setStory] = useState('')
   const [whatsapp, setWhatsapp] = useState('')
   const [selectedCountry, setSelectedCountry] = useState<CountryCode>(() =>
     COUNTRY_CODES.find(c => c.dialCode === '+256') || COUNTRY_CODES[0]
@@ -66,6 +67,7 @@ function EditStore() {
           aliasesRef.current = Array.isArray(data.aliases) ? data.aliases.filter((a: unknown) => typeof a === 'string') : []
           setBusinessName(data.businessName || '')
           setBio(data.bio || '')
+          setStory(data.story || '')
           const stored = (data.whatsapp || '').replace(/^0/, '')
           const country = [...COUNTRY_CODES].sort((a, b) => dialStripped(b).length - dialStripped(a).length)
             .find(c => stored.startsWith(dialStripped(c)))
@@ -107,9 +109,11 @@ function EditStore() {
         const hit = await reverseGeocode(point)
         if (hit) {
           setPlace(hit.place)
-          setLocation(placeLabel(hit.place) || hit.label)
+          // Only fill the text if they have not written their own — a landmark they typed is
+          // more precise than a town name, and tapping 📍 must never wipe it.
+          setLocation(prev => prev.trim() ? prev : (placeLabel(hit.place) || hit.label))
         } else {
-          setLocation(`${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}`)
+          setLocation(prev => prev.trim() ? prev : `${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}`)
         }
         setLocationLoading(false)
       },
@@ -143,13 +147,15 @@ function EditStore() {
       const updates: Record<string, any> = {
         businessName: businessName.trim(),
         bio: bio.trim(),
+        story: story.trim().slice(0, 200),
         whatsapp: fullNumber,
         email: email.trim(),
         instagram: instagram.trim().replace(/^@+/, ''),
         tiktok: tiktok.trim().replace(/^@+/, ''),
         logoUrl: finalLogoUrl,
         nationality: nationality.trim(),
-        location: resolved.label || location.trim(),
+        // The seller's own words win; geocoding only fills `geo`/`place`/`geoSource` below.
+        location: location.trim().slice(0, 75),
         geo: resolved.geo,
         place: resolved.place,
         geoSource: resolved.geoSource,
@@ -178,6 +184,13 @@ function EditStore() {
 
         <label>Bio</label>
         <textarea value={bio} onChange={e => setBio(e.target.value)} rows={3} style={{ width: '100%', padding: 8, marginBottom: 8 }} />
+
+        <label>Your story <span style={{ fontWeight: 400, color: '#888', fontSize: 12 }}>— optional</span></label>
+        <p style={{ fontSize: 12, color: '#666', margin: '0 0 6px' }}>Buyers trust sellers they know. Add your story and location to get more sales.</p>
+        <textarea value={story} onChange={e => setStory(e.target.value.slice(0, 200))} rows={4} maxLength={200}
+          placeholder="e.g. I started this shop in 2021 with two pairs of shoes. I pack every order myself."
+          style={{ width: '100%', padding: 8, marginBottom: 4 }} />
+        <p style={{ fontSize: 11, color: '#999', margin: '0 0 8px', textAlign: 'right' }}>{story.length}/200</p>
 
         <label>WhatsApp number</label>
         <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #ccc', borderRadius: 4, overflow: 'visible', marginBottom: 8, position: 'relative' }}>
@@ -267,18 +280,20 @@ function EditStore() {
           )}
         </div>
 
-        {/* Location */}
+        {/* Location — free text, the seller's own words. Geocoding never overwrites it. */}
         <label>Location</label>
-        <p style={{ fontSize: '12px', color: '#666', margin: '4px 0 4px' }}>Your city or district — helps buyers find you. Type manually or use auto-detect.</p>
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-          <input value={location} onChange={e => { setLocation(e.target.value); setGeo(null); setPlace(null); setGeoSource(null) }}
-            placeholder="e.g. Kampala, Uganda"
+        <p style={{ fontSize: '12px', color: '#666', margin: '4px 0 4px' }}>Where buyers can find you — describe it in your own words. Tap 📍 only if you want buyers to see how far they are.</p>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '4px' }}>
+          <input value={location} onChange={e => { setLocation(e.target.value.slice(0, 75)); setGeo(null); setPlace(null); setGeoSource(null) }}
+            placeholder="e.g. Kikuubo, Kampala opposite energy centre, shop number 5"
+            maxLength={75}
             style={{ flex: 1, padding: '10px 12px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '14px', boxSizing: 'border-box' }} />
           <button onClick={handleUseMyLocation} disabled={locationLoading}
             style={{ padding: '10px 14px', background: locationLoading ? '#eee' : '#f0f0f0', color: '#333', border: '1px solid #ddd', borderRadius: '6px', cursor: locationLoading ? 'not-allowed' : 'pointer', fontSize: '14px', whiteSpace: 'nowrap' }}>
             {locationLoading ? '⏳' : '📍 Detect'}
           </button>
         </div>
+        <p style={{ fontSize: '11px', color: '#999', margin: '0 0 8px', textAlign: 'right' }}>{location.length}/75</p>
         {locationLoading && <p style={{ fontSize: '12px', color: '#888', margin: '0 0 8px' }}>Detecting your location…</p>}
         {!locationLoading && geoSource === 'gps' && <p style={{ fontSize: '12px', color: '#2e7d32', fontWeight: '700', margin: '0 0 8px' }}>✓ Exact pin saved — buyers nearby will see how far you are.</p>}
         {!locationLoading && geoSource !== 'gps' && !!location.trim() && <p style={{ fontSize: '12px', color: '#888', margin: '0 0 8px' }}>📍 We'll place your store using this area (approximate). Tap Detect for an exact pin.</p>}

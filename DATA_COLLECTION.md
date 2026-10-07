@@ -71,6 +71,7 @@ Written by `SetupStore.tsx:552` (create), `EditStore.tsx:234-258` (edit), `Dashb
 |---|---|---|
 | `businessName` | string `"Aisha Fabrics"` | required at setup |
 | `bio` | string ≤500 | "What do you sell?" — sanitised |
+| `story` | string ≤200 | the seller's own words about themselves (optional) — shown on the store page under the bio, warm and slightly italic, clamped to ~4 lines (SetupStore step 1 / EditStore) |
 | `slug` | string `"aisha-fabrics"` | the store link; **never changes on rename** |
 | `aliases` | string[] (≤8) | previous business names, for search recall (EditStore.tsx:250-251) |
 | `whatsapp` | string `"+256771234567"` | contact/payout number — **PII** |
@@ -81,7 +82,7 @@ Written by `SetupStore.tsx:552` (create), `EditStore.tsx:234-258` (edit), `Dashb
 | `recoveryEmailPromptCount` | number | how many times we nagged |
 | `recoveryEmailLastPrompted` | Date | |
 | `nationality` | string `"Uganda"` | |
-| `location` | string `"Kampala, Nakawa"` | free text, normalised by geocoding |
+| `location` | string ≤75 `"Kikuubo, Kampala opposite energy centre, shop number 5"` | the seller's **own words**, kept exactly as typed — a landmark finds a shop better than a town name (SetupStore step 2 / EditStore). Geocoding no longer overwrites it; `geo`/`place`/`geoSource` below are still derived from it (or from a dropped pin) so Nearby keeps working |
 | `geo` | `{ lat: number, lng: number }` | store coordinates |
 | `place` | `{ city, area, region, country }` | structured area (place.ts:20-25) |
 | `geoSource` | `'gps' \| 'area'` | real pin vs approximate town |

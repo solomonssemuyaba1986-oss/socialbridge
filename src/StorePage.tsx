@@ -37,6 +37,7 @@ import { useDraft } from './useDraft'
 interface Seller {
   businessName: string
   bio: string
+  story?: string
   logoUrl: string
   slug: string
   whatsapp?: string
@@ -876,6 +877,13 @@ const handleSignupForAction = async (provider: any) => {
         <p style={{ margin: '0 0 16px', color: '#888', fontSize: '15px', maxWidth: '360px', marginInline: 'auto' }}>
           {seller.bio}
         </p>
+        {/* The seller's own words — warm, slightly italic, and clamped to four lines so it stays a
+            read, not a wall of text. Only shown when there is one. */}
+        {seller.story && (
+          <p style={{ margin: '0 auto 16px', color: '#f0c98a', fontSize: '15px', fontStyle: 'italic', lineHeight: 1.55, maxWidth: '420px', whiteSpace: 'pre-line', display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+            {seller.story}
+          </p>
+        )}
         {seller.location && (
           <p style={{ margin: '0 0 16px', color: '#aaa', fontSize: '13px', fontWeight: '600' }}>
             📍 {seller.location}
