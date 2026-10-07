@@ -13,6 +13,7 @@
     "analytics:report": "node functions/analytics-report.js",
     "feedback:report": "node functions/feedback-report.js",
     "backfill:store-dates": "node functions/backfill-store-dates.js",
+    "backfill:seller-stats": "node functions/backfill-seller-stats.js",
     "deploy:rules": "firebase deploy --only firestore:rules",
     "deploy:indexes": "firebase deploy --only firestore:indexes",
     "deploy:payments": "firebase deploy --only functions:pawapayStartDeposit,functions:pawapayPaymentStatus,functions:pawapayCallback"

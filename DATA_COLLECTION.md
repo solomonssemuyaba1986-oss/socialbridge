@@ -92,7 +92,7 @@ Written by `SetupStore.tsx:552` (create), `EditStore.tsx:234-258` (edit), `Dashb
 | `idDocumentPath` | string | **Legacy — no longer written.** National ID capture is off (see §11); older stores may still carry a path. Always stripped from exports. |
 | `idStatus` | `'pending'` | **Legacy — no longer written.** Was always `'pending'` with nothing to advance it. |
 | `createdAt` | Date | when the store was created (`SetupStore.tsx:575`) — powers the "Selling since …" trust line in the sidebar and dashboard. Older stores may be missing it; `functions/backfill-store-dates.js` fills it from real evidence only (first product → first order → first visit) and records where it came from. |
-| *read but never written* | `verifiedSeller`, `realSellerBadgeEarnedAt`, `realSellerBadgeGraceUntil`, `activeSellerBadgeEarnedAt`, `activeSellerBadgeGraceUntil` | `useSellerStats.ts:198-208` — badges are recomputed client-side, never persisted |
+| *read but never written* | `verifiedSeller`, `realSellerBadgeEarnedAt`, `realSellerBadgeGraceUntil` | `useSellerStats.ts` — the 🟢 Real Seller badge is recomputed client-side from the fields above plus `trust/{uid}`, never persisted. The 💎 Reliable Seller badge is not stored here either: it is derived from rachett's own numbers in `stats/main` (below). |
 
 ### 2.3 Subcollections under `sellers/{uid}/`
 
@@ -112,7 +112,7 @@ Written by `SetupStore.tsx:552` (create), `EditStore.tsx:234-258` (edit), `Dashb
 
 **`visits/{id}`** — `{ sourcePlatform, createdAt }` only. **No uid** → anonymous traffic counter (`StorePage.tsx:428-432`).
 
-**`stats/main`** — read-only legacy (`useSellerStats.ts:212`); no writer exists.
+**`stats/main`** — rachett's own measurement of the shop, written **only by the server** (`functions/index.js`: `recomputeSellerCompletion` on every order write, `recordSellerFirstResponse` on the seller's first reply in a thread; backfill existing shops with `node functions/backfill-seller-stats.js`). `firestore.rules` closes it to browser writes, so the badge it feeds cannot be self-awarded. Fields: `completedOrders`, `totalOrders`, `orderCompletionRate` (whole %, `null` until the shop has an order), `responsesMeasured`, `responseTotalMinutes`, `avgResponseMinutes` (`null` until a reply exists), `updatedAt`. The app reads these in `useSellerStats.ts` and applies the thresholds from `src/reliableBadge.ts` (completion ≥ 80%, reply < 120 min) to draw the 💎 Reliable Seller badge.
 
 ### 2.4 Seller files
 

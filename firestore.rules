@@ -102,9 +102,15 @@ service cloud.firestore {
         }
       }
 
+      // The 💎 Reliable Seller numbers — completion rate and average first-reply time. They are
+      // rachett's own measurements, kept in the one place a seller cannot reach: `functions/
+      // sellerStats.js` computes them and writes them with `firebase-admin`, which bypasses these
+      // rules. A seller may read their own numbers (and the store page shows the badge derived
+      // from them to everyone), but writing them by hand would let a shop award itself the badge,
+      // so the browser's pen is taken away entirely.
       match /stats/{statId} {
         allow read: if true;
-        allow write: if request.auth.uid == sellerId;
+        allow write: if false;
       }
 
       match /orders/{orderId} {

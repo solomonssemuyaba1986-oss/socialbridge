@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { doc, onSnapshot, collection, query, getDocs } from 'firebase/firestore'
 import { db } from './firebase'
 import { TRUST_COLLECTION, isPhoneProven } from './trust'
+import { meetsReliableCriteria } from './reliableBadge'
 
 export type BadgeStatus = 'none' | 'active' | 'grace'
 
@@ -19,13 +20,17 @@ export interface SellerStats {
   verifiedSeller: boolean
   realSellerBadge: boolean
   realSellerBadgeStatus: BadgeStatus
-  activeSellerBadge: boolean
-  activeSellerBadgeStatus: BadgeStatus
+  reliableSellerBadge: boolean
+  reliableSellerBadgeStatus: BadgeStatus
   productCount: number
   productWithImageCount: number
   productQualityCount: number
   fulfilledOrders: number
   totalOrdersProcessed: number
+  /** Rachett-measured (server): completed orders ÷ all orders. `null` until measured. */
+  orderCompletionRate: number | null
+  completedOrders: number
+  totalOrders: number
 }
 
 function computeStoreAge(createdAt: any): { label: string; days: number } {
@@ -93,31 +98,12 @@ function computeRealSellerBadge(
 }
 
 /**
- * Active Seller Badge (🔵):
- * - Must already be a Real Seller
- * - 14+ days on rachett
- * - 10+ fulfilled orders
- * - 60%+ delivery success (computed only when 10+ orders processed)
- * - Responds in < 24 hours (avg response < 1440 minutes)
- * - 3+ quality products (name 5+ chars, description 20+ chars, has image)
+ * The old 🔵 Active Seller badge used to live here. It asked for six things at once — age, order
+ * count, delivery success, a 24-hour reply, and three "quality" products — and because it was
+ * recomputed in the browser it was really just a mirror of what the seller had written about
+ * themselves. It is gone. The 💎 Reliable badge replaces it, and its two questions are answered by
+ * rachett from real orders and real replies (see `reliableBadge.ts` and `functions/sellerStats.js`).
  */
-function computeActiveSellerBadge(
-  realSellerBadge: boolean,
-  storeAgeDays: number,
-  fulfilledOrders: number,
-  deliverySuccess: number,
-  totalOrdersProcessed: number,
-  avgResponseMinutes: number | null,
-  productQualityCount: number,
-): boolean {
-  if (!realSellerBadge) return false
-  if (storeAgeDays < 14) return false
-  if (fulfilledOrders < 10) return false
-  if (totalOrdersProcessed >= 10 && deliverySuccess < 60) return false
-  if (avgResponseMinutes === null || avgResponseMinutes >= 1440) return false
-  if (productQualityCount < 3) return false
-  return true
-}
 
 function computeBadgeStatus(
   conditionsMet: boolean,
@@ -152,13 +138,16 @@ export function useSellerStats(sellerId: string | null) {
     verifiedSeller: false,
     realSellerBadge: false,
     realSellerBadgeStatus: 'none',
-    activeSellerBadge: false,
-    activeSellerBadgeStatus: 'none',
+    reliableSellerBadge: false,
+    reliableSellerBadgeStatus: 'none',
     productCount: 0,
     productWithImageCount: 0,
     productQualityCount: 0,
     fulfilledOrders: 0,
     totalOrdersProcessed: 0,
+    orderCompletionRate: null,
+    completedOrders: 0,
+    totalOrders: 0,
   })
   const [loading, setLoading] = useState(true)
 
@@ -180,8 +169,6 @@ export function useSellerStats(sellerId: string | null) {
     bio?: string
     realSellerBadgeEarnedAt?: number
     realSellerBadgeGraceUntil?: number
-    activeSellerBadgeEarnedAt?: number
-    activeSellerBadgeGraceUntil?: number
   }>({})
 
   useEffect(() => {
@@ -208,8 +195,6 @@ export function useSellerStats(sellerId: string | null) {
         bio: data.bio || undefined,
         realSellerBadgeEarnedAt: data.realSellerBadgeEarnedAt || undefined,
         realSellerBadgeGraceUntil: data.realSellerBadgeGraceUntil || undefined,
-        activeSellerBadgeEarnedAt: data.activeSellerBadgeEarnedAt || undefined,
-        activeSellerBadgeGraceUntil: data.activeSellerBadgeGraceUntil || undefined,
       })
 
       setStats(prev => ({
@@ -220,30 +205,27 @@ export function useSellerStats(sellerId: string | null) {
       }))
     })
 
+    // Rachett's own measurements — the completion rate and the average first-reply time. The
+    // server writes only these (see `functions/sellerStats.js`); everything else the store page
+    // shows is derived from the shop's own orders and products, below, so a stats document that
+    // appears mid-session can never blank a number the shop already had.
     const unsubStats = onSnapshot(doc(db, 'sellers', sellerId, 'stats', 'main'), (snap) => {
-      if (!snap.exists()) {
-        computeStatsFromOrdersAndProducts(sellerId)
-        return
-      }
+      if (!snap.exists()) return
       const data = snap.data()
       setStats(prev => ({
         ...prev,
-        totalSales: data.totalSales || 0,
-        avgRating: data.avgRating || 0,
-        reviewCount: data.reviewCount || 0,
-        responseRate: data.responseRate || 0,
-        responseTime: computeResponseTimeLabel(data.avgResponseMinutes ?? null),
-        avgResponseMinutes: data.avgResponseMinutes ?? null,
-        repeatBuyers: data.repeatBuyers || 0,
-        deliverySuccess: data.deliverySuccess || 0,
-        fulfilledOrders: data.fulfilledOrders || 0,
-        totalOrdersProcessed: data.totalOrdersProcessed || 0,
-        productCount: data.productCount || 0,
-        productWithImageCount: data.productWithImageCount || 0,
-        productQualityCount: data.productQualityCount || 0,
+        completedOrders: data.completedOrders ?? prev.completedOrders,
+        totalOrders: data.totalOrders ?? prev.totalOrders,
+        orderCompletionRate: data.orderCompletionRate ?? prev.orderCompletionRate,
+        avgResponseMinutes: data.avgResponseMinutes ?? prev.avgResponseMinutes,
+        responseTime: computeResponseTimeLabel(data.avgResponseMinutes ?? prev.avgResponseMinutes),
       }))
       setLoading(false)
     })
+
+    // The numbers a shop can count for itself: sales, delivery success, product quality. Read
+    // straight from its orders and products — the server document carries none of them.
+    computeStatsFromOrdersAndProducts(sellerId)
 
     // The proof, from the one place a browser cannot write. For a shop created after the move
     // this is the only document that carries it — the seller document may not hold the field at
@@ -320,15 +302,12 @@ export function useSellerStats(sellerId: string | null) {
     stats.productCount,
   )
 
-  const activeSellerConditionsMet = computeActiveSellerBadge(
-    realSellerConditionsMet,
-    stats.storeAgeDays,
-    stats.fulfilledOrders,
-    stats.deliverySuccess,
-    stats.totalOrdersProcessed,
-    stats.avgResponseMinutes,
-    stats.productQualityCount,
-  )
+  const reliableSellerConditionsMet = meetsReliableCriteria({
+    realSeller: realSellerConditionsMet,
+    orderCompletionRate: stats.orderCompletionRate,
+    totalOrders: stats.totalOrders,
+    avgResponseMinutes: stats.avgResponseMinutes,
+  })
 
   const realBadge = computeBadgeStatus(
     realSellerConditionsMet,
@@ -336,19 +315,17 @@ export function useSellerStats(sellerId: string | null) {
     sellerFields.realSellerBadgeGraceUntil,
   )
 
-  const activeBadge = computeBadgeStatus(
-    activeSellerConditionsMet,
-    sellerFields.activeSellerBadgeEarnedAt,
-    sellerFields.activeSellerBadgeGraceUntil,
-  )
+  // The 💎 Reliable badge has no grace timer and is never persisted: it simply reflects the last
+  // numbers rachett measured, so it comes and goes with the shop's own behaviour.
+  const reliableBadge = computeBadgeStatus(reliableSellerConditionsMet, undefined, undefined)
 
   return {
     stats: {
       ...stats,
       realSellerBadge: realBadge.visible,
       realSellerBadgeStatus: realBadge.status,
-      activeSellerBadge: activeBadge.visible,
-      activeSellerBadgeStatus: activeBadge.status,
+      reliableSellerBadge: reliableBadge.visible,
+      reliableSellerBadgeStatus: reliableBadge.status,
     },
     loading,
   }

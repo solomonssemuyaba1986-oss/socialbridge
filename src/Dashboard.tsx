@@ -10,7 +10,8 @@ import LoadingScreen from './LoadingScreen'
 import Sidebar from './Sidebar'
 import SellerTabs from './SellerTabs'
 import { variantLabel } from './productSheetUtils'
-import { getStoreAgeLabel } from './useSellerStats'
+import { getStoreAgeLabel, useSellerStats } from './useSellerStats'
+import ReliableBadgeCard from './ReliableBadgeCard'
 import { resolveSellerLocation, type GeoSource, type Place } from './place'
 import ViewHistory from './ViewHistory'
 import { useViewHistory } from './useViewHistory'
@@ -109,6 +110,12 @@ function Dashboard() {
   }
 
   const { orders, loading: ordersLoading } = useSellerOrders()
+
+  // 💎 Reliable Seller — rachett's own two numbers (completion rate, average first reply). They
+  // are read-only to the app: `functions/sellerStats.js` writes them into `sellers/{uid}/stats/
+  // main`. The card below turns them into something the seller can act on.
+  const { stats: reliableStats } = useSellerStats(userId || null)
+
   /**
    * What this seller looked at while shopping the market — the very same device-local list Browse
    * keeps (`rachett_history_browse`), shown here so a seller finds it on their own home instead of
@@ -292,6 +299,15 @@ const paidPending = paidCount(pendingOrders)
           </div>
         </div>
         <div className="rt-container" style={{ maxWidth: '100%', margin: '0', padding: 0 }}>
+
+        {/* 💎 Reliable Seller progress — the seller's own view of the badge buyers see. */}
+        <ReliableBadgeCard
+          realSeller={reliableStats.realSellerBadge}
+          orderCompletionRate={reliableStats.orderCompletionRate}
+          completedOrders={reliableStats.completedOrders}
+          totalOrders={reliableStats.totalOrders}
+          avgResponseMinutes={reliableStats.avgResponseMinutes}
+        />
 
         {/* Things you looked at in the market. The strip renders nothing at all when the list is
             empty, so a seller who never shops sees no dead shelf on their work screen. */}

@@ -1,4 +1,5 @@
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https')
+const { onDocumentWritten, onDocumentCreated } = require('firebase-functions/v2/firestore')
 const { defineSecret } = require('firebase-functions/params')
 const admin = require('firebase-admin')
 const { Resend } = require('resend')
@@ -6,6 +7,7 @@ const pesapal = require('./pesapal')
 const pawapay = require('./pawapay')
 const pawapayRules = require('./pawapayRules')
 const pawapaySignatures = require('./pawapaySignatures')
+const sellerStats = require('./sellerStats')
 const { decideOutcome, amountAgrees } = require('./paymentRules')
 const { orderTotal } = require('./orderAmount')
 const crypto = require('crypto')
@@ -904,4 +906,131 @@ exports.pawapayPaymentStatus = onCall(
     }
   }
 )
+
+/* ─── 💎 Reliable Seller — the two things rachett measures for the badge ────────────────────────
+ *
+ * The 🟢 Real Seller badge is a profile check: a seller can see for themselves whether they filled
+ * the fields in. This badge is not. Both of its questions need data only rachett holds — every
+ * order a shop received, and the private buyer↔seller threads — so both are answered here and
+ * written to `sellers/{uid}/stats/main`, a document `firestore.rules` locks to the server.
+ *
+ *   recomputeSellerCompletion   a shop's orders changed → rewrite completed / total / rate
+ *   recordSellerFirstResponse   a message arrived, and it is the seller's first reply → fold the
+ *                               reply time into the running average (`responseTotalMinutes`)
+ *
+ * The app reads these numbers and applies the thresholds itself (`src/reliableBadge.ts`); the
+ * numbers are the server's, the rule is the app's, and `_reliable_check.cjs` pins them together.
+ */
+
+/** `sellers/{sellerId}/stats/main` — the single document the badge and the card both read. */
+function statsRef(sellerId) {
+  return db.collection('sellers').doc(sellerId).collection('stats').doc('main')
+}
+
+/**
+ * Recompute a shop's completion numbers from its orders.
+ *
+ * Every order the shop received is the denominator — cancelled, out-of-stock and still-open ones
+ * included — because "did this seller finish what they were asked to?" is the question. The rate
+ * is left untouched (`null`) for a shop that has received nothing yet.
+ */
+exports.recomputeSellerCompletion = onDocumentWritten(
+  'sellers/{sellerId}/orders/{orderId}',
+  async (event) => {
+    const sellerId = event.params.sellerId
+    try {
+      const snap = await db.collection('sellers').doc(sellerId).collection('orders').get()
+      const orders = snap.docs.map((d) => d.data())
+      const total = orders.length
+      const completed = sellerStats.countCompleted(orders)
+      await statsRef(sellerId).set(
+        {
+          completedOrders: completed,
+          totalOrders: total,
+          orderCompletionRate: sellerStats.orderCompletionRate(completed, total),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      )
+    } catch (err) {
+      // Let it retry: a missed trigger would leave the badge stale, and this is cheap to redo.
+      console.error('[reliable] completion recompute failed for', sellerId, err && err.message)
+      throw err
+    }
+  },
+)
+
+/**
+ * Measure a seller's first reply and fold it into their running average.
+ *
+ * Only the seller's *first* reply in a thread counts, and only once: the thread document is
+ * stamped with `firstResponseMinutes` inside the same transaction, so a retried delivery cannot
+ * count the same reply twice. Anything that is not the first reply returns without writing.
+ */
+exports.recordSellerFirstResponse = onDocumentCreated(
+  'conversations/{conversationId}/messages/{messageId}',
+  async (event) => {
+    const conversationId = event.params.conversationId
+    const message = event.data.data()
+    if (!message || !message.senderId) return
+
+    const convoRef = db.collection('conversations').doc(conversationId)
+
+    try {
+      await db.runTransaction(async (tx) => {
+        const convoSnap = await tx.get(convoRef)
+        if (!convoSnap.exists) return
+        const convo = convoSnap.data()
+        const sellerId = convo.sellerId
+        const buyerId = convo.buyerId
+        if (!sellerId || !buyerId) return
+        // Only the seller's own words can be a reply, and only the first one per thread counts.
+        if (message.senderId !== sellerId) return
+        if (convo.firstResponseMinutes != null) return
+
+        const msgsSnap = await tx.get(
+          convoRef.collection('messages').orderBy('createdAt', 'asc'),
+        )
+        const messages = msgsSnap.docs.map((d) => {
+          const m = d.data()
+          return { senderId: m.senderId, atMillis: millis(m.createdAt) }
+        })
+        const minutes = sellerStats.firstResponseMinutes(messages, sellerId, buyerId)
+        if (minutes === null) return
+
+        const sRef = statsRef(sellerId)
+        const statsSnap = await tx.get(sRef)
+        const avg = sellerStats.accumulateResponse(
+          statsSnap.exists ? statsSnap.data() : null,
+          minutes,
+        )
+
+        tx.set(convoRef, {
+          firstResponseMinutes: minutes,
+          firstResponseAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true })
+        tx.set(sRef, {
+          responsesMeasured: avg.responsesMeasured,
+          responseTotalMinutes: avg.responseTotalMinutes,
+          avgResponseMinutes: avg.avgResponseMinutes,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true })
+      })
+    } catch (err) {
+      console.error('[reliable] first-response measure failed for', conversationId, err && err.message)
+      throw err
+    }
+  },
+)
+
+/** A Firestore timestamp as epoch millis — for measuring the gap between two messages. */
+function millis(value) {
+  if (!value) return 0
+  if (typeof value === 'number') return value
+  if (typeof value.toMillis === 'function') return value.toMillis()
+  if (typeof value.toDate === 'function') return value.toDate().getTime()
+  if (value instanceof Date) return value.getTime()
+  return 0
+}
+
 

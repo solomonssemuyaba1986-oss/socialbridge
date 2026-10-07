@@ -942,7 +942,7 @@ const handleSignupForAction = async (provider: any) => {
       {/* Trust Bar */}
       <div style={{ maxWidth: '640px', margin: '0 auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
         {/* Badges Row */}
-        {(sellerStats.realSellerBadge || sellerStats.activeSellerBadge) && (
+        {(sellerStats.realSellerBadge || sellerStats.reliableSellerBadge) && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
             {/* 🟢 Real Seller Badge */}
             {sellerStats.realSellerBadge && (
@@ -956,15 +956,16 @@ const handleSignupForAction = async (provider: any) => {
                 🟢 {getBadgeStatusLabel(sellerStats.realSellerBadgeStatus, 'Real Seller')}
               </span>
             )}
-            {/* 🔵 Active Seller Badge */}
-            {sellerStats.activeSellerBadge && (
-              <span title={sellerStats.activeSellerBadgeStatus === 'grace' ? 'This seller\'s active status is being renewed' : 'Consistently delivers on rachett'}
+            {/* 💎 Reliable Seller Badge — rachett-measured (order completion + fast replies), never
+                self-declared. It rides on top of 🟢, so a shop with both shows both. */}
+            {sellerStats.reliableSellerBadge && (
+              <span title="Rachett measured this seller: they finish their orders and reply to buyers within two hours"
                 style={{ 
-                  background: sellerStats.activeSellerBadgeStatus === 'grace' ? '#555' : '#2196F3', 
+                  background: '#7a5cff', 
                   color: '#fff', fontSize: '11px', fontWeight: '800', padding: '4px 12px', borderRadius: '999px', 
-                  display: 'inline-flex', alignItems: 'center', gap: '4px', opacity: sellerStats.activeSellerBadgeStatus === 'grace' ? 0.6 : 1,
+                  display: 'inline-flex', alignItems: 'center', gap: '4px',
                 }}>
-                🔵 {getBadgeStatusLabel(sellerStats.activeSellerBadgeStatus, 'Active Seller')}
+                💎 {getBadgeStatusLabel(sellerStats.reliableSellerBadgeStatus, 'Reliable Seller')}
               </span>
             )}
           </div>
