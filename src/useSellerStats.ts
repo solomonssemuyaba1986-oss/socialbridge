@@ -202,6 +202,13 @@ export function useSellerStats(sellerId: string | null) {
         storeAge: age.label,
         storeAgeDays: age.days,
         verifiedSeller: data.verifiedSeller || false,
+        // The shop's rating, recomputed by `recomputeSellerRating` (functions/index.js) every time
+        // a buyer comments anywhere in the shop. It rides on the seller document — the one this
+        // listener already holds — so every card can show it without reading a single comment.
+        // `firestore.rules` refuses these keys from a browser, so this is rachett's own number
+        // rather than something a seller typed. Absent = nobody has rated the shop yet.
+        avgRating: Number(data.ratingAvg) || 0,
+        reviewCount: Number(data.ratingCount) || 0,
       }))
     })
 

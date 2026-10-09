@@ -1,4 +1,5 @@
 import { avatarColor, initialOf } from './avatar'
+import SellerRating from './SellerRating'
 
 const green = '#adff2f'
 
@@ -9,6 +10,9 @@ export interface StoreCardData {
   bio?: string
   /** Shown as a small line when we know it (e.g. "12 products"). */
   note?: string
+  /** The shop's rating, read from the seller document — drawn only when the shop has one. */
+  ratingAvg?: number | null
+  ratingCount?: number
 }
 
 type Props = {
@@ -37,11 +41,15 @@ function StoreCard({ store, onClick }: Props) {
             {initial}
           </div>
         )}
-        <div style={{ minWidth: 0 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <p style={{ margin: 0, color: '#fff', fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {store.businessName || store.slug}
           </p>
-          <p style={{ margin: '2px 0 0', color: '#666', fontSize: 11 }}>@{store.slug}</p>
+          {/* The shop's link, and its rating when it has one — the same chip every card wears. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, minWidth: 0 }}>
+            <p style={{ margin: 0, color: '#666', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{store.slug}</p>
+            <SellerRating source={store} />
+          </div>
         </div>
       </div>
 

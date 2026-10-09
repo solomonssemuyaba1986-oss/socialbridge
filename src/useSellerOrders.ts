@@ -58,6 +58,12 @@ export interface SellerOrder {
   returnRequestedAt?: number
   returnUpdatedAt?: number
   returnDecidedAt?: number
+  /**
+   * ⭐ When the seller asked for a rating. Written once and never again (`firestore.rules`), so
+   * this is both the record that the ask went out and the reason the button stops offering it.
+   * It is not `updatedAt`: asking must not move the delivery date the return window runs from.
+   */
+  reviewAskedAt?: number
 }
 
 export function isUnread(order: SellerOrder): boolean {

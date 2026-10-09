@@ -17,6 +17,7 @@ import {
 } from './productSheetUtils'
 import { swatchFor } from './colourSwatch'
 import LikePill from './LikePill'
+import SellerRating from './SellerRating'
 import ProductPreview from './ProductPreview'
 import ProductReviews from './ProductReviews'
 import type { Eligibility, Review } from './reviewUtils'
@@ -279,20 +280,19 @@ function ProductSheet({
             <LikePill liked={Boolean(liked)} count={likeCount || 0} onToggle={isMine ? undefined : onToggleLike} />
           </div>
 
-          <p style={{ margin: '4px 0 10px', color: '#777', fontSize: 13 }}>
-            {product.businessName}
+          {/* The shop, its rating (when it has one) and the way into its shop page. */}
+          <div style={{ margin: '4px 0 10px', color: '#777', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span>{product.businessName}</span>
+            <SellerRating source={product} />
             {onOpenStore && !isMine && (
-              <>
-                {' · '}
-                <button
-                  onClick={() => leaveWith('store', onOpenStore)}
-                  style={{ background: 'none', border: 'none', padding: 0, color: green, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
-                >
-                  Visit shop →
-                </button>
-              </>
+              <button
+                onClick={() => leaveWith('store', onOpenStore)}
+                style={{ background: 'none', border: 'none', padding: 0, color: green, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Visit shop →
+              </button>
             )}
-          </p>
+          </div>
 
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
             <p style={{ margin: 0, fontWeight: 800, color: green, fontSize: 20 }}>UGX {product.price}</p>
@@ -387,7 +387,7 @@ function ProductSheet({
           <ProductReviews
             sellerId={product.sellerId}
             productId={product.id}
-            aggregate={{ count: product.reviewCount, scoreSum: product.reviewScoreSum, loved: product.reviewLovedCount }}
+            aggregate={{ count: product.reviewCount, scoreSum: product.reviewScoreSum }}
             eligibility={reviewEligibility}
             onWrite={onWriteReview}
             surface="sheet"

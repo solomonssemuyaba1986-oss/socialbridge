@@ -103,10 +103,16 @@ export async function createOrderConversation(opts: {
   sellerName: string
   buyerName: string
   orderId: string
+  /**
+   * The order **document id**. `orderId` above is the reference a human reads ("RT-AB12CD"), and a
+   * rating is authorised by looking the *document* up — so the bubble carries both and the rating
+   * ask can prove the purchase.
+   */
+  orderDocId?: string
   productName: string
   productPrice: string
   quantity: string
-  /** Which product — the delivered bubble needs it to offer the ♥. */
+  /** Which product — the delivered bubble needs it to offer the rating. */
   productId?: string
   /** What they picked in the details sheet, so the thread says "Black / M" and not just "1 ×". */
   color?: string
@@ -121,6 +127,7 @@ export async function createOrderConversation(opts: {
       type: 'order',
       text,
       orderId: opts.orderId,
+      ...(opts.orderDocId ? { orderDocId: opts.orderDocId } : {}),
       productId: opts.productId,
       productName: opts.productName,
       productPrice: opts.productPrice,
@@ -136,7 +143,7 @@ export async function createOrderConversation(opts: {
 
 /**
  * The delivery moment. When a seller confirms an order the buyer finds out where they already
- * track it — the thread — and is asked the one question that turns a delivery into a ♥.
+ * track it — the thread — and is asked the one question that turns a delivery into a rating.
  * It is the seller's own message, so the buyer's order document stays read-only to them.
  */
 export async function postOrderDeliveredMessage(opts: {
@@ -146,6 +153,8 @@ export async function postOrderDeliveredMessage(opts: {
   sellerName?: string
   buyerName?: string
   orderId: string
+  /** The order **document id** — what the rating stars hand to the rules as proof of delivery. */
+  orderDocId?: string
   productId?: string
   productName?: string
   productPrice?: string
@@ -161,8 +170,9 @@ export async function postOrderDeliveredMessage(opts: {
       type: 'order',
       text,
       orderId: opts.orderId,
+      ...(opts.orderDocId ? { orderDocId: opts.orderDocId } : {}),
       // Marks this as the *delivery* bubble (the read-receipt field `status` is taken),
-      // which is what makes the "Did you love it?" prompt appear for the buyer.
+      // which is what makes the rating stars appear for the buyer.
       orderStatus: 'fulfilled',
       productId: opts.productId,
       productName: opts.productName,
@@ -173,6 +183,53 @@ export async function postOrderDeliveredMessage(opts: {
     })
   } catch (err) {
     console.warn('Failed to post the delivered message:', err)
+  }
+}
+
+/**
+ * "Please rate this order" — the seller's own nudge, posted into the thread the buyer is already
+ * reading rather than sent anywhere new.
+ *
+ * It is a message of its own type (`reviewAsk`) carrying the order **document id**, because that is
+ * what turns the bubble into a rating the buyer can leave with one tap: the thread renders the
+ * stars (`RatePrompt`), and the write it makes is authorised by the very order being asked about.
+ * The seller may ask once per order — `reviewAskedAt` is write-once in `firestore.rules` — which is
+ * what keeps this a nudge rather than a campaign.
+ */
+export async function postReviewRequestMessage(opts: {
+  sellerId: string
+  buyerId: string
+  sellerName?: string
+  buyerName?: string
+  /** The reference a human reads ("RT-AB12CD"). Display only. */
+  orderId: string
+  /** The order document id — what the stars need to prove the purchase. */
+  orderDocId: string
+  productId?: string
+  productName?: string
+}): Promise<boolean> {
+  try {
+    if (!opts.buyerId || opts.buyerId === opts.sellerId || !opts.orderDocId) return false
+    const text = `⭐ How was ${opts.productName || 'your order'}? Rate it — one tap.`
+    const conversationId = await bumpConversationHeader({ ...opts, senderId: opts.sellerId, lastMessage: text })
+
+    await addDoc(collection(db, 'conversations', conversationId, 'messages'), {
+      senderId: opts.sellerId,
+      type: 'reviewAsk',
+      text,
+      orderId: opts.orderId,
+      orderDocId: opts.orderDocId,
+      productId: opts.productId,
+      productName: opts.productName,
+      status: 'sent',
+      createdAt: serverTimestamp(),
+    })
+    return true
+  } catch (err) {
+    // The ask is a courtesy: if the thread cannot take it, the seller is told so plainly and the
+    // order itself is left exactly as it was.
+    console.warn('Failed to post the rating request:', err)
+    return false
   }
 }
 

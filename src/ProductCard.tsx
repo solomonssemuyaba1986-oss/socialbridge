@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { formatBagCount, green, productImages, type CardProduct } from './productCardUtils'
 import { useDataSaver } from './dataSaverLive'
 import LikePill from './LikePill'
+import SellerRating from './SellerRating'
 import { useImpression } from './analytics/useImpression'
 
 type Props = {
@@ -170,7 +171,12 @@ function ProductCard({
             <p style={{ margin: 0, flex: 1, minWidth: 0, fontWeight: '700', fontSize: '14px', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</p>
             <LikePill liked={Boolean(liked)} count={likeCount || 0} onToggle={isMine ? undefined : onToggleLike} />
           </div>
-          <p style={{ margin: '0 0 8px', color: '#555', fontSize: '12px' }}>{p.businessName}</p>
+          {/* The shop's name, and — when it has one — the shop's rating. The number belongs to the
+              shop, not this product, so it reads the same on every card that shop appears on. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 8px', minWidth: 0 }}>
+            <span style={{ color: '#555', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.businessName}</span>
+            <SellerRating source={p} />
+          </div>
           {/* Price on the left, Details on the right — one tap to the whole product, and
               the page never leaves. */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>

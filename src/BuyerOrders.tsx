@@ -18,15 +18,16 @@ import { green, toMillis } from './productCardUtils'
 import { useBag } from './useBag'
 import { variantLabel } from './productSheetUtils'
 import ReviewForm from './ReviewForm'
-import { getMyReview } from './useProductReviews'
-import { canReview, type Review } from './reviewUtils'
+import RatePrompt from './RatePrompt'
+import { getMyReview, markRatingAsked, wasRatingAsked } from './useProductReviews'
+import { canReview, shouldNudgeRating, type Review } from './reviewUtils'
 import { useProductLikes } from './useProductLikes'
 import LikePill from './LikePill'
 import LovePrompt from './LovePrompt'
 import { notify } from './notifications'
 import { trackEvent } from './analytics'
 import { returnIsOpen, returnStateWords } from './returnPolicy'
-import { returnLineForOrder } from './returnView'
+import { deliveredAtMsOf, returnLineForOrder } from './returnView'
 import { useNow } from './useNow'
 import ReturnSheet from './ReturnSheet'
 
@@ -200,6 +201,52 @@ function BuyerOrders() {
     [orders],
   )
 
+  /**
+   * The quiet fallback: one order that was delivered a few days ago and is still unrated.
+   *
+   * The receipt asked first, the thread asked second — this is for the buyer who never went back to
+   * either. One order only (a nudge on every row would be a nag), and never on a row the ♥ question
+   * is already asking about.
+   *
+   * All of it happens in the effect rather than in a render: "three days old" is a fact about *now*,
+   * and the two reads that can veto the offer — "we have asked before?" (the marker is written once
+   * and kept forever) and "they rated it on another screen?" — cannot be guessed at while drawing.
+   * The rule itself is the pure half (`shouldNudgeRating`); this is only its plumbing.
+   */
+  const [ratingNudge, setRatingNudge] = useState<BuyerOrder | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const now = Date.now()
+      const order = uid
+        ? orders.find(o => Boolean(o.productId) && Boolean(o.sellerId) && shouldNudgeRating({
+            orderStatus: o.status,
+            deliveredAtMs: deliveredAtMsOf(o),
+            hasRated: commented.includes(o.id),
+            alreadyAsked: false,
+            isSeller: o.sellerId === uid,
+            now,
+          })) || null
+        : null
+      if (!order?.productId) {
+        if (!cancelled) setRatingNudge(null)
+        return
+      }
+      const asked = await wasRatingAsked(order.id)
+      const existing = asked ? null : await getMyReview(order.sellerId, order.productId)
+      if (cancelled) return
+      if (asked || existing) {
+        setRatingNudge(null)
+        return
+      }
+      setRatingNudge(order)
+      // Marked the moment it is shown: the card is offered once, and never comes back.
+      void markRatingAsked(order.id, 'orders')
+    })()
+    return () => { cancelled = true }
+  }, [uid, orders, commented])
+
   useEffect(() => {
     if (orders.length > 0) trackEvent('buyer_orders_viewed', { count: orders.length })
   }, [orders.length])
@@ -281,6 +328,7 @@ function BuyerOrders() {
             hasMore={hasMore && filter === 'all'}
             shops={shops}
             promptedOrderId={promptedOrderId}
+            askRatingId={ratingNudge?.id || ''}
             seenAt={seenAt}
             isLiked={isLiked}
             isInBag={isInBag}
@@ -292,6 +340,12 @@ function BuyerOrders() {
             onLoadMore={loadMore}
             onReview={(order) => void openReview(order)}
             onReturn={setReturnTarget}
+            onRated={(order) => {
+              // The row knows what it just did, without another read: the fallback card goes, the
+              // row's own button turns into "✓ Your comment".
+              setRatingNudge(null)
+              setCommented(prev => (prev.includes(order.id) ? prev : [...prev, order.id]))
+            }}
             reviewBusyId={reviewBusy}
             reviewedIds={commented}
           />
@@ -341,6 +395,8 @@ interface OrdersBodyProps {
   hasMore: boolean
   shops: Map<string, ShopInfo>
   promptedOrderId: string
+  /** The order the three-day fallback card is asking about, if any. */
+  askRatingId: string
   /** When the person last looked — anything changed after this gets a ● NEW. */
   seenAt: number
   isLiked: (productId: string) => boolean
@@ -355,6 +411,8 @@ interface OrdersBodyProps {
   onReview: (order: BuyerOrder) => void
   /** Opens the ↩️ sheet — the return policy, and the one tap out to rachett care. */
   onReturn: (order: BuyerOrder) => void
+  /** Told when a rating was left from a row, so the row can say so without another read. */
+  onRated: (order: BuyerOrder) => void
   /** The order whose comment form is being prepared, if any. */
   reviewBusyId: string
   /** Orders commented on in this session — so the row can say so without another read. */
@@ -368,6 +426,7 @@ function OrdersBody({
   hasMore,
   shops,
   promptedOrderId,
+  askRatingId,
   seenAt,
   isLiked,
   isInBag,
@@ -379,6 +438,7 @@ function OrdersBody({
   onLoadMore,
   onReview,
   onReturn,
+  onRated,
   reviewBusyId,
   reviewedIds,
 }: OrdersBodyProps) {
@@ -423,7 +483,10 @@ function OrdersBody({
                 shop={shops.get(order.sellerId)}
                 liked={Boolean(order.productId && isLiked(order.productId))}
                 inBag={Boolean(order.productId && isInBag(order.productId))}
-                askLove={order.id === promptedOrderId}
+                /* One question per row, at most: the ⭐ fallback takes precedence over the ♥
+                   prompt, because it is about the order that has just arrived. */
+                askLove={order.id === promptedOrderId && order.id !== askRatingId}
+                askRating={order.id === askRatingId}
                 placedMs={times.createdAt}
                 changedMs={times.updatedAt}
                 now={now}
@@ -433,6 +496,7 @@ function OrdersBody({
                 onToggleLove={() => onToggleLove(order)}
                 onChat={onChat}
                 onReview={() => onReview(order)}
+                onRated={() => onRated(order)}
                 onReturn={() => onReturn(order)}
                 reviewBusy={reviewBusyId === order.id}
                 reviewed={reviewedIds.includes(order.id)}
@@ -461,6 +525,8 @@ interface OrderRowProps {
   inBag: boolean
   /** The one delivered row that gets asked "did you love it?". */
   askLove: boolean
+  /** The one delivered row the quiet three-day fallback asks for a ⭐ rating on. */
+  askRating: boolean
   /** Milliseconds — when it was ordered, and when it last changed. */
   placedMs: number
   changedMs: number
@@ -476,6 +542,8 @@ interface OrderRowProps {
   onReview: () => void
   /** Opens the ↩️ sheet: the return, or the way out to rachett care. */
   onReturn: () => void
+  /** Told when a rating was left from this row, so the card goes and the row knows. */
+  onRated: () => void
   /** A read is in flight for this row (finding a comment they may have already written). */
   reviewBusy?: boolean
   /** They just commented on this order in this session. */
@@ -489,6 +557,7 @@ function OrderRow({
   liked,
   inBag,
   askLove,
+  askRating,
   placedMs,
   changedMs,
   now,
@@ -499,6 +568,7 @@ function OrderRow({
   onChat,
   onReview,
   onReturn,
+  onRated,
   reviewBusy,
   reviewed,
 }: OrderRowProps) {
@@ -554,6 +624,24 @@ function OrderRow({
           )}
         </div>
       </div>
+
+      {/* ⭐ The three-day fallback: a delivery that is a few days old and still unrated. One tap and
+          the rating is in — no form, no page to visit. Offered once per order, ever
+          (`users/{uid}/ratingAsks/{orderId}`), and never on a row the ♥ question is asking on. */}
+      {askRating && order.productId && (
+        <div style={{ borderTop: '1px solid #222', marginTop: 10, paddingTop: 2 }}>
+          <RatePrompt
+            sellerId={order.sellerId}
+            productId={order.productId}
+            orderId={order.id}
+            orderRef={order.orderId}
+            productName={order.productName}
+            surface="orders"
+            prompt="How was it? One tap — it takes 5 seconds."
+            onRated={onRated}
+          />
+        </div>
+      )}
 
       {askLove && order.productId && (
         <div style={{ borderTop: '1px solid #222', marginTop: 10, paddingTop: 2 }}>

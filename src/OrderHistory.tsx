@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSellerOrders, type SellerOrder } from './useSellerOrders.ts'
-import { postOrderDeliveredMessage } from './createBuyerOrder'
+import { postOrderDeliveredMessage, postReviewRequestMessage } from './createBuyerOrder'
 import { updateDoc, doc, deleteDoc, increment, serverTimestamp } from 'firebase/firestore'
 import { db } from './firebase'
 import { trackEvent } from './analytics'
@@ -108,6 +108,8 @@ function OrderHistory() {
   /** A refusal without a reason is a wall, so the words are checked before the write. */
   const [returnProblem, setReturnProblem] = useState<{ id: string; text: string } | null>(null)
   const [returnBusy, setReturnBusy] = useState(false)
+  /** The order whose rating ask is being posted — so the button cannot be tapped twice. */
+  const [reviewAskBusy, setReviewAskBusy] = useState('')
   const now = useNow()
 
   const updateOrderStatus = async (orderId: string, status: string) => {
@@ -142,18 +144,55 @@ function OrderHistory() {
       }
     }
     // The buyer finds out where they already track the order — and that bubble is where they
-    // are asked the one question that turns a delivery into a ♥. Confirming twice never asks twice.
+    // are asked for a rating: the stars, one tap, on the very order the delivery proves.
+    // Confirming twice never asks twice.
     if (!wasFulfilled && status === 'fulfilled' && order?.buyerUid) {
       await postOrderDeliveredMessage({
         sellerId: userId,
         buyerId: order.buyerUid,
         buyerName: order.buyerName,
         orderId: order.orderId || orderId,
+        // The document id, not the reference a human reads: the rating is authorised by looking
+        // this very order up in the rules.
+        orderDocId: orderId,
         productId: order.productId,
         productName: order.productName,
         productPrice: order.productPrice,
         quantity: String(order.quantity ?? '1'),
       })
+    }
+  }
+
+  /**
+   * ⭐ "Please rate this order."
+   *
+   * The seller's own nudge, for a delivery that has gone quiet. `reviewAskedAt` is written first
+   * and is write-once in `firestore.rules`, so it is the record that this order has been asked
+   * about — and the message into the thread is the ask the buyer can actually answer, with the
+   * stars and one tap. If the ask cannot reach the thread the seller is told plainly rather than
+   * left believing a nudge went out.
+   */
+  const requestRating = async (order: SellerOrder) => {
+    if (!userId || reviewAskBusy || !order.buyerUid) return
+    setReviewAskBusy(order.id)
+    try {
+      await updateDoc(doc(db, 'sellers', userId, 'orders', order.id), { reviewAskedAt: Date.now() })
+      const posted = await postReviewRequestMessage({
+        sellerId: userId,
+        buyerId: order.buyerUid,
+        buyerName: order.buyerName,
+        orderId: order.orderId || order.id,
+        orderDocId: order.id,
+        productId: order.productId,
+        productName: order.productName,
+      })
+      trackEvent('review_requested', { orderId: order.id, productId: order.productId, delivered: posted })
+      if (!posted) alert('That ask could not reach the buyer’s chat. The order is unchanged — try again.')
+    } catch (err) {
+      console.error('Could not ask for a rating:', err)
+      alert('That did not go through. Check your connection and try again.')
+    } finally {
+      setReviewAskBusy('')
     }
   }
 
@@ -375,6 +414,21 @@ function OrderHistory() {
                               Need Details
                             </button>
                           </div>
+                        )}
+
+                        {/* ⭐ Ask for a rating. Only a delivered order can be rated at all, and the ask
+                            lands in the thread the buyer already reads — as the stars, one tap. The
+                            field is write-once (`firestore.rules`), so the button becomes the record
+                            that this buyer has already been asked. */}
+                        {o.status === 'fulfilled' && o.buyerUid && (
+                          <button onClick={() => void requestRating(o)} disabled={Boolean(o.reviewAskedAt) || reviewAskBusy === o.id}
+                            style={{ width: '100%', padding: '10px', marginBottom: '8px', background: o.reviewAskedAt ? '#16240c' : '#222', color: o.reviewAskedAt ? green : '#fff', border: `1px solid ${o.reviewAskedAt ? green : '#333'}`, borderRadius: '8px', cursor: o.reviewAskedAt || reviewAskBusy === o.id ? 'default' : 'pointer', fontSize: '12px', fontWeight: '700' }}>
+                            {o.reviewAskedAt
+                              ? '⭐ Rating requested'
+                              : reviewAskBusy === o.id
+                                ? 'Asking…'
+                                : '⭐ Ask for a rating'}
+                          </button>
                         )}
 
                         {/* ↩️ The buyer's return, and the seller's half of the promise: answer

@@ -2,15 +2,16 @@ import { useEffect, useRef, useState } from 'react'
 import { uploadImageToCloudinary } from './uploadImage'
 import { postReview } from './useProductReviews'
 import {
-  REACTIONS,
   REVIEW_TAGS,
+  SCORES,
+  SCORE_LABELS,
   canEdit,
   canPost,
   cleanReviewText,
-  reactionEmoji,
-  reactionLabel,
-  type Reaction,
+  scoreLabel,
+  starRow,
   type Review,
+  type Score,
 } from './reviewUtils'
 import { trackEvent } from './analytics'
 import { green } from './productCardUtils'
@@ -20,7 +21,7 @@ import NameStrip from './NameStrip'
 /**
  * "How was it?" — the whole review form, three taps.
  *
- * Written for a phone and for someone who will not type: the reaction is required (one tap), the
+ * Written for a phone and for someone who will not type: the stars are required (one tap), the
  * chips are optional (a tap each, and they double as countable feedback), the words are optional,
  * and a photo is optional. Nothing else is asked — no title, no "would you recommend", no scores
  * per category.
@@ -42,10 +43,21 @@ type Props = {
   variant?: string
   /** The buyer's own comment, when they are correcting it. */
   existing?: Review | null
+  /**
+   * A star the buyer already tapped somewhere else (the receipt bubble, a nudge). The form opens
+   * with it chosen rather than asking the same question twice.
+   */
+  initialScore?: Score
   surface?: string
   onClose: () => void
   /** Fired after a successful post, so the host can say "thank you". */
   onPosted?: () => void
+}
+
+/** "5 stars — Loved it", for anyone who cannot see which star filled in. */
+function starAria(s: Score): string {
+  const label = SCORE_LABELS.find(l => l.score === s)?.label || ''
+  return `${s} star${s === 1 ? '' : 's'}${label ? ` — ${label}` : ''}`
 }
 
 function ReviewForm({
@@ -58,11 +70,12 @@ function ReviewForm({
   productImage,
   variant,
   existing,
+  initialScore,
   surface = 'orders',
   onClose,
   onPosted,
 }: Props) {
-  const [reaction, setReaction] = useState<Reaction | null>(existing?.reaction || null)
+  const [score, setScore] = useState<Score | null>(existing?.score || initialScore || null)
   const [tags, setTags] = useState<string[]>(existing?.tags || [])
   const [text, setText] = useState(existing?.text || '')
   const [photoUrl, setPhotoUrl] = useState(existing?.photoUrl || '')
@@ -76,7 +89,7 @@ function ReviewForm({
   const [editingName, setEditingName] = useState(false)
 
   const editing = Boolean(existing) && canEdit(existing?.createdAt)
-  const ready = canPost({ reaction, orderId, text })
+  const ready = canPost({ score, orderId, text })
 
   useEffect(() => {
     trackEvent('review_form_opened', { productId, sellerId, surface, eligible: Boolean(orderId) })
@@ -102,8 +115,8 @@ function ReviewForm({
   }
 
   const handlePost = async () => {
-    if (!reaction) {
-      setError('Tap how it was first.')
+    if (!score) {
+      setError('Tap a star first.')
       return
     }
     setPosting(true)
@@ -114,7 +127,7 @@ function ReviewForm({
         productId,
         orderId,
         orderRef,
-        reaction,
+        score,
         tags,
         text,
         photoUrl: photoUrl || undefined,
@@ -180,23 +193,27 @@ function ReviewForm({
             </div>
           </div>
 
-          {/* Tap 1 — required */}
+          {/* Tap 1 — required. Five stars, thumb-sized: the star number *is* the rating, so there
+              is nothing to interpret and nothing to read. */}
           <p style={{ margin: '0 0 8px', color: '#888', fontSize: '11px', fontWeight: 800, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-            {reaction ? `You said: ${reactionLabel(reaction)}` : 'How was it?'}
+            {score ? 'Your rating' : 'How was it?'}
           </p>
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-            {REACTIONS.map(r => {
-              const active = reaction === r.key
-              const tone = r.key === 'bad' ? '#ff6b6b' : green
+          <div role="radiogroup" aria-label="Rating, 1 to 5 stars" style={{ display: 'flex', gap: '6px' }}>
+            {SCORES.map(s => {
+              const picked = score === s
+              const filled = score !== null && s <= score
               return (
-                <button key={r.key} onClick={() => setReaction(r.key)}
-                  style={{ flex: 1, padding: '12px 6px', background: active ? tone : '#1c1c1c', color: active ? '#000' : '#ddd', border: `1px solid ${active ? tone : '#333'}`, borderRadius: '12px', fontWeight: 800, fontSize: '12px', cursor: 'pointer', lineHeight: 1.4 }}>
-                  <span style={{ display: 'block', fontSize: '20px', marginBottom: '4px' }}>{r.emoji}</span>
-                  {r.label}
+                <button key={s} type="button" role="radio" aria-checked={picked} aria-label={starAria(s)} title={starAria(s)}
+                  onClick={() => setScore(s)}
+                  style={{ flex: 1, minHeight: '48px', padding: 0, background: filled ? '#1d2a10' : '#1c1c1c', color: filled ? green : '#4a4a4a', border: `1px solid ${picked ? green : '#333'}`, borderRadius: '12px', fontSize: '24px', lineHeight: 1, cursor: 'pointer' }}>
+                  ★
                 </button>
               )
             })}
           </div>
+          <p aria-live="polite" style={{ margin: '6px 0 16px', color: score ? '#ddd' : '#666', fontSize: '12px', fontWeight: 700 }}>
+            {score ? `${starRow(score)} ${scoreLabel(score)}` : 'Tap a star — one tap and you are done.'}
+          </p>
 
           {/* What stood out — optional, tappable, and countable */}
           <p style={{ margin: '0 0 8px', color: '#888', fontSize: '11px', fontWeight: 800, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
@@ -260,7 +277,7 @@ function ReviewForm({
           )}
           <button onClick={handlePost} disabled={posting || uploading || !ready}
             style={{ width: '100%', padding: '14px', background: posting || uploading || !ready ? '#242424' : green, color: posting || uploading || !ready ? '#777' : '#000', border: 'none', borderRadius: '12px', fontWeight: 800, fontSize: '15px', cursor: posting || uploading || !ready ? 'not-allowed' : 'pointer' }}>
-            {posting ? 'Posting…' : reaction ? `Post — ${reactionEmoji(reaction)} ${reactionLabel(reaction)}` : 'Tap a reaction, then post'}
+            {posting ? 'Posting…' : score ? `Post — ${starRow(score)} ${scoreLabel(score)}` : 'Tap a star, then post'}
           </button>
           {existing && (
             <p style={{ margin: '8px 0 0', color: '#666', fontSize: '11px', textAlign: 'center' }}>

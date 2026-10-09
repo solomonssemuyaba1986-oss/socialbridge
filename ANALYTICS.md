@@ -119,9 +119,12 @@ the page needs it.
 | `product_unliked` | productId, sellerId, surface, source | ✅ (tapping a filled ♥ takes the vote back) |
 | `product_sheet_opened` | productId, sellerId, surface, hasVariants | ✅ (the ⓘ Details sheet on the product card — Browse, Nearby, the storefront) |
 | `product_sheet_closed` | productId, surface, dwellMs, action | ✅ (`action` = buy · bag · message · gallery · store · none — `none` is looked-and-left) |
-| `review_posted` | productId, sellerId, reaction, hasText, hasPhoto, tagCount, edited, surface | ⏳ (needs the reviews rules deployed) |
+| `review_posted` | productId, sellerId, score, hasText, hasPhoto, tagCount, edited, surface | ⏳ (needs the reviews rules deployed — `score` is the star, 1–5) |
 | `review_form_opened` | productId, sellerId, surface, eligible | ⏳ |
 | `review_comments_seen` | productId, count, surface | ⏳ |
+| `review_prompt_shown` | productId, sellerId, surface, orderRef | ⏳ (the one-tap stars: the delivered bubble, the seller's ask, under a thread, the My Orders fallback) |
+| `review_prompt_answered` | productId, sellerId, surface, score | ⏳ (`score` = the star they tapped — a rating with no words at all) |
+| `review_requested` | orderId, productId, delivered | ⏳ (a **seller** asked a buyer to rate, from My Orders; `delivered` says whether the ask reached the thread) |
 | `love_prompt_shown` | orderId, productId | ✅ (the delivered order bubble, buyer side) |
 | `love_prompt_answered` | orderId, productId, answer | ✅ (`yes` / `no` — a `no` is recorded here and nowhere else) |
 | `bag_opened` | size | ✅ |
@@ -200,7 +203,10 @@ Also available as `npm run analytics:report` from the repo root. Sections:
 - **PRODUCTS** — seen → opened → bagged → ordered → confirmed per product, plus the ♥
   likes cast in the window (split into card taps and post-purchase votes), "seen a lot,
   never ordered", and **"delivered 3+ times and never loved"** (where a "did you love
-  it? — no" ends up).
+  it? — no" ends up). The ⭐ half of that funnel is `review_prompt_shown` →
+  `review_prompt_answered` (the score is on the event), with `review_requested` saying how
+  often a *seller* had to ask — because a rating that only arrives when a shop chases it is a
+  different product decision from one that arrives on its own.
 - **SELLER PERFORMANCE** — visits, orders, confirmed, **average confirmation
   latency** and **average first-reply time** (minutes), out-of-stock rate,
   orders per visit.

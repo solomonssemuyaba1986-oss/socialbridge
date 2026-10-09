@@ -124,14 +124,26 @@ export const EVENT_PROPS = {
   product_sheet_closed: ['productId', 'surface', 'dwellMs', 'action'],
 
   // ── Comments on a product (reviews) ──────────────────────────────────────────────────────
-  // Written only after delivery, by a buyer the order itself proves. `reaction` is love|fine|bad,
-  // `tags` are the tapped chips (so the *content* of feedback is countable, not just its volume),
-  // and `edited` means they corrected their own comment — the counters move by the difference.
-  review_posted: ['productId', 'sellerId', 'reaction', 'hasText', 'hasPhoto', 'tagCount', 'edited', 'surface'],
+  // Written only after delivery, by a buyer the order itself proves. `score` is the star they
+  // tapped (1–5: the rating itself, in the event, so the spread is available without reading a
+  // single comment), `tags` are the tapped chips (so the *content* of feedback is countable, not
+  // just its volume), and `edited` means they corrected their own comment — the counters move by
+  // the difference.
+  review_posted: ['productId', 'sellerId', 'score', 'hasText', 'hasPhoto', 'tagCount', 'edited', 'surface'],
   // The form itself: opened where, and whether the buyer was even allowed to write (eligibility).
   review_form_opened: ['productId', 'sellerId', 'surface', 'eligible'],
   // The comment list being read — `count` is how many comments it had when they looked.
   review_comments_seen: ['productId', 'count', 'surface'],
+  // Asking for a rating, on whichever surface the buyer happens to be (`inbox` = the receipt bubble,
+  // `inbox-thread` = under a thread's composer, `orders` = the fallback card on My Orders). Shown vs.
+  // answered is the whole question these surfaces exist to answer, and `orderRef` rides along so a
+  // support conversation can find the order that was asked about.
+  review_prompt_shown: ['productId', 'sellerId', 'surface', 'orderRef'],
+  review_prompt_answered: ['productId', 'sellerId', 'surface', 'score'],
+  // The seller's own nudge, from their orders screen. `delivered` is whether the ask reached the
+  // buyer's chat — false means the seller was told it did not, which is the one failure worth
+  // watching here.
+  review_requested: ['orderId', 'productId', 'delivered'],
 
   // ── Bag (the only "save" we have today) ──────────────────────────────────
   bag_opened: ['size'],
@@ -172,8 +184,9 @@ export const EVENT_PROPS = {
   order_cancelled: ['orderId', 'by', 'reason'],
   order_completed: ['orderId', 'by', 'latencyMinutes'],
 
-  // The post-purchase ♥ question, asked on the delivered order bubble. `answer: 'no'` is the
-  // only place a "not loved" ever shows up — nothing public is written for it.
+  // The post-purchase ♥ question, asked on a delivered row of My Orders — the product's own like
+  // tally, not a comment. `answer: 'no'` is the only place a "not loved" ever shows up; nothing
+  // public is written for it. (The star rating has its own events above.)
   love_prompt_shown: ['orderId', 'productId'],
   love_prompt_answered: ['orderId', 'productId', 'answer'],
 

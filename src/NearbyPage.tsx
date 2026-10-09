@@ -18,6 +18,7 @@ import ProductPreview from './ProductPreview'
 import FloatingBag from './FloatingBag'
 import { getMainCategories } from './categories'
 import { green, productImages, seededShuffle, toMillis, type CardProduct } from './productCardUtils'
+import SellerRating from './SellerRating'
 import { trackEvent } from './analytics'
 import SearchSuggest from './SearchSuggest'
 import SearchBar from './SearchBar'
@@ -40,6 +41,13 @@ interface NearbySeller {
   geoSource?: GeoSource
   geo?: { lat: number; lng: number }
   distanceKm?: number
+  /**
+   * The shop's rating, straight off the seller document this page already loads (the whole
+   * document is spread into these objects below) — written by `recomputeSellerRating` and read by
+   * `SellerRating`. Absent on shops with no comments yet.
+   */
+  ratingAvg?: number | null
+  ratingCount?: number
 }
 
 interface DiscoveryProduct extends CardProduct {
@@ -292,6 +300,10 @@ function NearbyPage() {
               sellerId: seller.id,
               sellerSlug: seller.slug,
               businessName: seller.businessName,
+              // The shop's rating, from the seller document this page already read — every product
+              // the shop listed carries the same number.
+              ratingAvg: seller.ratingAvg ?? null,
+              ratingCount: seller.ratingCount ?? 0,
               // Only claim a distance when we know both points.
               distanceKm:
                 seller.geo && area
@@ -1117,7 +1129,10 @@ function NearbyPage() {
                       {initialOf(s.businessName || 'S')}
                     </div>
                   )}
-                  <p style={{ margin: '0 0 2px', fontWeight: '700', fontSize: '14px', color: '#fff' }}>{s.businessName}</p>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, margin: '0 0 2px', minWidth: 0 }}>
+                    <p style={{ margin: 0, fontWeight: '700', fontSize: '14px', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.businessName}</p>
+                    <SellerRating source={s} />
+                  </div>
                   <p style={{ margin: '0 0 8px', color: '#888', fontSize: '12px' }}>{placeLabel(s.place) || s.location || 'Location not set'}</p>
                   <span style={{ display: 'inline-block', background: '#12210d', border: `1px solid ${green}`, color: green, borderRadius: '999px', padding: '3px 10px', fontSize: '11px', fontWeight: '800' }}>
                     {s.distanceKm !== undefined

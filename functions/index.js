@@ -1033,4 +1033,60 @@ function millis(value) {
   return 0
 }
 
+/* ─── ⭐ The shop rating — one number, shown everywhere a shop is named ──────────────────────────
+ *
+ * Browse cards, Nearby cards, the shop page and the details sheet all print the same figure next to
+ * a shop's name: the average of every comment that shop has received, with the three taps scored
+ * ♥ 5 · 🙂 3 · 👎 1 (`sellerStats.ratingFromReviews`). No browser could produce it — it needs every
+ * comment in the shop, and a number a shop could write itself is a number a shop could award
+ * itself.
+ *
+ *   recomputeSellerRating   a comment was written, edited or deleted → recompute the shop's rating
+ *
+ * **Why the seller document, not `sellers/{uid}/stats/main`.** Every surface already reads the shop
+ * document (the card's own shop name comes from it, and the shop page listens to it live), so the
+ * rating costs no extra read anywhere. `firestore.rules` now refuses `ratingAvg` / `ratingCount` /
+ * `ratingUpdatedAt` from a browser exactly as it refuses `phoneVerified`.
+ *
+ * **Why a full recompute rather than a delta.** Trigger delivery is at-least-once: a delta can be
+ * applied twice and never be corrected. A recompute cannot drift, and it heals — a comment that
+ * arrived while this function was down is counted the next time anything in the shop is commented
+ * on. `functions/backfill-seller-ratings.js` does the same walk for comments that already exist.
+ *
+ * **Cost.** One read per product plus one per comment in the shop, per comment written. That is a
+ * few dozen reads for a real shop and the price of a number nobody can fake. If shops ever carry
+ * hundreds of products, move to a `collectionGroup('reviews')` query — that needs an index in
+ * `firestore.indexes.json` and a `sellerId` on every comment.
+ */
+exports.recomputeSellerRating = onDocumentWritten(
+  'sellers/{sellerId}/products/{productId}/reviews/{buyerUid}',
+  async (event) => {
+    const sellerId = event.params.sellerId
+    try {
+      // Walk the shop's own products rather than `collectionGroup('reviews')`: the path is already
+      // indexed (products are read on every visit anyway), and it needs neither a new index nor a
+      // `sellerId` field on every comment, old and new.
+      const products = await db.collection('sellers').doc(sellerId).collection('products').get()
+      const perProduct = await Promise.all(
+        products.docs.map((product) => product.ref.collection('reviews').get()),
+      )
+      const reviews = perProduct.flatMap((snap) => snap.docs.map((doc) => doc.data()))
+      const rating = sellerStats.ratingFromReviews(reviews)
+      await db.collection('sellers').doc(sellerId).set(
+        {
+          ratingAvg: rating.avg,
+          ratingCount: rating.count,
+          ratingUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      )
+    } catch (err) {
+      // Let it retry. A missed trigger would leave the rating stale until the shop's next comment,
+      // and a recompute is safe to repeat as often as the platform likes.
+      console.error('[rating] seller rating recompute failed for', sellerId, err && err.message)
+      throw err
+    }
+  },
+)
+
 

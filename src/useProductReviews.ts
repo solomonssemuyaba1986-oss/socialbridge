@@ -9,6 +9,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   writeBatch,
 } from 'firebase/firestore'
 import { auth, db } from './firebase'
@@ -16,13 +17,12 @@ import {
   cleanReviewText,
   cleanTags,
   displayName,
-  isReaction,
   postBlocker,
-  scoreOf,
+  scoreOfReview,
   summaryOf,
   toMillis,
-  type Reaction,
   type Review,
+  type Score,
 } from './reviewUtils'
 import { trackEvent } from './analytics'
 
@@ -32,9 +32,9 @@ import { trackEvent } from './analytics'
  * One listener per product (`…/reviews`, newest first) and one function that posts — the two
  * halves of "what buyers said" and "a buyer says something".
  *
- * The counters on the product document (`reviewCount`, `reviewScoreSum`, `reviewLovedCount`) move
- * in the **same batch** as the review itself: either both land or neither does, so the scoreboard
- * can never drift away from the comments. An edit moves them by the *difference* — never twice.
+ * The counters on the product document (`reviewCount`, `reviewScoreSum`) move in the **same batch**
+ * as the review itself: either both land or neither does, so the scoreboard can never drift away
+ * from the comments. An edit moves them by the *difference* — never twice.
  */
 
 /** How many comments a reading session loads. The counters still count every one of them. */
@@ -43,7 +43,10 @@ const REVIEW_PAGE = 40
 function mapReview(id: string, data: Record<string, unknown>): Review {
   return {
     buyerUid: id,
-    reaction: isReaction(data.reaction) ? data.reaction : 'fine',
+    // A stored star, or the score an older comment's reaction always stood for. Nothing readable
+    // at all reads as 3 — the same assumption the pre-stars code made — so a half-written
+    // document can never be mistaken for a five-star rave.
+    score: scoreOfReview(data) ?? 3,
     tags: cleanTags(data.tags),
     text: cleanReviewText(data.text),
     photoUrl: typeof data.photoUrl === 'string' && data.photoUrl ? data.photoUrl : undefined,
@@ -65,7 +68,8 @@ export interface PostReviewInput {
   orderId: string
   /** The reference shown to a human ("RT-AB12CD"). Display only. */
   orderRef?: string
-  reaction: Reaction
+  /** 1–5 stars. Required, and the only part of a comment the rules call a rating. */
+  score: Score
   tags?: string[]
   text?: string
   photoUrl?: string
@@ -85,28 +89,30 @@ export async function postReview(input: PostReviewInput): Promise<void> {
   const uid = auth.currentUser?.uid
   if (!uid) throw new Error('Sign in to write a comment.')
   if (uid === input.sellerId) throw new Error('You cannot comment on your own product.')
-  const blocker = postBlocker({ reaction: input.reaction, orderId: input.orderId, text: input.text })
+  const blocker = postBlocker({ score: input.score, orderId: input.orderId, text: input.text })
   if (blocker) throw new Error(blocker)
 
   const reviewRef = doc(db, 'sellers', input.sellerId, 'products', input.productId, 'reviews', uid)
   const productRef = doc(db, 'sellers', input.sellerId, 'products', input.productId)
 
-  // An edit must correct the tally, not double it — so we need the previous answer.
+  // An edit must correct the tally, not double it — so we need the previous answer. A comment
+  // written before stars existed answers with the score its reaction stood for (`scoreOfReview`),
+  // which is exactly what its weight in `reviewScoreSum` has always been.
   const existing = await getDoc(reviewRef)
-  const rawPrevious = existing.exists() ? existing.data() : null
-  const previous: Reaction | null = rawPrevious && isReaction(rawPrevious.reaction) ? rawPrevious.reaction : null
+  const rawPrevious = existing.exists() ? (existing.data() as Record<string, unknown>) : null
+  const previous = scoreOfReview(rawPrevious)
 
-  const score = scoreOf(input.reaction)
-  const countDelta = previous ? 0 : 1
-  const scoreDelta = score - (previous ? scoreOf(previous) : 0)
-  const lovedDelta = (input.reaction === 'love' ? 1 : 0) - (previous === 'love' ? 1 : 0)
+  const score = input.score
+  const countDelta = existing.exists() ? 0 : 1
+  const scoreDelta = score - (previous || 0)
 
   const text = cleanReviewText(input.text)
   const tags = cleanTags(input.tags)
   const batch = writeBatch(db)
   batch.set(reviewRef, {
     buyerUid: uid,
-    reaction: input.reaction,
+    // The rating itself. `reaction` is deliberately not written any more: it is history, and a
+    // document carrying both fields would have two answers where there is one.
     score,
     tags,
     text,
@@ -121,11 +127,10 @@ export async function postReview(input: PostReviewInput): Promise<void> {
     createdAt: serverTimestamp(),
   }, { merge: true })
 
-  if (countDelta || scoreDelta || lovedDelta) {
+  if (countDelta || scoreDelta) {
     const patch: Record<string, unknown> = {}
     if (countDelta) patch.reviewCount = increment(countDelta)
     if (scoreDelta) patch.reviewScoreSum = increment(scoreDelta)
-    if (lovedDelta) patch.reviewLovedCount = increment(lovedDelta)
     batch.update(productRef, patch)
   }
 
@@ -140,7 +145,7 @@ export async function postReview(input: PostReviewInput): Promise<void> {
   trackEvent('review_posted', {
     productId: input.productId,
     sellerId: input.sellerId,
-    reaction: input.reaction,
+    score: input.score,
     hasText: text.length > 0,
     hasPhoto: Boolean(input.photoUrl),
     tagCount: tags.length,
@@ -173,6 +178,40 @@ export async function hasReviewed(sellerId: string, productId: string): Promise<
     return snap.exists()
   } catch {
     // Offline or blocked: say "not yet" rather than inventing a review that isn't there.
+    return false
+  }
+}
+
+// ── Asking for a rating ──────────────────────────────────────────────────────────────────────
+
+/**
+ * "We have asked about this order." Written the first time the quiet fallback on My Orders offers
+ * the stars, so it is asked exactly once — an ask that repeats is a nag, not an ask.
+ *
+ * Keyed by the order's document id, under the buyer's own document, and deliberately **not** the
+ * old `loveAnswers` path: the ♥ question and the star question are different questions, and a
+ * leftover private answer must never silence a rating ask.
+ */
+export async function markRatingAsked(orderId: string, surface: string): Promise<void> {
+  const uid = auth.currentUser?.uid
+  if (!uid || !orderId) return
+  try {
+    await setDoc(doc(db, 'users', uid, 'ratingAsks', orderId), { surface, at: serverTimestamp() }, { merge: true })
+  } catch (err) {
+    // Bookkeeping must never block the question: worst case they are asked once more.
+    console.warn('Could not remember that we asked for a rating:', err)
+  }
+}
+
+/** Has this order been asked about already? One read, before the fallback card is shown. */
+export async function wasRatingAsked(orderId: string): Promise<boolean> {
+  const uid = auth.currentUser?.uid
+  if (!uid || !orderId) return false
+  try {
+    return (await getDoc(doc(db, 'users', uid, 'ratingAsks', orderId))).exists()
+  } catch {
+    // Unreadable (the rules for it are not deployed yet): treat it as "not asked". The rating is
+    // the thing that matters, and that write would have been refused for the same reason.
     return false
   }
 }

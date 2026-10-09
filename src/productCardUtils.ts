@@ -26,13 +26,21 @@ export interface CardProduct {
   stock?: string | number
   /**
    * The comment counters on the product document. They count *every* comment (not just the page
-   * the sheet loaded), which is why the header can say "19 of 23" truthfully.
+   * the sheet loaded), which is why the header can say "★ 4.7 from 23 ratings" truthfully.
+   * `reviewScoreSum` is the sum of the 1–5 stars, so the average is a division and never a lookup.
    */
   reviewCount?: number
   reviewScoreSum?: number
-  reviewLovedCount?: number
   /** ♥ The universal like tally — lives on the product doc, the same for every visitor. */
   likeCount?: number
+  /**
+   * The **shop's** rating — not this product's. `recomputeSellerRating` (Cloud Functions) averages
+   * every comment the shop has received and writes these two fields to the seller document; callers
+   * join them onto each row they already read. `src/SellerRating.tsx` is what draws them, and it
+   * draws nothing at all for a shop nobody has rated.
+   */
+  ratingAvg?: number | null
+  ratingCount?: number
 }
 
 export const green = '#adff2f'

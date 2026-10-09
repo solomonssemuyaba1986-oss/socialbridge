@@ -17,6 +17,9 @@ import { variantLabel, type Variant } from './productSheetUtils'
 import { useBuyerName } from './useBuyerName'
 import { nameLabel } from './buyerName'
 import { useSellerStats, getSalesLabel, getBadgeStatusLabel } from './useSellerStats.ts'
+import SellerRating from './SellerRating'
+import { hasSellerRating } from './sellerRatingUtils'
+import { summaryFromAggregate, summaryLabel } from './reviewUtils'
 import QuickRepliesPanel from './QuickRepliesPanel'
 import FloatingBag from './FloatingBag'
 import StoreProblem from './StoreProblem'
@@ -75,9 +78,12 @@ interface Product {
   colors?: string[]
   sizes?: string[]
   stock?: string | number
-  /** Comment counters — they count every buyer comment, not just the page we loaded. */
+  /**
+   * Comment counters — they count every buyer comment, not just the page we loaded.
+   * `reviewScoreSum` is the sum of the 1–5 stars, which the shop's own average is taken from.
+   */
   reviewCount?: number
-  reviewLovedCount?: number
+  reviewScoreSum?: number
   /** ♥ The universal like tally — the same number for every visitor. */
   likeCount?: number
 }
@@ -355,13 +361,16 @@ const messageDeepLinkId = searchParams.get('messageId')
   const [seller, setSeller] = useState<Seller | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   /**
-   * Buyer comments across this shop's products — summed from the products already on screen, so
-   * the storefront can say something true without a single extra read.
+   * Buyer ratings across this shop's products — summed from the products already on screen, so the
+   * storefront can say something true without a single extra read. `scoreSum` is the sum of the
+   * 1–5 stars, and the line below is drawn from the same helper the details sheet uses
+   * (`summaryLabel`), so the shop and its products can never round the same comments differently.
    */
   const shopComments = useMemo(() => products.reduce(
-    (acc, p) => ({ count: acc.count + (p.reviewCount || 0), loved: acc.loved + (p.reviewLovedCount || 0) }),
-    { count: 0, loved: 0 },
+    (acc, p) => ({ count: acc.count + (p.reviewCount || 0), scoreSum: acc.scoreSum + (p.reviewScoreSum || 0) }),
+    { count: 0, scoreSum: 0 },
   ), [products])
+  const shopCommentLine = summaryFromAggregate(shopComments.count, shopComments.scoreSum)
   const [bagCounts, setBagCounts] = useState<Record<string, BagCountData>>({})
   const [isOwner, setIsOwner] = useState(false)
   const [showForm, setShowForm] = useState(false)
@@ -439,6 +448,17 @@ const messageDeepLinkId = searchParams.get('messageId')
 
   // Seller stats for trust signals
   const { stats: sellerStats } = useSellerStats(sellerId)
+  /**
+   * The shop's rating, as rachett measured it. `recomputeSellerRating` (Cloud Functions) recomputes
+   * it from every comment the shop has received and writes it to the seller document;
+   * `useSellerStats` above is already listening to that document, so this costs no reads at all.
+   * `hasSellerRating` is what decides whether there is anything to show — a shop nobody has rated
+   * has no average, not an average of zero.
+   */
+  const shopRating = useMemo(
+    () => ({ ratingAvg: sellerStats.avgRating, ratingCount: sellerStats.reviewCount }),
+    [sellerStats.avgRating, sellerStats.reviewCount],
+  )
 
   // The buyer's own area — only used on this screen to show "1.2 km away".
   // Stays on their device; we never send it to the database.
@@ -971,13 +991,19 @@ const handleSignupForAction = async (provider: any) => {
           </div>
         )}
 
-        {/* Buyer comments on this shop. This used to render a star average from `avgRating` — a
-            field nothing ever wrote, so it could never appear. A star average built on three
-            comments says more about luck than about the shop, so this counts hearts instead, from
-            counters the products actually carry. */}
-        {shopComments.count > 0 && (
+        {/* What buyers said about this shop. The star average is real now: `recomputeSellerRating`
+            recomputes it from every comment the shop has received, whenever a buyer comments
+            anywhere in it, and `firestore.rules` keeps the seller out of those fields — so a shop
+            cannot award itself ★ 5.0. Until the backfill has run for a shop whose comments predate
+            this (`node functions/backfill-seller-ratings.js`), the line below falls back to
+            averaging the ratings on the products already on this page, which needs no new field. */}
+        {hasSellerRating(shopRating) ? (
+          <p style={{ textAlign: 'center', margin: '0 0 10px' }}>
+            <SellerRating source={shopRating} variant="line" word="buyer rating" />
+          </p>
+        ) : shopCommentLine.average !== null && (
           <p style={{ textAlign: 'center', margin: '0 0 10px', color: green, fontSize: '15px', fontWeight: 800 }}>
-            ♥ {shopComments.loved} of {shopComments.count} loved it
+            {summaryLabel(shopCommentLine)}
           </p>
         )}
 
@@ -1350,6 +1376,8 @@ const handleSignupForAction = async (provider: any) => {
             sellerId: sellerId || '',
             sellerSlug: seller?.slug || slugParam,
             businessName: seller?.businessName || '',
+            ratingAvg: shopRating.ratingAvg,
+            ratingCount: shopRating.ratingCount,
           }}
           surface="store"
           liked={isLiked(detailsProduct.id)}

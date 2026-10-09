@@ -16,6 +16,10 @@
  * claim the badge by hand with no SMS ever sent. That is now refused on both halves of the write,
  * the proof has moved to `trust/{uid}` (public to read, closed to write), and this file reads
  * `api/_lib/identity.js` to prove the publicly readable document holds no phone number.
+ *
+ * The ⭐ rating sits under the same rule, for the same reason: `ratingAvg` / `ratingCount` /
+ * `ratingUpdatedAt` are what a shop's own buyers said about it, averaged, and a shop that could
+ * write them could award itself ★ 5.0 — so they are refused with `phoneVerified` in one list.
  */
 const assert = require('assert')
 const fs = require('fs')
@@ -289,14 +293,16 @@ check('a store page stays public, but a seller may no longer write their own bad
   const create = sellers.match(/allow create: if[\s\S]*?;/)
   const update = sellers.match(/allow update: if[\s\S]*?;/)
   assert.ok(create && update, 'the seller document still has both halves of the write')
-  assert.ok(
-    /!\s*request\.resource\.data\.keys\(\)\.hasAny\(\['phoneVerified'\]\)/.test(create[0]),
-    'a new seller document may not carry phoneVerified at all',
-  )
-  assert.ok(
-    /!\s*request\.resource\.data\.diff\(resource\.data\)\.affectedKeys\(\)\.hasAny\(\['phoneVerified'\]\)/.test(update[0]),
-    'a write may not so much as touch phoneVerified — it is a claim about the seller, not a setting',
-  )
+  // The refused list has already grown once (the ⭐ rating keys joined it), so pin the *shape* of
+  // the refusal and that the badge's own field is inside it — not the exact array, which would turn
+  // every new server-written field into a failing check.
+  const refusedOnCreate = (create[0].match(/!\s*request\.resource\.data\.keys\(\)\s*\.hasAny\(\[([^\]]*)\]/) || [])[1]
+  assert.ok(refusedOnCreate, 'a new seller document must be refused the keys it may not set itself')
+  assert.ok(/'phoneVerified'/.test(refusedOnCreate), 'a new seller document may not carry phoneVerified at all')
+  const refusedOnUpdate = (update[0].match(/!\s*request\.resource\.data\.diff\(resource\.data\)\s*\.affectedKeys\(\)\s*\.hasAny\(\[([^\]]*)\]/) || [])[1]
+  assert.ok(refusedOnUpdate, 'a write that touches a key the seller may not set must be refused')
+  assert.ok(/'phoneVerified'/.test(refusedOnUpdate),
+    'a write may not so much as touch phoneVerified — it is a claim about the seller, not a setting')
   // The exception is that one field, not the shop: the seller still owns everything else.
   assert.ok(/request\.auth\.uid == sellerId/.test(create[0]), 'the seller still creates their own document')
   assert.ok(/request\.auth\.uid == sellerId/.test(update[0]), 'the seller still edits their own document')
@@ -305,6 +311,31 @@ check('a store page stays public, but a seller may no longer write their own bad
   assert.ok(!/phoneVerified\s*:/.test(withoutComments(sellers)), 'the rules never set a value themselves')
   // Old shops keep the badge they earned, and *why* is written down next to the rule.
   assert.ok(markerOf(sellers, 'frozen snapshot') > 0, 'the reason old badges are left alone is recorded')
+})
+
+check('and a shop may not award itself the ⭐ rating its own buyers gave it', () => {
+  // The same rule refuses the rating keys. The number a card prints next to a shop's name is the
+  // average of every comment the shop has received (`recomputeSellerRating`, Cloud Functions) — a
+  // shop that could write `ratingAvg` is a shop that can award itself ★ 5.0 with no customers at
+  // all, which is the forgery the badge above was fixed for.
+  const create = sellers.match(/allow create: if[\s\S]*?;/) || []
+  const update = sellers.match(/allow update: if[\s\S]*?;/) || []
+  const refusedOnCreate = (create[0].match(/!\s*request\.resource\.data\.keys\(\)\s*\.hasAny\(\[([^\]]*)\]/) || [])[1]
+  const refusedOnUpdate = (update[0].match(/!\s*request\.resource\.data\.diff\(resource\.data\)\s*\.affectedKeys\(\)\s*\.hasAny\(\[([^\]]*)\]/) || [])[1]
+  assert.ok(refusedOnCreate && refusedOnUpdate, 'the seller document still refuses the keys it may not set itself')
+  const RATING_KEYS = ['ratingAvg', 'ratingCount', 'ratingUpdatedAt']
+  RATING_KEYS.forEach(key => {
+    assert.ok(refusedOnCreate.includes(`'${key}'`), `a shop could still be created carrying its own ${key}`)
+    assert.ok(refusedOnUpdate.includes(`'${key}'`), `a shop could still write ${key} over itself`)
+  })
+  // Refused here, never computed or set here: `firebase-admin` bypasses these rules, so the Cloud
+  // Function is the only writer. With the two refusal lists taken out, the keys must not appear at
+  // all — a rule that *set* one would be the forgery the refusal exists to prevent.
+  const setting = withoutComments(sellers).replace(/!\s*request[\s\S]*?hasAny\(\[[^\]]*\]\)/g, '')
+  RATING_KEYS.forEach(key => {
+    assert.ok(!setting.includes(key), `firestore.rules names ${key} outside the refusal — it has no business setting it`)
+  })
+  assert.ok(markerOf(sellers, 'award itself') > 0, 'why the rating keys are refused is recorded next to the rule')
 })
 
 check('the proof lives where the person it is about cannot reach it', () => {

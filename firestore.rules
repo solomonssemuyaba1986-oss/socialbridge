@@ -5,7 +5,7 @@ service cloud.firestore {
     match /sellers/{sellerId} {
       allow read: if true;
 
-      // A seller owns their own shop document — with one exception.
+      // A seller owns their own shop document — with two exceptions.
       //
       // `phoneVerified` used to be writable here, and that single fact is what made the 🟢 "real
       // seller" badge forgeable: the browser could send `phoneVerified: true` by hand, with no SMS
@@ -14,10 +14,18 @@ service cloud.firestore {
       // and it records the proof in `trust/{uid}` below. The value still on old documents is left
       // untouched — a frozen snapshot of a real Firebase phone-auth result — so shops that earned
       // the badge before this change keep it.
+      //
+      // `ratingAvg` / `ratingCount` / `ratingUpdatedAt` are the same kind of fact: what a shop's
+      // own buyers said about it, averaged over every comment it has received. They are written by
+      // `recomputeSellerRating` (Cloud Functions) only, because a shop that could write them could
+      // award itself ★ 5.0 without a single customer — the exact forgery the badge above was fixed
+      // for. The keys are refused outright, on create and on update.
       allow create: if request.auth.uid == sellerId
-        && !request.resource.data.keys().hasAny(['phoneVerified']);
+        && !request.resource.data.keys()
+             .hasAny(['phoneVerified', 'ratingAvg', 'ratingCount', 'ratingUpdatedAt']);
       allow update: if request.auth.uid == sellerId
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['phoneVerified']);
+        && !request.resource.data.diff(resource.data).affectedKeys()
+             .hasAny(['phoneVerified', 'ratingAvg', 'ratingCount', 'ratingUpdatedAt']);
       allow delete: if request.auth.uid == sellerId;
 
       match /products/{productId} {
@@ -46,21 +54,20 @@ service cloud.firestore {
             // 🗣️ The comment counters. Only a buyer (never the seller) moves them, only by what one
             // comment can move, and only in the same write as their own comment —
             // `existsAfter` is the proof that the comment is landing alongside, so the scoreboard
-            // can never drift away from the comments.
+            // can never drift away from the comments. `reviewScoreSum` moves by the *difference*
+            // between the old score and the new one, which is at most 4 either way — a fresh
+            // comment adds between 1 and 5 — so ±5 is the whole range one comment can account for.
             request.auth != null
             && request.auth.uid != sellerId
             && request.resource.data.diff(resource.data).affectedKeys()
-                 .hasOnly(['reviewCount', 'reviewScoreSum', 'reviewLovedCount'])
+                 .hasOnly(['reviewCount', 'reviewScoreSum'])
             && existsAfter(/databases/$(database)/documents/sellers/$(sellerId)/products/$(productId)/reviews/$(request.auth.uid))
             && request.resource.data.reviewCount is int
             && request.resource.data.reviewScoreSum is int
-            && request.resource.data.reviewLovedCount is int
             && request.resource.data.reviewCount - resource.data.get('reviewCount', 0) >= 0
             && request.resource.data.reviewCount - resource.data.get('reviewCount', 0) <= 1
             && request.resource.data.reviewScoreSum - resource.data.get('reviewScoreSum', 0) >= -5
             && request.resource.data.reviewScoreSum - resource.data.get('reviewScoreSum', 0) <= 5
-            && request.resource.data.reviewLovedCount - resource.data.get('reviewLovedCount', 0) >= -1
-            && request.resource.data.reviewLovedCount - resource.data.get('reviewLovedCount', 0) <= 1
           );
 
         // ♥ One vote per account, world-wide: the document ID *is* the voter's uid, so a
@@ -84,6 +91,11 @@ service cloud.firestore {
         // second one is structurally impossible), and the write is authorised by **their own
         // delivered order** — looked up here, in the rules, where it cannot be faked. That is what
         // makes "✓ Bought it" a fact instead of a checkbox the buyer ticked.
+        //
+        // The rating itself is one whole number from 1 to 5, checked here rather than in the app:
+        // a score is what every average on rachett is computed from, and `sellerStats.js` counts a
+        // document it cannot read as nothing at all — so a 0, a 4.5 or a 900 would quietly become a
+        // missing rating rather than an error anybody could see.
         match /reviews/{buyerUid} {
           allow read: if true;
           allow create, update: if request.auth != null
@@ -92,7 +104,9 @@ service cloud.firestore {
             && request.resource.data.buyerUid == request.auth.uid
             && request.resource.data.verified == true
             && request.resource.data.orderId is string
-            && request.resource.data.reaction in ['love', 'fine', 'bad']
+            && request.resource.data.score is int
+            && request.resource.data.score >= 1
+            && request.resource.data.score <= 5
             && request.resource.data.text.size() <= 400
             && get(/databases/$(database)/documents/sellers/$(sellerId)/orders/$(request.resource.data.orderId)).data.buyerUid == request.auth.uid
             && get(/databases/$(database)/documents/sellers/$(sellerId)/orders/$(request.resource.data.orderId)).data.status == 'fulfilled';
@@ -120,9 +134,9 @@ service cloud.firestore {
           && request.resource.data.buyerUid == request.auth.uid
           && request.resource.data.buyerUid != sellerId
           && request.resource.data.status == 'pending';
-        // The seller's own half: moving an order along, and deciding a return once it is delivered.
-        // The two are separate on purpose — a delivered order is closed to everything except the
-        // return decision, so nothing can walk back out of "fulfilled" by accident.
+        // The seller's own half: moving an order along, deciding a return, and asking for a rating.
+        // They are separate on purpose — a delivered order is closed to everything except those, so
+        // nothing can walk back out of "fulfilled" by accident.
         allow update: if request.auth.uid == sellerId
           && (
             (resource.data.status in ['pending', 'paid', 'awaiting_payment', 'needs_details']
@@ -133,6 +147,16 @@ service cloud.firestore {
                    .hasOnly(['returnState', 'returnNote', 'returnDecidedAt'])
               && request.resource.data.returnState in ['photos_needed', 'approved', 'declined', 'refunded', 'completed']
               && (!('returnNote' in request.resource.data) || request.resource.data.returnNote.size() <= 300)
+            )
+            || (
+              // ⭐ The only other thing a seller may add to a delivered order: "rate it". Write-once,
+              // so nobody can be asked again and again — and it deliberately carries no `updatedAt`,
+              // because asking for a rating must not move the delivery date the return window and
+              // the seller's own completion numbers are counted from.
+              resource.data.status == 'fulfilled'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reviewAskedAt'])
+              && !('reviewAskedAt' in resource.data)
+              && request.resource.data.reviewAskedAt is int
             )
           );
         // ↩️ The buyer's half of a return. Only these six fields, only on their own delivered order,
@@ -278,6 +302,21 @@ service cloud.firestore {
       // ♥ My own votes (productId → where), so every page can draw its hearts from a
       // single listener instead of one read per card.
       match /likes/{productId} {
+        allow read, write: if request.auth.uid == userId;
+      }
+
+      // 🗣️ My own comments, indexed (productId → where), so a later rename knows exactly which
+      // published comments to relabel without a collection-group query. Owner-only — nobody else can
+      // read your index. The document is written in the **same batch** as the comment itself, so
+      // without this rule a comment could not be posted at all: the whole batch is refused.
+      match /comments/{productId} {
+        allow read, write: if request.auth.uid == userId;
+      }
+
+      // ⭐ "We have asked you about this order." Keyed by the order's document id, so the quiet
+      // fallback on My Orders offers the stars exactly once. A different question from the ♥ answer
+      // below, and stored apart from it on purpose: one must never silence the other.
+      match /ratingAsks/{orderId} {
         allow read, write: if request.auth.uid == userId;
       }
 

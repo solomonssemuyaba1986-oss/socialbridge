@@ -47,6 +47,7 @@ import { useViewHistory } from './useViewHistory'
 import { useRotatingPlaceholder } from './useRotatingPlaceholder'
 import { useProductFeed } from './useProductFeed'
 import StoreCard from './StoreCard'
+import SellerRating from './SellerRating'
 import Fuse from 'fuse.js'
 import SearchSuggest from './SearchSuggest'
 import { buildSuggestions, type Suggestion } from './useSuggestions'
@@ -69,6 +70,9 @@ interface Product {
   salesCount?: number
   /** ♥ The universal like tally — the same number for every visitor. */
   likeCount?: number
+  /** The shop's rating, joined on with the store details below (never the product's own counters). */
+  ratingAvg?: number | null
+  ratingCount?: number
   createdAt?: unknown
   updatedAt?: unknown
 }
@@ -95,7 +99,7 @@ function BrowsePage() {
   } = useProductFeed({ pageSize: 24 })
 
   /** Store details, joined onto each product by its sellerId. */
-  const [sellerMap, setSellerMap] = useState<Map<string, { slug: string; businessName: string; logoUrl: string }>>(new Map())
+  const [sellerMap, setSellerMap] = useState<Map<string, { slug: string; businessName: string; logoUrl: string; ratingAvg: number | null; ratingCount: number }>>(new Map())
 
   /** Everything we've loaded so far, with its store attached. */
   const products: Product[] = useMemo(
@@ -108,6 +112,10 @@ function BrowsePage() {
           sellerId: row.sellerId,
           sellerSlug: info?.slug || '',
           businessName: info?.businessName || '',
+          // The shop's rating rides along with the shop's name: one read of the seller document
+          // (below) gives every one of its cards the number, and no card reads a comment at all.
+          ratingAvg: info?.ratingAvg ?? null,
+          ratingCount: info?.ratingCount ?? 0,
         }
       })
       .filter(p => p.sellerSlug),
@@ -140,7 +148,7 @@ function BrowsePage() {
   const { isLiked, likeCountFor, toggleLike } = useProductLikes()
   const navigate = useNavigate()
   const [bagCounts, setBagCounts] = useState<Record<string, BagCountData>>({})
-  const [stores, setStores] = useState<{ slug: string; businessName: string; logoUrl: string; bio: string; aliases: string[]; createdAtMs: number }[]>([])
+  const [stores, setStores] = useState<{ slug: string; businessName: string; logoUrl: string; bio: string; aliases: string[]; createdAtMs: number; ratingAvg: number | null; ratingCount: number }[]>([])
   /** True while the person is in the search box — the rolling hint must not move under them. */
   const [searchFocused, setSearchFocused] = useState(false)
 
@@ -830,11 +838,21 @@ function BrowsePage() {
             bio: s.bio || '',
             aliases: Array.isArray(s.aliases) ? s.aliases.filter((a: unknown) => typeof a === 'string') : [],
             createdAtMs: toMillis(s.createdAt) ?? 0,
+            // The shop's rating, read from the same document the name came from — the directory
+            // costs exactly the reads it cost before this existed.
+            ratingAvg: typeof s.ratingAvg === 'number' ? s.ratingAvg : null,
+            ratingCount: Number(s.ratingCount) || 0,
           }
         }))
         setSellerMap(new Map(linkable.map(d => {
           const s = d.data()
-          return [d.id, { slug: s.slug || '', businessName: s.businessName || '', logoUrl: s.logoUrl || '' }]
+          return [d.id, {
+            slug: s.slug || '',
+            businessName: s.businessName || '',
+            logoUrl: s.logoUrl || '',
+            ratingAvg: typeof s.ratingAvg === 'number' ? s.ratingAvg : null,
+            ratingCount: Number(s.ratingCount) || 0,
+          }]
         })))
         // Where each shop is, for the "Nearby" sort — and how to open it and what it is called, which
         // the empty bag needs. Shops without a real pin (or with a placeholder zero) are simply left
@@ -1218,7 +1236,10 @@ function BrowsePage() {
                           <p style={{ margin: 0, flex: 1, minWidth: 0, fontWeight: '700', fontSize: '14px', color: '#fff', lineHeight: '1.3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</p>
                           <LikePill liked={isLiked(p.id)} count={likeCountFor(p)} onToggle={p.sellerId === (userId || '') ? undefined : () => handleToggleLike(p)} />
                         </div>
-                        <p style={{ margin: '0 0 8px', color: '#555', fontSize: '12px' }}>{p.businessName}</p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 8px', minWidth: 0 }}>
+                          <span style={{ color: '#555', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.businessName}</span>
+                          <SellerRating source={p} />
+                        </div>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                           <p style={{ margin: 0, fontWeight: '800', color: green, fontSize: '14px' }}>UGX {p.price}</p>
                           <button onClick={(e) => { e.stopPropagation(); setDetailsProduct(p) }}
@@ -1267,7 +1288,10 @@ function BrowsePage() {
                         <p style={{ margin: 0, flex: 1, minWidth: 0, fontWeight: '700', fontSize: '14px', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</p>
                         <LikePill liked={isLiked(p.id)} count={likeCountFor(p)} onToggle={p.sellerId === (userId || '') ? undefined : () => handleToggleLike(p)} />
                       </div>
-                      <p style={{ margin: '0 0 8px', color: '#555', fontSize: '12px' }}>{p.businessName}</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 8px', minWidth: 0 }}>
+                        <span style={{ color: '#555', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.businessName}</span>
+                        <SellerRating source={p} />
+                      </div>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                         <p style={{ margin: 0, fontWeight: '800', color: green, fontSize: '14px' }}>UGX {p.price}</p>
                         <button onClick={(e) => { e.stopPropagation(); setDetailsProduct(p) }}
@@ -1404,7 +1428,10 @@ function BrowsePage() {
               </div>
 
               <h2 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: '800', color: '#fff' }}>{surveyProduct.name}</h2>
-              <p style={{ margin: '0 0 8px', color: '#888', fontSize: '13px' }}>{surveyProduct.businessName}</p>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, margin: '0 0 8px', flexWrap: 'wrap' }}>
+                <span style={{ color: '#888', fontSize: '13px' }}>{surveyProduct.businessName}</span>
+                <SellerRating source={surveyProduct} />
+              </div>
               <p style={{ margin: '0 0 12px', fontWeight: '800', fontSize: '18px', color: green }}>UGX {surveyProduct.price}</p>
               {(bagCounts[surveyProduct.id]?.baggedCount || 0) > 0 || (surveyProduct.salesCount || 0) > 0 ? (
                 <div style={{ display: 'flex', gap: '14px', marginBottom: '12px', flexWrap: 'wrap' }}>

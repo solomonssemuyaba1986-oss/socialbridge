@@ -1,9 +1,9 @@
 import { useEffect } from 'react'
 import { useProductReviews } from './useProductReviews'
 import {
-  averageLabel,
-  reactionEmoji,
-  reactionLabel,
+  SCORES,
+  scoreLabel,
+  starRow,
   summaryFromAggregate,
   summaryLabel,
   timeAgo,
@@ -17,19 +17,19 @@ import { trackEvent } from './analytics'
  * What buyers said, inside the details sheet.
  *
  * This is the trust surface: a person is looking at the product and deciding. So it says only what
- * is true — how many commented, how many loved it, and what they actually wrote — and it never
- * invents a number for a product nobody has commented on.
+ * is true — how many commented, what they gave it out of five, and what they actually wrote — and
+ * it never invents a number for a product nobody has commented on.
  *
  * It also reads only what it needs: the list comes from one live query, while the header's total
  * comes from the product's own counters, so a product with 200 comments never loads 200 documents
- * just to say "147 of 200 loved it".
+ * just to say "★ 4.7 from 200 ratings".
  */
 
 type Props = {
   sellerId: string
   productId: string
   /** The counters stored on the product document (they count every comment, not just this page). */
-  aggregate?: { count?: unknown; scoreSum?: unknown; loved?: unknown }
+  aggregate?: { count?: unknown; scoreSum?: unknown }
   /** Who may write one — the host decides, because the host knows the buyer's orders. */
   eligibility?: Eligibility
   /** Opens the form. Leave it out and the section is read-only. */
@@ -45,7 +45,6 @@ function ProductReviews({ sellerId, productId, aggregate, eligibility, onWrite, 
   const loaded = summaryFromAggregate(
     Math.max(summary.count, Number(aggregate?.count) || 0),
     usingAggregate ? aggregate?.scoreSum : summary.scoreSum,
-    usingAggregate ? aggregate?.loved : summary.loved,
   )
   const total = loaded.count
   const hidden = Math.max(0, total - summary.count)
@@ -75,7 +74,6 @@ function ProductReviews({ sellerId, productId, aggregate, eligibility, onWrite, 
           <p style={{ margin: 0, color: '#fff', fontSize: 14, fontWeight: 800 }}>What buyers said</p>
           <p style={{ margin: '2px 0 0', color: total > 0 ? green : '#777', fontSize: 12, fontWeight: 700 }}>
             {summaryLabel(loaded)}
-            {averageLabel(loaded) && <span style={{ color: '#888', fontWeight: 600 }}> · {averageLabel(loaded)}/5</span>}
           </p>
         </div>
         {canWrite && (
@@ -97,6 +95,18 @@ function ProductReviews({ sellerId, productId, aggregate, eligibility, onWrite, 
         <p style={{ margin: '0 0 10px', color: '#777', fontSize: 12, lineHeight: 1.5 }}>
           Received this one? You can comment on it from your orders — it appears right here.
         </p>
+      )}
+
+      {/* The shape of the page's stars — how many of the comments *below* gave each one. The
+          product's counters hold no spread, so this is never dressed up as a world-wide count. */}
+      {summary.count > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+          {[...SCORES].reverse().map(s => (
+            <span key={s} style={{ padding: '3px 8px', borderRadius: 999, background: '#111', border: '1px solid #2a2a2a', color: summary.stars[s - 1] ? '#ccc' : '#555', fontSize: 11, fontWeight: 700 }}>
+              {s}★ ×{summary.stars[s - 1]}
+            </span>
+          ))}
+        </div>
       )}
 
       {summary.topTags.length > 0 && (
@@ -122,8 +132,8 @@ function ProductReviews({ sellerId, productId, aggregate, eligibility, onWrite, 
           {reviews.map(review => (
             <div key={review.buyerUid} style={{ background: '#1a1a1a', border: '1px solid #242424', borderRadius: 12, padding: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 15 }}>{reactionEmoji(review.reaction)}</span>
-                <span style={{ color: '#fff', fontSize: 13, fontWeight: 800 }}>{reactionLabel(review.reaction)}</span>
+                <span aria-label={`${review.score} out of 5`} style={{ color: green, fontSize: 14, letterSpacing: '1px' }}>{starRow(review.score)}</span>
+                <span style={{ color: '#fff', fontSize: 13, fontWeight: 800 }}>{scoreLabel(review.score)}</span>
                 <span style={{ color: '#666', fontSize: 11 }}>·</span>
                 <span style={{ color: '#bbb', fontSize: 12, fontWeight: 700 }}>{review.buyerName || 'Verified buyer'}</span>
                 <span style={{ padding: '2px 7px', borderRadius: 999, background: '#12210d', color: green, border: `1px solid ${green}`, fontSize: 10, fontWeight: 800 }}>

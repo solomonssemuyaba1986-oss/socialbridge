@@ -11,7 +11,9 @@ import { toMillis } from './productCardUtils'
 import { useBuyerName } from './useBuyerName'
 import { nameLabel } from './buyerName'
 import ProductPreview from './ProductPreview'
-import LovePrompt from './LovePrompt'
+import RatePrompt from './RatePrompt'
+import ReviewForm from './ReviewForm'
+import { type Score } from './reviewUtils'
 import PawapayCheckout, { type Stage } from './PawapayCheckout'
 
 const green = '#adff2f'
@@ -76,6 +78,11 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
   const [uploadingImage, setUploadingImage] = useState(false)
   const [pendingImages, setPendingImages] = useState<string[]>([])
   const [previewImage, setPreviewImage] = useState<string | null>(null)
+  /**
+   * A star tapped in the thread, and the buyer then wanted to say more: opens the full form with
+   * that star already chosen, so the same question is never asked twice.
+   */
+  const [rateMore, setRateMore] = useState<{ orderId: string; orderRef?: string; productId: string; productName?: string; score?: Score } | null>(null)
 
   const showFeedback = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
     setFeedbackMessage(msg)
@@ -106,7 +113,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
     }
 
     try {
-      const { orderId } = await createBuyerOrder(sellerId, {
+      const { orderRef: orderDocRef, orderId } = await createBuyerOrder(sellerId, {
         buyerName: shownBuyerName.trim(),
         buyerUid: buyerId,
         productName,
@@ -137,6 +144,9 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
         sellerName: sellerName || 'Seller',
         buyerName: shownBuyerName.trim(),
         orderId: orderId || '',
+        // The document id rides along, so the receipt bubble can later prove the purchase and
+        // offer the rating with one tap.
+        orderDocId: orderDocRef.id,
         productId,
         productName: productName || '',
         productPrice: productPrice || '',
@@ -299,6 +309,30 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
     }
   }
 
+  /**
+   * The order this thread is still owed a rating for.
+   *
+   * The delivery bubble is where the receipt lands, so the stars belong there — but a thread that
+   * has moved on ("thanks, it arrived") buries that bubble, and the buyer is still standing right
+   * here. So the same one-tap ask is offered once more under the composer, and only then: while the
+   * receipt is the last thing said, the bubble above already asks and there is nothing to repeat.
+   *
+   * Whether there is anything left to ask is `RatePrompt`'s own business — it reads the buyer's
+   * comment first — so this only has to find the order.
+   */
+  const ratingAsk = useMemo(() => {
+    if (meIsSeller) return null
+    // Untyped rows on purpose: the thread's messages are a union (text · order · reviewAsk · image)
+    // and only the order ones carry what this needs — the same shape the renderer above reads.
+    const rows = messages as Array<Record<string, unknown>>
+    const delivered = rows.filter(m => m.orderStatus === 'fulfilled' && m.productId && m.orderDocId)
+    if (delivered.length === 0) return null
+    const newest = delivered[delivered.length - 1]
+    const last = rows[rows.length - 1]
+    if (last && last.id === newest.id) return null
+    return newest as { orderDocId: string; orderId?: string; productId: string; productName?: string }
+  }, [messages, meIsSeller])
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       <div style={{ borderBottom: '1px solid #222', paddingBottom: 12 }}>
@@ -369,9 +403,10 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
             const m = c.kind === 'images' ? c.messages[0] : c.message
             if (m.type === 'order') {
               // A delivered bubble is the seller's "✓ Confirm" reaching the buyer — the only
-              // place they learn the order is done — so the ♥ question belongs right here.
+              // place they learn the order is done — so the rating belongs right here: the stars,
+              // one tap, authorised by this very order (`orderDocId`).
               const delivered = m.orderStatus === 'fulfilled'
-              const askToLove = delivered && !meIsSeller && Boolean(m.productId) && Boolean(m.orderId)
+              const askToRate = delivered && !meIsSeller && Boolean(m.productId) && Boolean(m.orderDocId)
               return (
                 <div key={m.id} style={{ display: 'flex', justifyContent: 'center', margin: '4px 0' }}>
                   <div style={{ background: '#12210d', border: `1px solid ${green}`, borderRadius: '12px', padding: '12px 16px', maxWidth: '90%', textAlign: 'center' }}>
@@ -383,18 +418,62 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
                       {m.variant && <span style={{ color: '#ddd', fontWeight: 700 }}> · {m.variant}</span>}
                     </div>
                     {delivered ? (
-                      askToLove ? (
-                        <LovePrompt
+                      askToRate ? (
+                        <RatePrompt
                           sellerId={sellerId}
                           productId={m.productId}
+                          orderId={m.orderDocId}
+                          orderRef={m.orderId}
                           productName={m.productName}
-                          orderId={m.orderId}
+                          surface="inbox"
+                          onWriteMore={score => setRateMore({
+                            orderId: m.orderDocId,
+                            orderRef: m.orderId,
+                            productId: m.productId,
+                            productName: m.productName,
+                            score,
+                          })}
                         />
                       ) : (
                         <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>Delivered 🎉</div>
                       )
                     ) : (
                       <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>{sellerName || 'The seller'} will confirm in your Inbox</div>
+                    )}
+                  </div>
+                </div>
+              )
+            }
+            if (m.type === 'reviewAsk') {
+              // The seller's "please rate it", rendered as the thing it asks for: the stars, right
+              // in the thread the buyer is already reading. Only the buyer gets them — the seller
+              // sees their own ask waiting.
+              const mine = m.senderId === auth.currentUser?.uid
+              return (
+                <div key={m.id} style={{ display: 'flex', justifyContent: 'center', margin: '4px 0' }}>
+                  <div style={{ background: '#141414', border: '1px solid #2a2a2a', borderRadius: 12, padding: '12px 16px', maxWidth: '90%', textAlign: 'center' }}>
+                    <div style={{ fontSize: 12, color: '#ccc', lineHeight: 1.5 }}>{m.text}</div>
+                    {!mine && m.productId && m.orderDocId ? (
+                      <RatePrompt
+                        sellerId={sellerId}
+                        productId={m.productId}
+                        orderId={m.orderDocId}
+                        orderRef={m.orderId}
+                        productName={m.productName}
+                        surface="inbox"
+                        prompt="Tap a star — it takes a second."
+                        onWriteMore={score => setRateMore({
+                          orderId: m.orderDocId,
+                          orderRef: m.orderId,
+                          productId: m.productId,
+                          productName: m.productName,
+                          score,
+                        })}
+                      />
+                    ) : (
+                      <div style={{ fontSize: 11, color: '#666', marginTop: 6 }}>
+                        {mine ? 'Waiting for the buyer to rate it.' : 'Open the product to rate it.'}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -536,6 +615,29 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
             Place Order — UGX {productPrice}
           </button>
         )}
+
+        {/* The rating, asked where the buyer already is. The receipt above asked first, so this one
+            appears only once the thread has moved past it — and only while they have not rated. */}
+        {ratingAsk && (
+          <div style={{ background: '#111', border: '1px solid #222', borderRadius: 12, padding: '10px 12px' }}>
+            <RatePrompt
+              sellerId={sellerId}
+              productId={ratingAsk.productId}
+              orderId={ratingAsk.orderDocId}
+              orderRef={ratingAsk.orderId}
+              productName={ratingAsk.productName}
+              surface="inbox-thread"
+              prompt={`How was ${ratingAsk.productName || 'your order'}?`}
+              onWriteMore={score => setRateMore({
+                orderId: ratingAsk.orderDocId,
+                orderRef: ratingAsk.orderId,
+                productId: ratingAsk.productId,
+                productName: ratingAsk.productName,
+                score,
+              })}
+            />
+          </div>
+        )}
       </div>
 
       {/* Feedback Toast */}
@@ -548,6 +650,23 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
       {/* Full-screen photo preview */}
       {previewImage && (
         <ProductPreview images={[previewImage]} startIndex={0} onClose={() => setPreviewImage(null)} />
+      )}
+
+      {/* The rest of the comment — chips, words, a photo — for a buyer who tapped a star in the
+          thread and then wanted to say more. The star they tapped is already chosen, so the form
+          never asks the same question twice. */}
+      {rateMore && (
+        <ReviewForm
+          key={rateMore.orderId}
+          sellerId={sellerId}
+          productId={rateMore.productId}
+          orderId={rateMore.orderId}
+          orderRef={rateMore.orderRef}
+          productName={rateMore.productName}
+          initialScore={rateMore.score}
+          surface="inbox"
+          onClose={() => setRateMore(null)}
+        />
       )}
 
       {/* Order Modal */}
