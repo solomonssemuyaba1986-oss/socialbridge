@@ -63,7 +63,7 @@ bounded offline buffer (200, oldest dropped) and never break the UI.
 - **Opt-out** — `localStorage.rachett_analytics_off = '1'` silences every writer
   (see `setAnalyticsOptOut`). Nothing is queued or sent in that state.
 
-## The events (92)
+## The events (104)
 
 ✅ = wired in the app today · ⏳ = reserved name, add the call when the feature or
 the page needs it.
@@ -113,7 +113,7 @@ the page needs it.
 | `product_viewed` | productId, sellerId, sellerSlug, surface, position, category | ✅ |
 | `product_surveyed` | productId, sellerId, sellerSlug, surface | ✅ |
 | `product_previewed` | productId, imageIndex | ⏳ |
-| `product_shared` | productId, sellerId, channel, surface | ⏳ (no share button yet) |
+| `product_shared` | productId, sellerId, channel, surface | ✅ (the seller's own share sheet — Marketing, or the phone's native sheet; `channel` = whatsapp · telegram · facebook · x · email · native · clipboard) |
 | `product_out_of_stock_seen` | productId, sellerId | ⏳ |
 | `product_liked` | productId, sellerId, surface, source | ✅ (♥ on Browse / Nearby / Store, and the post-purchase prompt) |
 | `product_unliked` | productId, sellerId, surface, source | ✅ (tapping a filled ♥ takes the vote back) |
@@ -155,9 +155,14 @@ the page needs it.
 | `stock_toggled` | productId, outOfStock | ⏳ |
 | `published_toggled` | productId, published | ⏳ |
 | `bulk_upload_finished` | count, failed | ⏳ |
-| `store_link_copied` | sellerId, surface | ⏳ |
-| `store_shared` | sellerId, channel, surface | ⏳ |
-| `qr_viewed` | sellerId | ⏳ |
+| `store_link_copied` | sellerId, surface | ✅ (three doors, one helper: the Dashboard block · the sidebar button · the Marketing page — `surface` says which) |
+| `store_shared` | sellerId, channel, surface | ✅ (the Marketing page's share row and the phone's native sheet) |
+| `qr_viewed` | sellerId | ✅ (a shop QR was drawn — Marketing's card, and each product's own) |
+| `product_link_copied` | productId, sellerId, surface | ✅ (Marketing — the per-product link, which is the one worth sending to one person) |
+| `qr_downloaded` | sellerId, surface | ✅ (⬇️ Download PNG — the card left the phone and can be printed) |
+| `qr_printed` | sellerId, surface | ✅ (🖨️ Print card — a blocked pop-up is a `qr_downloaded` instead, so the two never both fire) |
+| `promote_card_used` | card, surface | ✅ (a promotion caption was copied to the clipboard; `card` = status · bio · groups · parcel · ask) |
+| `marketing_opened` | productCount | ✅ (the seller opened 📣 Marketing — `productCount` is what they had to work with) |
 | `feedback_submitted` | category, role, source | ✅ (the form, and now the after-use ask) |
 | `care_ticket_sent` | issue, topic, photos, hasOrder | ✅ (a care ticket actually landed — `careTickets/`, author-readable only) |
 | `care_sheet_viewed` | hasOrder, issue | ✅ (the sheet was opened — the top of the care funnel) |
@@ -242,6 +247,20 @@ decided about. Change the horizon in `src/analytics/core.ts` (`RAW_TTL_DAYS`).
 
 No machine-learning models, no session recording, no third-party analytics, no
 push tokens. This is first-party, structured, queryable data — the raw material
-for funnels today and for modelling later. Seller-facing dashboards (reading this
-data back inside the app) need new collections and rules, so they come in M4 once
-rules can be deployed.
+for funnels today and for modelling later.
+
+**The one seller-facing read-back is deliberately narrow.** `events/` is readable by
+nobody but the report (`firestore.rules`: `allow read: if false`), so a seller cannot be
+told "12 people looked at this" *from the lake*. The 📣 Marketing page therefore reads only
+two things a browser is allowed to read: `sellers/{uid}/visits` — already written on every
+non-owner store visit — for "people opened your shop", and `productViews/{productId}`, a
+bare counter that is public to read, signed-in to move, and **up by exactly one and
+nothing else**. Everything else on that page (bags, ♥, orders) was already a number the
+app had. The funnel the page teaches, in the order it teaches it:
+
+    opens (productViews) → shares (store_shared · product_shared · product_link_copied)
+      → store visits (visits) → bags (bagCounts.baggedCount) → orders (products.orderCount)
+
+Two rules from this section still hold: a seller-facing number comes from the shop's own
+documents, never from `events/`; and nothing new gets written without a rule that keeps it
+honest.

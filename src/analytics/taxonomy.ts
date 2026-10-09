@@ -200,6 +200,14 @@ export const EVENT_PROPS = {
   store_link_copied: ['sellerId', 'surface'],
   store_shared: ['sellerId', 'channel', 'surface'],
   qr_viewed: ['sellerId'],
+  // The Marketing page: one door, and what a seller does inside it. `product_link_copied` is the
+  // sibling of `store_link_copied` for a single product; the QR is counted where it is made, in the
+  // seller's head, because that is the number that predicts a parcel coming back.
+  marketing_opened: ['productCount'],
+  product_link_copied: ['productId', 'sellerId', 'surface'],
+  qr_downloaded: ['sellerId', 'surface'],
+  qr_printed: ['sellerId', 'surface'],
+  promote_card_used: ['card', 'surface'],
   feedback_submitted: ['category', 'role', 'source'],
   // The after-use ask: shown, dismissed, and whether it earned an answer.
   feedback_prompt_shown: ['actions'],

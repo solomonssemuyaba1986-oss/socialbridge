@@ -19,6 +19,7 @@ import EditStore from './EditStore.tsx'
 import PaymentSetup from './PaymentSetup.tsx'
 import ProductsPage from './ProductsPage.tsx'
 import AnalyticsPage from './AnalyticsPage.tsx'
+import Marketing from './Marketing.tsx'
 import FeedbackPage from './FeedbackPage.tsx'
 import TopNav from './TopNav.tsx'
 import Splash from './Splash.tsx'
@@ -156,6 +157,10 @@ function App() {
       <Route path="/my-chats" element={<Navigate to="/inbox" />} />
       <Route path="/orders" element={sellerOnly ? <OrderHistory /> : <Navigate to="/" />} />
       <Route path="/analytics" element={sellerOnly ? <AnalyticsPage /> : <Navigate to="/" />} />
+      {/* 📣 Marketing — where a seller turns "my shop exists" into "people open it": the share link,
+          the QR for parcels, the per-product table, and the promotion prompts. Seller-only, like
+          Analytics: it is full of the shop's own numbers. */}
+      <Route path="/marketing" element={sellerOnly ? <Marketing /> : <Navigate to="/" />} />
       <Route path="/edit-store" element={sellerOnly ? <EditStore /> : <Navigate to="/" />} />
       {/* How the seller gets paid. It writes to their own document, so it needs no rules deploy. */}
       <Route path="/payment-setup" element={sellerOnly ? <PaymentSetup /> : <Navigate to="/" />} />

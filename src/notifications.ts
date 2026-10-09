@@ -53,6 +53,15 @@ export const notify = {
   storeLinkCopied: 'Link copied! Paste it anywhere you sell.',
   storeNotFound: "This store doesn't exist yet. Try searching for another seller.",
   editProductInfo: 'Edit your product details below. Save when done.',
+  productLinkCopied: 'Product link copied! Send it to the one person who asked for it.',
+  copyFailed: "Couldn't copy that. Press and hold the link to copy it by hand.",
+
+  // ---------- Marketing (the QR card) ----------
+  qrDownloaded: 'QR saved to your downloads. Print it and tape it on your parcels.',
+  qrPrinted: 'Printing your QR card — price it, tape it, sell it again.',
+  qrPrintBlocked: 'Your browser blocked the print window. Download the QR and print it from your photos instead.',
+  qrFailed: "Couldn't build the QR code. Check your connection and try again.",
+  captionCopied: 'Caption copied — paste it where your buyers already are.',
 
   // ---------- File Uploads ----------
   fileTypeInvalid: 'Please upload a JPG, PNG, or PDF file for this document.',

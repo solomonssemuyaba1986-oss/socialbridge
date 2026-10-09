@@ -74,10 +74,11 @@ const check = (name, fn) => { fn(); checks++; console.log('  ok  ' + name) }
 
 check('no page is still offset by the desktop sidebar', () => {
   const shells = find('marginLeft: 260')
-  assert.strictEqual(shells.length, 3, 'the three seller shells (Dashboard / Orders / Analytics)')
+  assert.strictEqual(shells.length, 4, 'the four seller shells (Dashboard / Orders / Analytics / Marketing)')
   const undressed = shells.filter(l => !l.line.includes('rt-main'))
   assert.deepStrictEqual(undressed.map(at), [],
     'marginLeft: 260 without rt-main — on a 390px phone that leaves the panel 130px to work in')
+  assert.ok(shells.every(l => l.file.endsWith('.tsx')), 'and each one is a page, not a stray style')
   assert.ok(fs.existsSync(path.join(SRC, 'SellerTabs.tsx')), 'the phone navigation must exist')
 })
 

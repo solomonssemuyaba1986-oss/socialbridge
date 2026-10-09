@@ -236,6 +236,23 @@ service cloud.firestore {
       }
     }
 
+    // 👀 How many times a product has been opened — the one number the seller's Marketing page needs
+    // and could not have: `events/` is unreadable by any browser, so a client-side count needs its own
+    // home. Same bargain as `bagCounts` above: public to read, signed-in to move, **up by exactly one
+    // and nothing else**. A seller cannot wind their own numbers back, cannot write a number in, and
+    // no uid is stored here at all — the "have I counted this session?" marker lives in the opener's
+    // own browser (`viewOnce.ts`), not in Firestore.
+    match /productViews/{productId} {
+      allow read: if true;
+      allow create: if request.auth != null
+        && request.resource.data.count == 1
+        && request.resource.data.updatedAt is int;
+      allow update: if request.auth != null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['count', 'updatedAt'])
+        && request.resource.data.count == resource.data.count + 1;
+      allow delete: if false;
+    }
+
     match /feedback/{feedbackId} {
       allow create: if request.auth != null;
       allow read, update, delete: if false;

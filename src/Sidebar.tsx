@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { db, auth } from './firebase'
-import { notify } from './notifications'
+import { copyStoreLink } from './shareStore'
 import { useSellerLive } from './sellerLive'
 import { getStoreAgeLabel } from './useSellerStats'
 import { SELLER_NAV, badgeFor } from './sellerNav'
@@ -91,7 +91,7 @@ function Sidebar({ spotlight }: Props) {
         </div>
         <div style={{ marginTop: 'auto' }}>
           {storeLink && (
-            <button onClick={() => { navigator.clipboard.writeText(storeLink); alert(notify.storeLinkCopied) }}
+            <button onClick={() => { void copyStoreLink({ sellerId: auth.currentUser?.uid || '', link: storeLink, surface: 'sidebar' }) }}
               style={{ width: '100%', padding: '12px', borderRadius: '14px', border: '1px solid #222', background: '#111', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>
               Copy Store Link
             </button>

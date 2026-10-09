@@ -22,6 +22,7 @@ import ProductPreview from './ProductPreview'
 import ProductReviews from './ProductReviews'
 import type { Eligibility, Review } from './reviewUtils'
 import { trackEvent } from './analytics'
+import { countProductView } from './productViews'
 
 /**
  * The product details sheet — the whole product, and the buy button, without a page load.
@@ -149,6 +150,10 @@ function ProductSheet({
       surface,
       hasVariants: listVariants(product?.colors).length > 0 || listVariants(product?.sizes).length > 0,
     })
+    // The same moment, counted where a seller can read it. `events/` answers rachett's questions;
+    // this one answers the seller's, on their own Marketing page — once per session, never their own
+    // opens, and it can only ever go up (`firestore.rules`).
+    void countProductView(product?.id || '', product?.sellerId)
   }, [product?.id, product?.sellerId, product?.colors, product?.sizes, surface])
 
   const recordClose = useCallback((action?: SheetAction | null) => {

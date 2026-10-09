@@ -5,7 +5,7 @@ import { auth, db } from './firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 import { useSellerOrders } from './useSellerOrders'
 import { paidCount } from './orderPayment'
-import { notify } from './notifications'
+import { copyStoreLink } from './shareStore'
 import LoadingScreen from './LoadingScreen'
 import Sidebar from './Sidebar'
 import SellerTabs from './SellerTabs'
@@ -428,15 +428,23 @@ const paidPending = paidCount(pendingOrders)
         </div>
 
         {/* Store Link */}
-        {/* Share Guide */}
+        {/* Share Guide — the same copy button the Marketing page owns, so the copy is *counted*
+            wherever it happens. The second button is the door: this block is the teaser, Marketing
+            is where the QR, the product links and the numbers live. */}
 <div style={{ borderTop: '1px solid #222', paddingTop: '16px' }}>
   <p style={{ color: '#888', fontSize: '13px', margin: '0 0 12px' }}>
     📢 <span style={{ color: '#fff', fontWeight: '600' }}>Grow your sales</span> — paste your link anywhere you have an audience. Instagram bio, TikTok profile, WhatsApp status, Facebook, Telegram, Pinterest, Reddit — anywhere.
   </p>
-  <button onClick={() => { navigator.clipboard.writeText(storeLink); alert(notify.storeLinkCopied) }}
-    style={{ width: '100%', padding: '12px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '14px' }}>
-    📋 Copy Link — Share Everywhere
-  </button>
+  <div className="rt-order-actions" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+    <button onClick={() => { void copyStoreLink({ sellerId: userId, link: storeLink, surface: 'dashboard' }) }}
+      style={{ flex: 1, minWidth: '180px', padding: '12px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '14px' }}>
+      📋 Copy Link — Share Everywhere
+    </button>
+    <button onClick={() => navigate('/marketing')}
+      style={{ flex: '0 0 auto', padding: '12px 16px', background: 'transparent', color: green, border: `1px solid ${green}`, borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '14px' }}>
+      📣 Open Marketing →
+    </button>
+  </div>
 </div>
 
         {/* Pending Orders */}
