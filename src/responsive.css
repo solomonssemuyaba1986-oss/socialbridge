@@ -215,6 +215,14 @@
     padding-bottom: calc(var(--rt-tabs) + var(--rt-safe-bottom) + 20px) !important;
   }
 
+  /* A floating button on a screen that *has* the tab bar cannot sit at the bottom of the screen: the
+     bar is 62px of opaque chrome at z-index 900, so the bag's slot leaves the bottom half of the
+     button behind it. This lifts it clear — same corner, same size, just above the bar instead of
+     under it. (In landscape the bar is 50px; the lift is still clear of it, so it is not restated.) */
+  .rt-fab.rt-fab-clears-tabs {
+    bottom: calc(var(--rt-tabs) + var(--rt-safe-bottom) + 16px) !important;
+  }
+
   /* ---- The tab bar ------------------------------------------------------------------------------ */
   .rt-tabs {
     position: fixed !important;
@@ -425,6 +433,15 @@
   .rt-sheet {
     z-index: 1000 !important;
     padding-bottom: var(--rt-safe-bottom) !important;
+  }
+
+  /* The "More" sheet is a list of every destination that is not a daily tab, so it grows whenever the
+     seller panel does (the market four came out of it). On a small phone it is now taller than the
+     92dvh a sheet is allowed, and without this the last rows — Settings, Reviews — would sit off the
+     bottom of the screen with no way to reach them. */
+  .rt-tabs-sheet .rt-modal-box {
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
   }
 
   /* Marketing sections: 80px of vertical padding is a desktop gesture. */

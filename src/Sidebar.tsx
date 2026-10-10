@@ -78,7 +78,7 @@ function Sidebar({ spotlight }: Props) {
             return (
               <button key={item.path + item.label} onClick={() => navigate(item.path)}
                 style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderRadius: '14px', border: 'none', cursor: 'pointer', textAlign: 'left', background: active ? '#0f2910' : 'transparent', color: active ? '#fff' : '#aaa', fontWeight: active ? 700 : 600, fontSize: '14px' }}>
-                <span>{item.icon}</span>
+                <span>{item.icon}{item.play && <span className="rt-play" aria-hidden="true">▶</span>}</span>
                 <span style={{ flex: 1 }}>{item.label}</span>
                 {showBadge > 0 ? (
                   <span style={{ minWidth: '24px', height: '24px', borderRadius: '999px', background: green, color: '#000', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 900, padding: '0 6px', boxShadow: '0 0 0 2px rgba(173,255,47,0.2)', animation: spotlight ? 'rachettPulse 0.8s ease-in-out infinite' : 'none' }}>

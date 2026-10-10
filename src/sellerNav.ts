@@ -12,7 +12,20 @@ export interface SellerNavItem {
   icon: string
   /** On the phone tab bar: the work that happens every day. Everything else waits behind "More". */
   tab?: boolean
+  /** A video destination — its icon wears a small ▶ (Shoppertainment is a bag with a play button). */
+  play?: boolean
 }
+
+/**
+ * The market, and the places a seller shows their own face in it. Named, because more than one
+ * screen opens them: the sidebar and the "More" sheet render these rows, the Dashboard's own button
+ * takes its label and glyph from `BROWSE`, and the phone's ＋ from `STUDIO` — never a second copy of
+ * a path that only has to be typed wrong once.
+ */
+export const BROWSE: SellerNavItem = { label: 'Browse', path: '/browse', icon: '▦' }
+export const SHOPPERTAINMENT: SellerNavItem = { label: 'Shoppertainment', path: '/shoppertainment', icon: '🛍️', play: true }
+export const LIVE: SellerNavItem = { label: 'Live', path: '/live', icon: '🔴' }
+export const STUDIO: SellerNavItem = { label: 'Studio', path: '/studio', icon: '＋' }
 
 /** Every destination in the seller panel, in the order the seller sees them. */
 export const SELLER_NAV: SellerNavItem[] = [
@@ -23,6 +36,13 @@ export const SELLER_NAV: SellerNavItem[] = [
   { label: 'Nearby', path: '/nearby', icon: '📍' },
   { label: 'Analytics', path: '/analytics', icon: '📈', tab: true },
   { label: 'Marketing', path: '/marketing', icon: '📣' },
+  // A seller is a buyer too — nothing a seller *is* may be unreachable from their own panel. These
+  // four sit above the admin tail (Payouts / Settings / Reviews) rather than at the end of the list,
+  // so the things a seller does around the shop stay together.
+  BROWSE,
+  SHOPPERTAINMENT,
+  LIVE,
+  STUDIO,
   { label: 'Payouts', path: '/payment-setup', icon: '💸' },
   { label: 'Settings', path: '/edit-store', icon: '⚙️' },
   { label: 'Reviews', path: '/dashboard', icon: '⭐' },

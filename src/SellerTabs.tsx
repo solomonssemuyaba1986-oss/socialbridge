@@ -78,7 +78,7 @@ function SellerTabs({ spotlight }: Props) {
               aria-current={active ? 'page' : undefined}
               className={active ? 'rt-tab-on' : undefined}
             >
-              <span className="rt-tabs-icon" aria-hidden="true">{item.icon}</span>
+              <span className="rt-tabs-icon" aria-hidden="true">{item.icon}{item.play && <span className="rt-play">▶</span>}</span>
               <span className="rt-tabs-label">{item.label}</span>
               {tabBadge(item)}
             </button>
@@ -124,7 +124,7 @@ function SellerTabs({ spotlight }: Props) {
                     onClick={() => { setSheetFor(null); navigate(item.path) }}
                     style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%', minHeight: 48, padding: '12px 14px', borderRadius: 14, border: 'none', background: '#1a1a1a', color: '#fff', fontWeight: 600, fontSize: 15, textAlign: 'left', cursor: 'pointer' }}
                   >
-                    <span aria-hidden="true">{item.icon}</span>
+                    <span aria-hidden="true">{item.icon}{item.play && <span className="rt-play">▶</span>}</span>
                     <span style={{ flex: 1 }}>{item.label}</span>
                     {count > 0 && (
                       <span style={{ minWidth: '22px', height: '22px', borderRadius: '999px', background: green, color: '#000', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 900, padding: '0 6px' }}>

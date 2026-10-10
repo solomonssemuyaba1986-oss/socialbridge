@@ -9,6 +9,8 @@ import { copyStoreLink } from './shareStore'
 import LoadingScreen from './LoadingScreen'
 import Sidebar from './Sidebar'
 import SellerTabs from './SellerTabs'
+import FloatingStudio from './FloatingStudio'
+import { BROWSE } from './sellerNav'
 import { variantLabel } from './productSheetUtils'
 import { getStoreAgeLabel, useSellerStats } from './useSellerStats'
 import ReliableBadgeCard from './ReliableBadgeCard'
@@ -264,6 +266,8 @@ const paidPending = paidCount(pendingOrders)
       <Sidebar spotlight={showSpotlight} />
       {/* The phone's navigation: same five places, same badges. Hidden on desktop by responsive.css. */}
       <SellerTabs spotlight={showSpotlight} />
+      {/* The seller's own door to making something — the ＋ that floats where a buyer's bag floats. */}
+      <FloatingStudio />
 
       <div className="rt-main rt-has-tabs" style={{ width: '100%', marginLeft: 260, padding: '32px 28px', minHeight: '100vh' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
@@ -292,9 +296,9 @@ const paidPending = paidCount(pendingOrders)
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={() => navigate('/browse')}
+            <button onClick={() => navigate(BROWSE.path)}
               style={{ background: green, border: 'none', color: '#000', borderRadius: '12px', padding: '10px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: '700' }}>
-              🏪 Market
+              {BROWSE.icon} {BROWSE.label}
             </button>
           </div>
         </div>

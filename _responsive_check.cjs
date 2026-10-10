@@ -6,8 +6,8 @@
  * Every rule below is here because it broke rachett on a phone, or because it would break it again
  * silently: a 260px sidebar on a 360px screen, a dialog left floating in the middle with the
  * keyboard over it, a screen still measuring itself in `vh`, a class that only exists in the JSX (or
- * only in the CSS), a second copy of the seller's navigation, and the missing line that lets a
- * megabyte of markup slide sideways.
+ * only in the CSS), a second copy of a navigation, a floating button left half-behind the tab bar,
+ * and the missing line that lets a megabyte of markup slide sideways.
  *
  * It reads files. It does not run the app — `npm run build` and `npm run lint` still have to pass.
  */
@@ -177,6 +177,23 @@ check('the tab bar and the space left for it agree', () => {
     'the content padding is derived from the same variable, so the two cannot drift')
 })
 
+check('the studio button floats clear of the tab bar', () => {
+  const fab = read('FloatingStudio.tsx')
+  assert.ok(fab.includes('className="rt-fab rt-fab-clears-tabs"'),
+    "the ＋ takes the bag's own slot — same size, same corner — and lifts itself over the bar")
+  assert.ok(fab.includes("from './sellerNav'") && fab.includes('STUDIO.path'),
+    'and Studio is wherever sellerNav.ts says it is, never a second copy of "/studio"')
+  assert.ok(/const cyan = '#22d3ee'/.test(fab) && fab.includes('background: cyan'),
+    'cyan, named once: this button makes something, it does not buy something')
+  assert.ok(/\.rt-fab\.rt-fab-clears-tabs \{\s*bottom: calc\(var\(--rt-tabs\) \+ var\(--rt-safe-bottom\) \+ 16px\)/.test(css),
+    'without the lift the bottom of it sits behind 62px of opaque bar at z-index 900')
+  const rendered = find('<FloatingStudio />')
+  assert.strictEqual(rendered.length, 1, 'one floating ＋, on the Dashboard')
+  assert.strictEqual(rendered[0].file, 'Dashboard.tsx', 'and nowhere else — buyers get the bag instead')
+  assert.ok(!read('FloatingBag.tsx').includes('rt-fab-clears-tabs'),
+    "the bag never shares a screen with the bar, so it keeps the plain slot")
+})
+
 check('the keyboard and the notch are both handled', () => {
   assert.ok(/input,\s*select,\s*textarea \{\s*font-size: 16px !important/.test(css),
     'under 16px, iOS zooms into the field and never comes back')
@@ -197,13 +214,44 @@ check('the browser is told this is a phone', () => {
 
 check('the two navigations share one definition', () => {
   const nav = read('sellerNav.ts')
-  assert.strictEqual((nav.match(/tab: true/g) || []).length, 5, 'five tabs')
-  assert.strictEqual((nav.match(/label: '/g) || []).length, 10, 'ten destinations in total')
+  const buyer = read('buyerNav.ts')
+  assert.strictEqual((nav.match(/tab: true/g) || []).length, 5, 'five tabs — the daily work is unchanged')
+  assert.strictEqual((nav.match(/label: '/g) || []).length, 14,
+    "ten of the seller's own, plus the four market ones (Browse / Shoppertainment / Live / Studio)")
+  /*
+   * A seller is a buyer too. The destinations the two sides share are written with the very same
+   * words in both files — same label, same path, same glyph, same ▶ — and this is the rule that
+   * keeps them that way. Two lists, one description of the market.
+   */
+  const shared = [
+    "{ label: 'Browse', path: '/browse', icon: '▦' }",
+    "{ label: 'Shoppertainment', path: '/shoppertainment', icon: '🛍️', play: true }",
+  ]
+  for (const entry of shared) {
+    assert.ok(nav.includes(entry), `sellerNav.ts is missing ${entry}`)
+    assert.ok(buyer.includes(entry), `buyerNav.ts describes the same place differently: ${entry}`)
+  }
+  assert.ok(read('buyerNav.ts').includes('badgeForBuyer'), 'the buyer bar gets one badge rule too')
   assert.ok(/badgeFor/.test(nav), 'one badge rule, shared')
   assert.ok(read('Sidebar.tsx').includes("from './sellerNav'"), 'the sidebar reads the shared list')
   assert.ok(read('SellerTabs.tsx').includes("from './sellerNav'"), 'so does the tab bar')
   assert.ok(!/const NAV_ITEMS/.test(read('Sidebar.tsx')), 'and neither keeps a second copy of it')
   assert.ok(!/const NAV_ITEMS/.test(read('SellerTabs.tsx')))
+  assert.strictEqual((nav.match(/play: true/g) || []).length, 1,
+    'exactly one destination in the seller panel is video: Shoppertainment')
+})
+
+check('a video destination looks like one everywhere', () => {
+  assert.ok(/\.rt-play \{/.test(indexCss), 'the ▶ marker is defined once, for both sizes')
+  for (const file of ['Sidebar.tsx', 'SellerTabs.tsx']) {
+    assert.ok(read(file).includes('item.play'),
+      `${file} draws it — a bag and a bag with a ▶ are the same picture otherwise`)
+  }
+})
+
+check('the More sheet has room for what is behind it', () => {
+  assert.ok(/\.rt-tabs-sheet \.rt-modal-box \{\s*overflow-y: auto !important/.test(css),
+    "the market four made the sheet taller than a small phone's 92dvh: its last rows must scroll")
 })
 
 check('every screen uses dynamic height, so a URL bar cannot clip it', () => {

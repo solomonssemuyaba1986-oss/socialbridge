@@ -116,6 +116,16 @@ button,
   right: calc(24px + var(--rt-safe-right)) !important;
 }
 
+/* The ▶ that turns a bag into a video. Shoppertainment shares Products' 🛍️ on purpose — one
+   destination, one picture — and the play button is what says "watch instead of buy". Drawn the
+   same way in the sidebar, the "More" sheet and the phone tab bar. */
+.rt-play {
+  font-size: 9px;
+  line-height: 1;
+  margin-left: 1px;
+  vertical-align: super;
+}
+
 /**
  * The new-order pulse on the phone tab bar.
  *
