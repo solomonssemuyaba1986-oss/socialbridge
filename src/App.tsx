@@ -32,10 +32,14 @@ import NearbyPage from './NearbyPage.tsx'
 import BuyerHome from './BuyerHome.tsx'
 import BuyerOrders from './BuyerOrders.tsx'
 import ProfilePage from './ProfilePage.tsx'
+import ShoppertainmentPage from './ShoppertainmentPage.tsx'
+import ComingSoon from './ComingSoon.tsx'
+import BuyerTabs from './BuyerTabs.tsx'
 import FeedbackNudge from './FeedbackNudge.tsx'
 import DemographicsGate from './DemographicsGate.tsx'
 import NotFound from './NotFound.tsx'
 import { getRole, MARKET_HOME } from './role.ts'
+import { LIVE, STUDIO } from './sellerNav'
 import { SellerLiveProvider } from './sellerLive.tsx'
 import { DataSaverProvider } from './dataSaverLive.tsx'
 import NetworkGuard from './NetworkGuard.tsx'
@@ -124,6 +128,10 @@ function App() {
           built on. A card rather than an overlay, so it never covers a half-filled order. */}
       <DemographicsGate />
       {location.pathname !== '/terms' && <TopNav variant={location.pathname === '/bag' ? 'bag' : 'default'} />}
+      {/* The buyer's phone navigation — mounted once, for every screen. It hides itself for a seller,
+          on the screens that own the whole phone, and (in `responsive.css`) on desktop, where the
+          appbar and the page itself are the way around. See `BuyerTabs.tsx`. */}
+      <BuyerTabs />
       <Routes>
       {/* Market-first: the PRODUCTS are the front door. A seller with a shop gets their
           dashboard, anyone who tapped "I'm a seller" but has no shop gets the one-time
@@ -149,6 +157,16 @@ function App() {
       <Route path="/store/:slug" element={<StorePage />} />
       <Route path="/dashboard" element={sellerOnly ? <Dashboard /> : <Navigate to="/" />} />
       <Route path="/browse" element={<BrowsePage />} />
+      {/* 🛍️▶ Shoppertainment — the market as a channel: one product per screen, edge to edge. Open to
+          guests, like Browse: watching is not a member's privilege, and nothing on the channel needs
+          an account (the sheet asks for one exactly when Buy or Message does). */}
+      <Route path="/shoppertainment" element={<ShoppertainmentPage />} />
+      {/* The seller's two video promises. The sidebar, the "More" sheet and the Dashboard's ＋ have
+          linked to them since the panel was built, and until now both links landed on "this page
+          doesn't exist" — which reads as a bug rather than as a plan. One honest "not yet" each,
+          labelled from `sellerNav.ts` so the page and the link can never disagree. */}
+      <Route path="/live" element={sellerOnly ? <ComingSoon item={LIVE} /> : <Navigate to="/" />} />
+      <Route path="/studio" element={sellerOnly ? <ComingSoon item={STUDIO} /> : <Navigate to="/" />} />
       <Route path="/nearby" element={<NearbyPage />} />
       <Route path="/bag" element={<BagPage />} />
       <Route path="/bulk-upload" element={sellerOnly ? <BulkUploadWrapper /> : <Navigate to="/" />} />

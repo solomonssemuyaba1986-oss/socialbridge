@@ -12,6 +12,13 @@ export interface SellerNavItem {
   icon: string
   /** On the phone tab bar: the work that happens every day. Everything else waits behind "More". */
   tab?: boolean
+  /**
+   * The name a 72px tab can hold, for the destinations the buyer's bar also carries (`buyerNav.ts`).
+   * The seller's own bar has room for its labels, so nothing on this side reads it yet — it is here
+   * because the two lists describe the market's shared places in the very same words, and
+   * `_responsive_check.cjs` refuses to let them drift apart.
+   */
+  short?: string
   /** A video destination — its icon wears a small ▶ (Shoppertainment is a bag with a play button). */
   play?: boolean
 }
@@ -23,7 +30,7 @@ export interface SellerNavItem {
  * a path that only has to be typed wrong once.
  */
 export const BROWSE: SellerNavItem = { label: 'Browse', path: '/browse', icon: '▦' }
-export const SHOPPERTAINMENT: SellerNavItem = { label: 'Shoppertainment', path: '/shoppertainment', icon: '🛍️', play: true }
+export const SHOPPERTAINMENT: SellerNavItem = { label: 'Shoppertainment', path: '/shoppertainment', icon: '🛍️', play: true, short: 'Shops' }
 export const LIVE: SellerNavItem = { label: 'Live', path: '/live', icon: '🔴' }
 export const STUDIO: SellerNavItem = { label: 'Studio', path: '/studio', icon: '＋' }
 

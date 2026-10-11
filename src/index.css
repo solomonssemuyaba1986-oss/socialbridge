@@ -105,6 +105,28 @@ button,
   overflow-x: clip;
 }
 
+/**
+ * 🛍️▶ One product, one screen — the slide itself.
+ *
+ * Shoppertainment is the only page whose *shape* is its content, so the slide belongs here rather
+ * than in the page: the photo has to be a layer of its own, which needs the article to be its
+ * positioning context — at every size, not only on a phone. The words sit at the foot of the slide
+ * (`align-items: flex-end`), and the slide is deliberately a little shorter than the screen: the next
+ * product peeking in at the bottom is the only "keep going" hint a phone has.
+ *
+ * The phone-only half of the shape is in `responsive.css`: there the words and the rail are lifted
+ * clear of the tab bar (`--rt-tabs`), and the scroll-snap is switched on — on a desktop a mouse wheel
+ * fights a snapping document, and this page is a stack of products up there.
+ */
+.rt-shop-item {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  min-height: 74dvh;
+  overflow: hidden;
+  scroll-snap-align: start;
+}
+
 /* NOTE: a generic `.rt-hscroll` rail helper and a `.rt-tap` target helper were written for this
    work and then removed: the rails that would have used them (`.rt-filters`, `.rt-rail`,
    `.rt-appbar-actions`) already carry those exact properties, and `_responsive_check.cjs` refuses to

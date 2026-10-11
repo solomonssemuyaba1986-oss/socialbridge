@@ -509,7 +509,7 @@ function BagPage() {
   if (count === 0) {
     const railsCopy = { recentCount: recent.length, suggestionCount: suggestions.length, near: shelfIsNear }
     return (
-      <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '20px' }}>
+      <div className="rt-page rt-has-tabs" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '20px' }}>
         <div style={{ maxWidth: '640px', margin: '0 auto' }}>
           {/* Nothing saved yet — so the top of the page says what it *can* offer, and offers it. */}
           <div style={{ textAlign: 'center', padding: '26px 0 4px' }}>
@@ -572,7 +572,7 @@ function BagPage() {
   }
 
   return (
-    <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '20px' }}>
+    <div className="rt-page rt-has-tabs" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '20px' }}>
       <div style={{ maxWidth: '640px', margin: '0 auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <h1 style={{ margin: 0, fontSize: '22px', fontWeight: '800' }}>🛍️ Your Bag ({count})</h1>

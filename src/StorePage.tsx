@@ -871,7 +871,7 @@ const handleSignupForAction = async (provider: any) => {
   if (!seller) return <StoreProblem slug={slugParam} />
 
   return (
-    <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
+    <div className="rt-page rt-has-tabs" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
       {feedbackVisible && (
         <div style={{ margin: '16px auto 0', maxWidth: '640px', padding: '14px 16px', borderRadius: '14px', border: `1px solid ${feedbackType === 'success' ? '#2f8' : feedbackType === 'error' ? '#f55' : '#55d'}`, background: feedbackType === 'success' ? '#122a0d' : feedbackType === 'error' ? '#2a0d0d' : '#0d122a', color: '#fff', fontSize: '14px', textAlign: 'center' }}>
           {feedbackMessage}

@@ -53,7 +53,7 @@ function FeedbackPage() {
 
 
   return (
-    <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '20px' }}>
+    <div className="rt-page rt-has-tabs" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '20px' }}>
       <div style={{ maxWidth: '480px', margin: '0 auto' }}>
         <h1 style={{ margin: '0 0 4px', fontSize: '24px', fontWeight: '800' }}>What didn't you like?</h1>
         <p style={{ color: '#888', fontSize: '14px', margin: '0 0 24px' }}>

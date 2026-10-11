@@ -9,13 +9,14 @@ import { STUDIO } from './sellerNav'
  * live stream. So it is the same 56px circle in the same corner, in cyan instead of the brand
  * green, because it makes something rather than buys something.
  *
- * Two differences the bag does not have to worry about:
- *   - The Dashboard *has* the phone tab bar. The bar is 62px of opaque chrome at a higher z-index,
- *     so the bag's slot would leave the bottom half of this button behind it. `rt-fab-clears-tabs`
- *     (responsive.css, phone only) lifts it above the bar; on desktop the class does nothing and it
- *     sits exactly where the bag sits.
- *   - The destination comes from `sellerNav.ts`, so the ＋ and the sidebar's Studio row can never
- *     disagree about where Studio is.
+ * Two things worth saying about the pair of floating buttons in this corner (`FloatingBag.tsx` is the
+ * other one):
+ *   - Both wear `rt-fab-clears-tabs`, because both can share a screen with the phone tab bar — 62px of
+ *     opaque chrome at a higher z-index than either button, which is exactly where the bottom half of
+ *     a bottom-right FAB would otherwise be. The lift is written once, in `responsive.css`, phone
+ *     only; on desktop the class does nothing and each button sits in the corner the other one uses.
+ *   - This one's destination comes from `sellerNav.ts`, so the ＋ and the sidebar's Studio row can
+ *     never disagree about where Studio is.
  */
 const cyan = '#22d3ee'
 

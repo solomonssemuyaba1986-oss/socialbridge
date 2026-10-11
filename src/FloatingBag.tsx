@@ -10,13 +10,18 @@ type Props = {
 /**
  * The floating bag button buyers expect on every shopping screen
  * (Browse, Store, Nearby, home). One component, one look.
+ *
+ * On a phone it always shares the screen with the buyer's tab bar — every shopping screen has both —
+ * so it always wears the lift that puts it clear of the bar instead of under it
+ * (`.rt-fab-clears-tabs`). Desktop has no bar, and the lift is only written inside the phone media
+ * query, so nothing changes up there.
  */
 function FloatingBag({ count }: Props) {
   const navigate = useNavigate()
 
   return (
     <button onClick={() => navigate('/bag')} aria-label="Open your bag" title="Your bag"
-      className="rt-fab"
+      className="rt-fab rt-fab-clears-tabs"
       style={{ position: 'fixed', bottom: '24px', right: '24px', width: '56px', height: '56px', borderRadius: '50%', background: green, color: '#000', border: 'none', cursor: 'pointer', fontSize: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, boxShadow: '0 4px 16px rgba(173,255,47,0.4)' }}>
       🛍️
       {count > 0 && (

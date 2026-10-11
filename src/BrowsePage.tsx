@@ -932,7 +932,7 @@ function BrowsePage() {
   }, [activeCategory, search, products, sortBy, minPrice, maxPrice, hideOutOfStock, ownerFilter, mySlug, buyerArea, sellerGeo])
 
   return (
-    <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
+    <div className="rt-page rt-has-tabs" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
 
       {/* Hero */}
       <div style={{ textAlign: 'center', padding: '48px 20px 32px', borderBottom: '1px solid #1a1a1a' }}>

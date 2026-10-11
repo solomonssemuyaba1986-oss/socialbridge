@@ -113,7 +113,7 @@ function ProfilePage() {
   }
 
   return (
-    <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
+    <div className="rt-page rt-has-tabs" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '20px 16px 60px' }}>
 
         <h1 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 800 }}>👤 Your profile</h1>

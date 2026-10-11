@@ -85,7 +85,7 @@ function ReturnsPage() {
   const goSignIn = () => requireSignIn(navigate, { action: 'care', returnTo: RETURN_PAGE })
 
   return (
-    <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '20px 16px 60px' }}>
+    <div className="rt-page rt-has-tabs" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '20px 16px 60px' }}>
       <div style={{ maxWidth: 720, margin: '0 auto' }}>
         <h1 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 800 }}>↩️ Returns & rachett care</h1>
         <p style={{ margin: '0 0 20px', color: '#888', fontSize: 13, lineHeight: 1.6 }}>

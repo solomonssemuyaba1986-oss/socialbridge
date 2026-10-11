@@ -216,9 +216,10 @@
   }
 
   /* A floating button on a screen that *has* the tab bar cannot sit at the bottom of the screen: the
-     bar is 62px of opaque chrome at z-index 900, so the bag's slot leaves the bottom half of the
+     bar is 62px of opaque chrome at z-index 900, so the plain slot would leave the bottom half of the
      button behind it. This lifts it clear — same corner, same size, just above the bar instead of
-     under it. (In landscape the bar is 50px; the lift is still clear of it, so it is not restated.) */
+     under it. Both floating buttons wear it: the buyer's bag (a buyer's bar is on every shopping
+     screen) and the seller's ＋. (In landscape the bar is 50px, so the lift is still clear of it.) */
   .rt-fab.rt-fab-clears-tabs {
     bottom: calc(var(--rt-tabs) + var(--rt-safe-bottom) + 16px) !important;
   }
@@ -274,6 +275,14 @@
   .rt-tabs-label {
     font-size: 10px !important;
     white-space: nowrap !important;
+  }
+
+  /* The seller's bar is five tabs and a "More"; the buyer's is five destinations and no sheet at all
+     (`buyerNav.ts`), so each bar states its own column count instead of sharing a guessed one. Five
+     across a 360px screen leaves 72px a tab — which is why the buyer's two long names are written
+     short in `buyerNav.ts` rather than squeezed here. */
+  .rt-tabs-buyer {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
   }
 
   /* ---- The app's own header ---------------------------------------------------------------------
@@ -447,6 +456,28 @@
   /* Marketing sections: 80px of vertical padding is a desktop gesture. */
   .rt-section {
     padding: 44px 16px !important;
+  }
+
+  /* ---- 🛍️▶ Shoppertainment: the part of a slide that only matters next to the tab bar -------------
+   * The words at the foot of a slide (price, name, shop) clear the bar and the home indicator by the
+   * same sum the bar's own room is calculated from, so the two can never drift apart.
+   */
+  .rt-shop-meta {
+    padding-bottom: calc(var(--rt-tabs) + var(--rt-safe-bottom) + 22px) !important;
+  }
+
+  /* The rail of three taps sits in the corner the words leave free for it (`.rt-shop-meta` keeps 92px
+     of right padding for exactly this), lifted by the same sum — so ♥ / 🛍️ / 💬 stay reachable on the
+     last slide too, where the bar is nearest. */
+  .rt-shop-rail {
+    bottom: calc(var(--rt-tabs) + var(--rt-safe-bottom) + 22px) !important;
+  }
+
+  /* The snap, on the document itself: `ShoppertainmentPage.tsx` puts this class on `<html>` while it
+     is mounted, because a page cannot style the document from JSX. `proximity` rather than
+     `mandatory`, so a hard flick can still travel two or three products instead of exactly one. */
+  html.rt-shop-snap {
+    scroll-snap-type: y proximity !important;
   }
 }
 

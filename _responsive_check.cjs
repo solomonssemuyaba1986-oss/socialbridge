@@ -175,9 +175,15 @@ check('the tab bar and the space left for it agree', () => {
   assert.ok(/--rt-tabs: 62px/.test(indexCss), 'one height, named once')
   assert.ok(/padding-bottom: calc\(var\(--rt-tabs\) \+ var\(--rt-safe-bottom\) \+ 20px\)/.test(css),
     'the content padding is derived from the same variable, so the two cannot drift')
+  assert.ok(read('BrowsePage.tsx').includes('rt-page rt-has-tabs'),
+    "and the market's own screen leaves that room too — the bar floats over the grid, not just the panel")
+  assert.ok(/\.rt-tabs-buyer \{\s*grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/.test(css),
+    'five buyer destinations, five columns — there is no "More" sheet on that side to hide the fifth')
+  assert.ok(/\.rt-shop-meta \{\s*padding-bottom: calc\(var\(--rt-tabs\) \+ var\(--rt-safe-bottom\) \+ 22px\)/.test(css),
+    'and a slide’s own words clear the bar by the same sum, not by a number of their own')
 })
 
-check('the studio button floats clear of the tab bar', () => {
+check('the floating buttons float clear of the tab bar', () => {
   const fab = read('FloatingStudio.tsx')
   assert.ok(fab.includes('className="rt-fab rt-fab-clears-tabs"'),
     "the ＋ takes the bag's own slot — same size, same corner — and lifts itself over the bar")
@@ -190,8 +196,8 @@ check('the studio button floats clear of the tab bar', () => {
   const rendered = find('<FloatingStudio />')
   assert.strictEqual(rendered.length, 1, 'one floating ＋, on the Dashboard')
   assert.strictEqual(rendered[0].file, 'Dashboard.tsx', 'and nowhere else — buyers get the bag instead')
-  assert.ok(!read('FloatingBag.tsx').includes('rt-fab-clears-tabs'),
-    "the bag never shares a screen with the bar, so it keeps the plain slot")
+  assert.ok(read('FloatingBag.tsx').includes('className="rt-fab rt-fab-clears-tabs"'),
+    "the bag takes the same lift: a buyer's bar is on every screen the bag floats over")
 })
 
 check('the keyboard and the notch are both handled', () => {
@@ -221,11 +227,12 @@ check('the two navigations share one definition', () => {
   /*
    * A seller is a buyer too. The destinations the two sides share are written with the very same
    * words in both files — same label, same path, same glyph, same ▶ — and this is the rule that
-   * keeps them that way. Two lists, one description of the market.
+   * keeps them that way — the label, the path, the glyph, the ▶, and the short name a phone's tab
+   * bar can actually fit. Two lists, one description of the market.
    */
   const shared = [
     "{ label: 'Browse', path: '/browse', icon: '▦' }",
-    "{ label: 'Shoppertainment', path: '/shoppertainment', icon: '🛍️', play: true }",
+    "{ label: 'Shoppertainment', path: '/shoppertainment', icon: '🛍️', play: true, short: 'Shops' }",
   ]
   for (const entry of shared) {
     assert.ok(nav.includes(entry), `sellerNav.ts is missing ${entry}`)
@@ -235,10 +242,25 @@ check('the two navigations share one definition', () => {
   assert.ok(/badgeFor/.test(nav), 'one badge rule, shared')
   assert.ok(read('Sidebar.tsx').includes("from './sellerNav'"), 'the sidebar reads the shared list')
   assert.ok(read('SellerTabs.tsx').includes("from './sellerNav'"), 'so does the tab bar')
+  assert.ok(read('BuyerTabs.tsx').includes("from './buyerNav'"), "and the buyer's bar reads the buyer's list")
+  assert.ok(read('App.tsx').includes('<BuyerTabs />'),
+    'which is mounted once, for every screen — the bar decides where it belongs, not the router')
   assert.ok(!/const NAV_ITEMS/.test(read('Sidebar.tsx')), 'and neither keeps a second copy of it')
   assert.ok(!/const NAV_ITEMS/.test(read('SellerTabs.tsx')))
   assert.strictEqual((nav.match(/play: true/g) || []).length, 1,
     'exactly one destination in the seller panel is video: Shoppertainment')
+})
+
+check('the buyer’s bar keeps out of the seller’s part of the app', () => {
+  // Every route `App.tsx` guards with `sellerOnly` is a screen a signed-in buyer can still type the
+  // URL for. The bar names each one, and this is the rule that keeps the two lists together: add a
+  // seller route, add it to `OFF_LIMITS` in `BuyerTabs.tsx`.
+  const guarded = [...read('App.tsx').matchAll(/path="([^"]+)" element=\{sellerOnly \?/g)].map(m => m[1])
+  assert.ok(guarded.length >= 8, `expected the seller's own routes, found ${guarded.length}`)
+  const bar = read('BuyerTabs.tsx')
+  const missing = guarded.filter(p => !bar.includes(`'${p}'`))
+  assert.deepStrictEqual(missing, [],
+    `the market's bar would float over the seller's own ${missing.join(', ')}`)
 })
 
 check('a video destination looks like one everywhere', () => {
