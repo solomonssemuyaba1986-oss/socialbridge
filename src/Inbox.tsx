@@ -12,6 +12,7 @@ import ConversationPanel from './ConversationPanel'
 import DraftResumeSheet from './DraftResumeSheet'
 import { getConversationId, markConversationRead } from './useConversation'
 import LoadingScreen from './LoadingScreen'
+import LoadingBanner from './LoadingBanner'
 import { getDraft, useAllDrafts } from './useDraft'
 import { draftAge, draftLabel, type DraftMeta } from './draftStore'
 import SellerTabs from './SellerTabs'
@@ -533,7 +534,7 @@ function Inbox() {
           {showInitialLoad ? (
             <LoadingScreen inline variant="rows" message="Loading your conversations..." />
           ) : loading && threads.length === 0 ? (
-            <p style={{ color: '#666', fontSize: 13, textAlign: 'center', padding: '24px 0' }}>Loading…</p>
+            <LoadingBanner message="Loading…" compact />
           ) : visible.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 20px' }}>
             <div style={{ fontSize: '48px', marginBottom: '16px' }}>{search ? '🔍' : (filter === 'unread' ? '🎉' : '📭')}</div>

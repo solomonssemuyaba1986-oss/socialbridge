@@ -10,12 +10,14 @@ import { useAllDrafts, useDraft } from './useDraft'
 import QuickRepliesPanel from './QuickRepliesPanel'
 import { uploadImageToCloudinary } from './uploadImage'
 import ProductPreview from './ProductPreview'
+import ProductSheet from './ProductSheet'
 import { getConversationId, sendConversationMessage } from './useConversation'
 import { notify } from './notifications'
 import { consumePendingAction, requireSignIn } from './signInGate'
 import SignInPrompt from './SignInPrompt'
 // One number format for the whole app: ✓ bought (and ♥ likes) abbreviate to K/M.
 import { formatCount } from './productCardUtils'
+import type { CardProduct } from './productCardUtils'
 import { variantLabel } from './productSheetUtils'
 import { useBuyerName } from './useBuyerName'
 import { nameLabel } from './buyerName'
@@ -40,6 +42,14 @@ import {
 const green = '#adff2f'
 const SUPPORT_WHATSAPP = (import.meta.env.VITE_SUPPORT_WHATSAPP || '256703174968').trim()
 const SUPPORT_EMAIL = 'rachettcommerce@gmail.com'
+
+/**
+ * Slug → shop id, for bags saved before every row carried a `sellerId`. A slug belongs to one shop
+ * for good, so this may live for as long as the page does — and being module-level rather than a
+ * ref keeps `openOrder`/`openMessage` free of ref reads, which the React compiler flags even when
+ * they are only ever called from a tap.
+ */
+const sellerIdCache = new Map<string, string>()
 
 /**
  * The small cards an empty bag offers: their own trail on the left of the page, then what is moving.
@@ -123,7 +133,6 @@ function BagPage() {
     { surface: 'bag' },
   )
   const [showQuickReplies, setShowQuickReplies] = useState(false)
-  const sellerIdCache = useRef<Map<string, string>>(new Map())
   // Unsent messages, so a row in the bag can say "you already wrote about this".
   const { drafts: myDrafts } = useAllDrafts()
   const draftProductIds = new Set(myDrafts.map(d => d.productId).filter((id): id is string => Boolean(id)))
@@ -132,8 +141,23 @@ function BagPage() {
   const [guestUploading, setGuestUploading] = useState(false)
   const [salesMap, setSalesMap] = useState<Record<string, number>>({})
   const [missingProducts, setMissingProducts] = useState<Record<string, boolean>>({})
-  const [liveProducts, setLiveProducts] = useState<Record<string, { imageUrl?: string; images?: string[]; name?: string; price?: string; outOfStock?: boolean }>>({})
+  const [liveProducts, setLiveProducts] = useState<Record<string, {
+    imageUrl?: string
+    images?: string[]
+    name?: string
+    price?: string
+    outOfStock?: boolean
+    /** 🗣️ The comment counters — what the row's ⭐ line and the details sheet both read. */
+    reviewCount?: number
+    reviewScoreSum?: number
+    likeCount?: number
+    stock?: string | number
+    colors?: string[]
+    sizes?: string[]
+  }>>({})
   const [previewItem, setPreviewItem] = useState<typeof items[number] | null>(null)
+  /** The details sheet — the same one Browse and Nearby use, opened from the bag row. */
+  const [detailsItem, setDetailsItem] = useState<typeof items[number] | null>(null)
   const [previewImageIndex, setPreviewImageIndex] = useState(0)
   const [fullPreview, setFullPreview] = useState(false)
   const previewSwipeStart = useRef<{ x: number; y: number } | null>(null)
@@ -220,7 +244,19 @@ function BagPage() {
           if (snap.exists()) {
             const d = snap.data()
             setSalesMap(prev => ({ ...prev, [item.productId]: d.salesCount || 0 }))
-            setLiveProducts(prev => ({ ...prev, [item.productId]: { imageUrl: d.imageUrl || '', images: d.images || [], name: d.name || '', price: d.price || '', outOfStock: !!d.outOfStock } }))
+            setLiveProducts(prev => ({ ...prev, [item.productId]: {
+              imageUrl: d.imageUrl || '',
+              images: d.images || [],
+              name: d.name || '',
+              price: d.price || '',
+              outOfStock: !!d.outOfStock,
+              reviewCount: Number(d.reviewCount) || 0,
+              reviewScoreSum: Number(d.reviewScoreSum) || 0,
+              likeCount: Number(d.likeCount) || 0,
+              stock: d.stock,
+              colors: Array.isArray(d.colors) ? d.colors : undefined,
+              sizes: Array.isArray(d.sizes) ? d.sizes : undefined,
+            } }))
             setMissingProducts(prev => {
               if (!prev[item.productId]) return prev
               const next = { ...prev }
@@ -289,12 +325,12 @@ function BagPage() {
 
   const resolveSellerId = async (slug: string, cached: string): Promise<string> => {
     if (cached) return cached
-    if (sellerIdCache.current.has(slug)) return sellerIdCache.current.get(slug)!
+    if (sellerIdCache.has(slug)) return sellerIdCache.get(slug)!
     try {
       const snap = await getDocs(query(collection(db, 'sellers'), where('slug', '==', slug)))
       if (!snap.empty) {
         const id = snap.docs[0].id
-        sellerIdCache.current.set(slug, id)
+        sellerIdCache.set(slug, id)
         return id
       }
     } catch (err) {
@@ -592,6 +628,9 @@ function BagPage() {
           {items.map(item => {
             const isMissing = !!missingProducts[item.productId]
             const lv = liveView(item)
+            const live = liveProducts[item.productId]
+            const reviews = live?.reviewCount || 0
+            const stars = reviews > 0 ? ((live?.reviewScoreSum || 0) / reviews).toFixed(1) : ''
             return (
               <div key={item.productId}
                 style={{ background: '#1a1a1a', borderRadius: '12px', padding: '14px', border: isMissing ? '1px solid #333' : '1px solid #222', display: 'flex', gap: '14px', alignItems: 'center', opacity: isMissing ? 0.85 : 1 }}>
@@ -623,6 +662,12 @@ function BagPage() {
                           ✓ {formatCount(salesMap[item.productId] || 0)} bought
                         </p>
                       )}
+                      {/* 🗣️ Social proof, right where the decision is made: what buyers said. */}
+                      {reviews > 0 && (
+                        <p style={{ margin: '6px 0 0', fontSize: 12, color: '#ddd', fontWeight: 700 }}>
+                          ⭐ {stars} · {reviews} review{reviews === 1 ? '' : 's'}
+                        </p>
+                      )}
                     </>
                   )}
                 </div>
@@ -641,6 +686,11 @@ function BagPage() {
                           📝 Draft
                         </span>
                       )}
+                      <button onClick={() => setDetailsItem(item)}
+                        title="Photos, sizes, and what buyers said about it"
+                        style={{ padding: '6px 12px', background: '#111', color: green, border: `1px solid ${green}`, borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                        ⓘ Details
+                      </button>
                       <button onClick={() => openMessage(item)}
                         style={{ padding: '6px 12px', background: '#222', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '11px', whiteSpace: 'nowrap' }}>
                         💬 Message
@@ -878,6 +928,42 @@ function BagPage() {
           onClose={() => setFullPreview(false)}
         />
       )}
+
+      {/* ⓘ The details sheet — the same one Browse, Nearby and the storefront open, so the bag
+          shows the whole product and what buyers said about it instead of a second, thinner view. */}
+      {detailsItem && (() => {
+        const lv = liveView(detailsItem)
+        const live = liveProducts[detailsItem.productId] || {}
+        const card: CardProduct = {
+          id: detailsItem.productId,
+          name: lv.name,
+          price: lv.price,
+          imageUrl: lv.imageUrl,
+          images: lv.images,
+          sellerSlug: detailsItem.sellerSlug,
+          sellerId: detailsItem.sellerId,
+          businessName: detailsItem.businessName,
+          outOfStock: live.outOfStock,
+          reviewCount: live.reviewCount,
+          reviewScoreSum: live.reviewScoreSum,
+          likeCount: live.likeCount,
+          stock: live.stock,
+          colors: live.colors,
+          sizes: live.sizes,
+        }
+        return (
+          <ProductSheet
+            key={detailsItem.productId}
+            product={card}
+            surface="bag"
+            inBag
+            onClose={() => setDetailsItem(null)}
+            onBuy={() => { const item = detailsItem; setDetailsItem(null); void openOrder(item) }}
+            onMessage={() => { const item = detailsItem; setDetailsItem(null); void openMessage(item) }}
+            onToggleBag={() => { removeFromBag(detailsItem.productId); setDetailsItem(null) }}
+          />
+        )
+      })()}
     </div>
   )
 }

@@ -66,6 +66,18 @@ export const CATEGORIES = {
     "eBooks",
     "Design Services"
   ],
+  // A job is not a product, but it is still something a seller brings to the market: a shop with
+  // work going, a tradesman, a salon needing a hand. Listed like everything else so a buyer can
+  // browse it, message about it and agree terms in the same thread — the sub-list is what the
+  // store setup demands, so it must never be empty.
+  "Job & Work": [
+    "Full-time Jobs",
+    "Part-time & Shift Work",
+    "Gigs & Freelance",
+    "Internships & Attachments",
+    "Skills & Training",
+    "CV & Career Help"
+  ],
   // Services are people selling their time — a tutor, a coach, a photographer. Nothing ships, so
   // these are booked: the buyer sends the order and the two of them agree a time in chat.
   "Services": [

@@ -39,7 +39,7 @@ import FeedbackNudge from './FeedbackNudge.tsx'
 import DemographicsGate from './DemographicsGate.tsx'
 import NotFound from './NotFound.tsx'
 import { getRole, MARKET_HOME } from './role.ts'
-import { LIVE, STUDIO } from './sellerNav'
+import { LIVE, STUDIO, SERVICES } from './sellerNav'
 import { SellerLiveProvider } from './sellerLive.tsx'
 import { DataSaverProvider } from './dataSaverLive.tsx'
 import NetworkGuard from './NetworkGuard.tsx'
@@ -167,6 +167,9 @@ function App() {
           labelled from `sellerNav.ts` so the page and the link can never disagree. */}
       <Route path="/live" element={sellerOnly ? <ComingSoon item={LIVE} /> : <Navigate to="/" />} />
       <Route path="/studio" element={sellerOnly ? <ComingSoon item={STUDIO} /> : <Navigate to="/" />} />
+      {/* 🧰 Services & Delivery — the seller's next promise, labelled from the same list as its
+          sidebar row and its More sheet entry, so the page and the link cannot disagree. */}
+      <Route path="/services-delivery" element={sellerOnly ? <ComingSoon item={SERVICES} /> : <Navigate to="/" />} />
       <Route path="/nearby" element={<NearbyPage />} />
       <Route path="/bag" element={<BagPage />} />
       <Route path="/bulk-upload" element={sellerOnly ? <BulkUploadWrapper /> : <Navigate to="/" />} />

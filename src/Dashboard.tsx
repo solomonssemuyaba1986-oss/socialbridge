@@ -10,7 +10,7 @@ import LoadingScreen from './LoadingScreen'
 import Sidebar from './Sidebar'
 import SellerTabs from './SellerTabs'
 import FloatingStudio from './FloatingStudio'
-import { BROWSE } from './sellerNav'
+import { BROWSE, MY_ORDERS } from './sellerNav'
 import { variantLabel } from './productSheetUtils'
 import { getStoreAgeLabel, useSellerStats } from './useSellerStats'
 import ReliableBadgeCard from './ReliableBadgeCard'
@@ -293,9 +293,20 @@ const paidPending = paidCount(pendingOrders)
               <div style={{ fontSize: '13px', color: '#888' }}>
                 {storeAge ? `${storeAge} · ` : ''}Manage products, orders, inbox and growth.
               </div>
+              {/* 🟢 The seller's own side of the presence badge: while they are in the app,
+                  `presence.ts` keeps their shop's `lastSeen` fresh, and buyers see "Active now". */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontSize: 12, color: green, fontWeight: 700 }}>
+                <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: green, flexShrink: 0 }} />
+                Active now — buyers can see you are around
+              </div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
+            {/* A seller is a buyer too: their own purchases, one tap from their work screen. */}
+            <button onClick={() => navigate(MY_ORDERS.path)}
+              style={{ background: '#111', border: '1px solid #333', color: '#ddd', borderRadius: '12px', padding: '10px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: '700' }}>
+              {MY_ORDERS.icon} {MY_ORDERS.label}
+            </button>
             <button onClick={() => navigate(BROWSE.path)}
               style={{ background: green, border: 'none', color: '#000', borderRadius: '12px', padding: '10px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: '700' }}>
               {BROWSE.icon} {BROWSE.label}

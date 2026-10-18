@@ -11,7 +11,8 @@ import { createBuyerOrder, incrementProductOrderCount, createOrderConversation }
 import QuickRepliesPanel from './QuickRepliesPanel'
 import PawapayCheckout, { type Stage } from './PawapayCheckout'
 import { getMainCategories } from './categories'
-import LoadingScreen from './LoadingScreen'
+import LoadingBanner from './LoadingBanner'
+import { isNewSeller, NEW_SELLER_LABEL } from './sellerAge'
 import { avatarColor, initialOf } from './avatar'
 import ProductSheet from './ProductSheet'
 import { variantLabel, type Variant } from './productSheetUtils'
@@ -73,6 +74,8 @@ interface Product {
   /** The shop's rating, joined on with the store details below (never the product's own counters). */
   ratingAvg?: number | null
   ratingCount?: number
+  /** When the *shop* opened, joined from the seller document — never the product's own date. */
+  sellerCreatedAt?: unknown
   createdAt?: unknown
   updatedAt?: unknown
 }
@@ -99,7 +102,7 @@ function BrowsePage() {
   } = useProductFeed({ pageSize: 24 })
 
   /** Store details, joined onto each product by its sellerId. */
-  const [sellerMap, setSellerMap] = useState<Map<string, { slug: string; businessName: string; logoUrl: string; ratingAvg: number | null; ratingCount: number }>>(new Map())
+  const [sellerMap, setSellerMap] = useState<Map<string, { slug: string; businessName: string; logoUrl: string; ratingAvg: number | null; ratingCount: number; createdAt?: unknown }>>(new Map())
 
   /** Everything we've loaded so far, with its store attached. */
   const products: Product[] = useMemo(
@@ -116,6 +119,9 @@ function BrowsePage() {
           // (below) gives every one of its cards the number, and no card reads a comment at all.
           ratingAvg: info?.ratingAvg ?? null,
           ratingCount: info?.ratingCount ?? 0,
+          // The shop's own birthday, not the product's: a brand-new listing in an old shop is not
+          // a new seller, and an old listing in a new shop still is.
+          sellerCreatedAt: info?.createdAt,
         }
       })
       .filter(p => p.sellerSlug),
@@ -403,6 +409,13 @@ function BrowsePage() {
   }, [toggleLike, likeCountFor, navigate])
 
   const formatBagCount = formatCount
+
+  /**
+   * The viewer's own listing — by shop slug, or by uid when an old product has no slug. The
+   * "New seller" badge must never land on your own shop, whichever half of the identity exists.
+   */
+  const isMyListing = (p: Product) =>
+    Boolean((mySlug && p.sellerSlug === mySlug) || (userId && p.sellerId === userId))
 
   const handleCardClick = (p: Product) => {
     if (clickTimerRef.current !== null) {
@@ -852,6 +865,7 @@ function BrowsePage() {
             logoUrl: s.logoUrl || '',
             ratingAvg: typeof s.ratingAvg === 'number' ? s.ratingAvg : null,
             ratingCount: Number(s.ratingCount) || 0,
+            createdAt: s.createdAt,
           }]
         })))
         // Where each shop is, for the "Nearby" sort — and how to open it and what it is called, which
@@ -1158,7 +1172,7 @@ function BrowsePage() {
       {/* Products */}
       <div className="rt-container" style={{ maxWidth: '800px', margin: '0 auto', padding: '32px 16px' }}>
         {loading && filtered.length === 0 ? (
-          <LoadingScreen inline variant="rows" message="Fetching products for you..." />
+          <LoadingBanner message="Fetching products for you…" />
         ) : filtered.length === 0 ? (
           <div style={{ padding: '24px 0' }}>
             {/* One small line — the trending grid does the talking */}
@@ -1230,6 +1244,9 @@ function BrowsePage() {
                       {p.sellerSlug === mySlug && mySlug && (
                       <div style={{ position: 'absolute', top: '6px', left: '6px', background: green, color: '#000', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: '800', zIndex: 2 }}>Yours</div>
                     )}
+                    {!isMyListing(p) && isNewSeller(p.sellerCreatedAt) && (
+                      <div title="This shop opened less than a month ago" style={{ position: 'absolute', top: '6px', left: '6px', background: '#fff', color: '#000', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: 900, letterSpacing: '0.3px', zIndex: 2, lineHeight: 1.5, textTransform: 'uppercase' }}>{NEW_SELLER_LABEL}</div>
+                    )}
                     {renderCardImages(p, 190)}
                       <div style={{ padding: '12px' }}>
                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 4 }}>
@@ -1272,6 +1289,9 @@ function BrowsePage() {
                   style={{ background: '#1a1a1a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #222', position: 'relative', display: 'flex', flexDirection: 'column' }}>
                   <div onClick={() => handleCardClick(p)} style={{ cursor: 'pointer', position: 'relative' }}>
                     {p.sellerSlug === mySlug && mySlug && (<div style={{ position: 'absolute', top: '6px', left: '6px', background: green, color: '#000', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: '800', zIndex: 2 }}>Yours</div>)}
+                    {!isMyListing(p) && isNewSeller(p.sellerCreatedAt) && (
+                      <div title="This shop opened less than a month ago" style={{ position: 'absolute', top: '6px', left: '6px', background: '#fff', color: '#000', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: 900, letterSpacing: '0.3px', zIndex: 2, lineHeight: 1.5, textTransform: 'uppercase' }}>{NEW_SELLER_LABEL}</div>
+                    )}
                     <button onClick={(e) => { e.stopPropagation(); handleToggleBag(p) }}
                       style={{ position: 'absolute', top: '6px', right: '6px', background: isInBag(p.id) ? '#1a3a1a' : 'rgba(0,0,0,0.65)', color: '#fff', border: isInBag(p.id) ? `1px solid ${green}` : '1px solid rgba(255,255,255,0.25)', borderRadius: '8px', padding: '2px 7px', cursor: 'pointer', fontSize: '11px', fontWeight: '700', zIndex: 2, display: 'flex', alignItems: 'center', gap: '3px', backdropFilter: 'blur(4px)', lineHeight: 1.4, whiteSpace: 'nowrap' }}>
                       🛍️ {formatBagCount(bagCounts[p.id]?.baggedCount || 0)}

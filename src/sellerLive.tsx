@@ -3,6 +3,7 @@ import { collection, query, where, onSnapshot, doc } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth, db } from './firebase'
 import { playNewOrderAlert, playNewMessageAlert, showUnreadBadge } from './orderAlerts'
+import { useSellerHeartbeat } from './presence'
 
 /**
  * Shared realtime seller overview — the single source of truth for the live
@@ -24,6 +25,8 @@ const SellerLiveContext = createContext<SellerLiveValue | null>(null)
 
 export function SellerLiveProvider({ children }: { children: ReactNode }) {
   const [isSeller, setIsSeller] = useState(false)
+  /** The signed-in uid, kept so the presence heartbeat knows whose shop to touch. */
+  const [uid, setUid] = useState<string | null>(null)
   const [pendingOrdersCount, setPendingOrdersCount] = useState(0)
   const [productsCount, setProductsCount] = useState(0)
   const [unreadMessages, setUnreadMessages] = useState(0)
@@ -38,6 +41,7 @@ export function SellerLiveProvider({ children }: { children: ReactNode }) {
       unsubs = []
 
       if (!user) {
+        setUid(null)
         setIsSeller(false)
         setPendingOrdersCount(0)
         setProductsCount(0)
@@ -47,6 +51,7 @@ export function SellerLiveProvider({ children }: { children: ReactNode }) {
         return
       }
       const uid = user.uid
+      setUid(uid)
 
       // Seller existence (drives isSeller gating in the Inbox)
       const sellerUnsub = onSnapshot(doc(db, 'sellers', uid), snap => {
@@ -109,6 +114,13 @@ export function SellerLiveProvider({ children }: { children: ReactNode }) {
       unsubs.forEach(u => { try { u() } catch { /* noop */ } })
     }
   }, [])
+
+  /**
+   * 🟢 "Active now" — while a seller is in the app, their shop document carries a fresh
+   * `lastSeen`. Buyers read that one timestamp in chat (`presence.ts`); nothing else about the
+   * seller is exposed, and a hidden tab stops beating so the badge never lies.
+   */
+  useSellerHeartbeat(uid, isSeller)
 
   const value = useMemo<SellerLiveValue>(() => ({
     isSeller,

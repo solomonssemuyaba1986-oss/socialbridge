@@ -222,8 +222,8 @@ check('the two navigations share one definition', () => {
   const nav = read('sellerNav.ts')
   const buyer = read('buyerNav.ts')
   assert.strictEqual((nav.match(/tab: true/g) || []).length, 5, 'five tabs — the daily work is unchanged')
-  assert.strictEqual((nav.match(/label: '/g) || []).length, 14,
-    "ten of the seller's own, plus the four market ones (Browse / Shoppertainment / Live / Studio)")
+  assert.strictEqual((nav.match(/label: '/g) || []).length, 16,
+    "ten of the seller's own, plus My Orders and Services & Delivery, plus the four market ones (Browse / Shoppertainment / Live / Studio)")
   /*
    * A seller is a buyer too. The destinations the two sides share are written with the very same
    * words in both files — same label, same path, same glyph, same ▶ — and this is the rule that

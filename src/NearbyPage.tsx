@@ -9,6 +9,8 @@ import { useBuyerLocation } from './useBuyerLocation'
 import { useBag, getBagCounts, type BagCountData } from './useBag'
 import ProductCard from './ProductCard'
 import ProductSheet from './ProductSheet'
+import LoadingBanner from './LoadingBanner'
+import { isNewSeller } from './sellerAge'
 import type { Variant } from './productSheetUtils'
 import { useAllDrafts } from './useDraft'
 import ProductCardSkeleton from './ProductCardSkeleton'
@@ -48,6 +50,8 @@ interface NearbySeller {
    */
   ratingAvg?: number | null
   ratingCount?: number
+  /** When the shop opened — the whole document is spread here, so the card can say "New seller". */
+  createdAt?: unknown
 }
 
 interface DiscoveryProduct extends CardProduct {
@@ -714,6 +718,7 @@ function NearbyPage() {
         key={p.id}
         p={p}
         distanceLabel={label}
+        newSeller={isNewSeller(seller?.createdAt)}
         inBag={isInBag(p.id)}
         bagged={bagCounts[p.id]?.baggedCount || 0}
         isMine={p.sellerId === userId}
@@ -741,6 +746,8 @@ function NearbyPage() {
   return (
     <div className="rt-page rt-has-tabs" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff', padding: '20px' }}>
       <div style={{ maxWidth: '980px', margin: '0 auto' }}>
+        {/* One shared loading banner (Browse mounts the same one) — never a full-screen wall. */}
+        {loadingPool && <LoadingBanner message="Finding what's around you…" />}
         {/* Header — title left, my location top right */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '14px', flexWrap: 'wrap' }}>
           <div>

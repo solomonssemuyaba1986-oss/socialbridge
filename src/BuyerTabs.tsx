@@ -21,7 +21,7 @@ const green = '#adff2f'
 const OFF_LIMITS = [
   '/signin', '/setup', '/onboarding', '/recover', '/terms',
   '/dashboard', '/products', '/orders', '/analytics', '/marketing', '/bulk-upload', '/edit-store',
-  '/payment-setup', '/live', '/studio',
+  '/payment-setup', '/live', '/studio', '/services-delivery',
 ]
 
 /**

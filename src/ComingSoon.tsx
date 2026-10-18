@@ -21,6 +21,7 @@ type Props = {
 const BLURB: Record<string, string> = {
   '/live': 'Live is the shop with a camera on it — you talking about a product or a price to whoever is watching right now, with the market still under their thumb. It is being built. Nothing to switch on until it opens here.',
   '/studio': 'Studio is where a video about one of your products gets made — the clip that plays in Shoppertainment and in the market. It is being built. Until it opens, Products is where a product’s photos, price and description live.',
+  '/services-delivery': 'Services & Delivery is how a shop sells its time as well as its stock: a repair, a delivery run, a fitting, a lesson, a job going at your business. A buyer books it in the same chat and the two of you agree the price and the day. It is being built. Until it opens, list what you offer under the “Services” or “Job & Work” category in Products.',
 }
 
 function ComingSoon({ item }: Props) {

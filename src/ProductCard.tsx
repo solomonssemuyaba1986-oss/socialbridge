@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { formatBagCount, green, productImages, type CardProduct } from './productCardUtils'
+import { NEW_SELLER_LABEL } from './sellerAge'
 import { useDataSaver } from './dataSaverLive'
 import LikePill from './LikePill'
 import SellerRating from './SellerRating'
@@ -9,6 +10,12 @@ type Props = {
   p: CardProduct
   /** Pinned to the top-left of the photo — "1.3 km" or "~3 km" when approximate. */
   distanceLabel?: string
+  /**
+   * The shop opened within the last month (`sellerAge.ts`). A white badge on the photo — the
+   * quiet, factual counterpart to the seller's own "New on rachett" line, and a reason to look at
+   * a shop nobody has rated yet rather than scroll past it.
+   */
+  newSeller?: boolean
   inBag: boolean
   bagged: number
   isMine?: boolean
@@ -39,6 +46,7 @@ type Props = {
 function ProductCard({
   p,
   distanceLabel,
+  newSeller,
   inBag,
   bagged,
   isMine,
@@ -64,6 +72,12 @@ function ProductCard({
   const clickTimer = useRef<number | null>(null)
   const imgs = productImages(p)
   const idx = Math.min(imgIndex, Math.max(0, imgs.length - 1))
+  /**
+   * Where the left-hand stack ends: 📍 distance first, then 📝 Draft, then this badge. Computed
+   * rather than guessed so the three can never sit on top of each other on a card that has all
+   * of them.
+   */
+  const newSellerTop = 6 + (distanceLabel ? 24 : 0) + (hasDraft ? 24 : 0)
 
   // Single tap → open the store. Double tap → full-screen photo viewer.
   const handleCardClick = () => {
@@ -101,6 +115,14 @@ function ProductCard({
         {hasDraft && (
           <div style={{ position: 'absolute', top: distanceLabel ? '30px' : '6px', left: '6px', background: 'rgba(0,0,0,0.7)', color: '#b026ff', border: '1px solid #b026ff', padding: '2px 7px', borderRadius: '8px', fontSize: '11px', fontWeight: '800', zIndex: 2, backdropFilter: 'blur(4px)', lineHeight: 1.4, whiteSpace: 'nowrap' }}>
             📝 Draft
+          </div>
+        )}
+        {newSeller && !isMine && (
+          <div
+            title="This shop opened less than a month ago"
+            style={{ position: 'absolute', top: newSellerTop, left: '6px', background: '#fff', color: '#000', padding: '2px 7px', borderRadius: '8px', fontSize: '11px', fontWeight: 900, letterSpacing: '0.2px', zIndex: 2, lineHeight: 1.4, whiteSpace: 'nowrap', boxShadow: '0 1px 4px rgba(0,0,0,0.35)', textTransform: 'uppercase' }}
+          >
+            {NEW_SELLER_LABEL}
           </div>
         )}
         <button

@@ -8,6 +8,7 @@ import { useDraft } from './useDraft'
 import { uploadImageToCloudinary } from './uploadImage'
 import { trackEvent } from './analytics'
 import { toMillis } from './productCardUtils'
+import { useSellerPresence } from './presence'
 import { useBuyerName } from './useBuyerName'
 import { nameLabel } from './buyerName'
 import ProductPreview from './ProductPreview'
@@ -37,6 +38,12 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
   const { messages, loading, sendMessage, sendImageBatch, conversationId } = useConversation(sellerId, buyerId)
   /** Who I am on this thread — decides the draft's counterpart and sender role. */
   const meIsSeller = Boolean(auth.currentUser?.uid) && auth.currentUser?.uid === sellerId
+  /**
+   * 🟢 Is the shop around? Read from the seller's own document (`presence.ts`), which is public and
+   * already joined by half the market. A seller does not need to be told they are here, so the
+   * listener is off for them — and an old shop with no `lastSeen` simply shows nothing.
+   */
+  const sellerPresence = useSellerPresence(sellerId, !meIsSeller)
   const { text, setText, clearDraft } = useDraft(
     conversationId ? `convo_${conversationId}` : 'none',
     {
@@ -336,8 +343,39 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       <div style={{ borderBottom: '1px solid #222', paddingBottom: 12 }}>
-        <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>{nameLabel(buyerName)}</div>
-        <div style={{ fontSize: 13, color: '#888', marginTop: 4 }}>Chat with {buyerName || 'the buyer'}</div>
+        {/* The other person, not yourself: this header used to print the buyer's own name back to
+            them, and a thread is only useful if it says who is on the other end. */}
+        <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>{nameLabel(meIsSeller ? buyerName : sellerName)}</div>
+        <div style={{ fontSize: 13, color: '#888', marginTop: 4 }}>
+          Chat with {meIsSeller ? (buyerName || 'the buyer') : (sellerName || 'the seller')}
+        </div>
+        {/* 🟢 Active-seller badge — the one thing a buyer wants to know before waiting on an
+            answer. Shown only when the shop has ever said hello, so "unknown" never reads as
+            "offline". */}
+        {!meIsSeller && sellerPresence.known && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+            <span
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '3px 10px', borderRadius: 999,
+                fontSize: 12, fontWeight: 800, lineHeight: 1.5,
+                background: sellerPresence.online ? '#12210d' : '#1a1a1a',
+                color: sellerPresence.online ? green : '#999',
+                border: `1px solid ${sellerPresence.online ? green : '#333'}`,
+              }}
+              title={sellerPresence.online ? 'This seller is in their shop right now' : 'When this seller was last in their shop'}
+            >
+              <span
+                aria-hidden="true"
+                style={{ width: 7, height: 7, borderRadius: '50%', background: sellerPresence.online ? green : '#555', flexShrink: 0 }}
+              />
+              {sellerPresence.label}
+            </span>
+            <span style={{ color: '#666', fontSize: 12 }}>
+              {sellerPresence.online ? 'Your message will reach them now.' : 'They will see your message when they are back.'}
+            </span>
+          </div>
+        )}
         {productName && productImage && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '12px', padding: '10px', background: '#111', borderRadius: '10px', border: '1px solid #222' }}>
             <img src={productImage} alt={productName}

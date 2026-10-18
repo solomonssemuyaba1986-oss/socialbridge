@@ -20,6 +20,7 @@ import { useSellerStats, getSalesLabel, getBadgeStatusLabel } from './useSellerS
 import SellerRating from './SellerRating'
 import { hasSellerRating } from './sellerRatingUtils'
 import { summaryFromAggregate, summaryLabel } from './reviewUtils'
+import { isNewSeller, NEW_SELLER_LABEL } from './sellerAge'
 import QuickRepliesPanel from './QuickRepliesPanel'
 import FloatingBag from './FloatingBag'
 import StoreProblem from './StoreProblem'
@@ -52,6 +53,8 @@ interface Seller {
   place?: Place
   geoSource?: GeoSource
   geo?: { lat: number; lng: number }
+  /** When the shop opened — the only evidence the "New seller" card badge may rest on. */
+  createdAt?: unknown
 }
 
 function maskEmail(email: string): string {
@@ -94,7 +97,7 @@ const green = '#adff2f'
 const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'dzudmmuxg'
 const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'p2z65zrv'
 
-function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onDetails, onRefresh, onPreview, inBag, bagged, sold, liked, likeCount, onToggleLike, onToggleBag }: any) {
+function ProductCard({ p, isOwner, sellerId, newSeller, onOrder, onMessage, onDetails, onRefresh, onPreview, inBag, bagged, sold, liked, likeCount, onToggleLike, onToggleBag }: any) {
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(p.name)
   const [editPrice, setEditPrice] = useState(p.price)
@@ -192,6 +195,14 @@ function ProductCard({ p, isOwner, sellerId, onOrder, onMessage, onDetails, onRe
       {isOutOfStock && (
         <div style={{ position: 'absolute', top: '8px', left: '8px', background: '#ff4444', color: '#fff', padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', zIndex: 2 }}>
           Out of Stock
+        </div>
+      )}
+
+      {/* The shop is less than a month old — said plainly, on the card, not buried in the header. */}
+      {newSeller && !isOwner && (
+        <div title="This shop opened less than a month ago"
+          style={{ position: 'absolute', top: isOutOfStock ? '40px' : '8px', left: '8px', background: '#fff', color: '#000', padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 900, zIndex: 2, lineHeight: 1.4, textTransform: 'uppercase' }}>
+          {NEW_SELLER_LABEL}
         </div>
       )}
 
@@ -1129,6 +1140,7 @@ const handleSignupForAction = async (provider: any) => {
                 p={{ ...p, sellerWhatsapp: seller.whatsapp }}
                 isOwner={isOwner}
                 sellerId={sellerId}
+                newSeller={isNewSeller(seller.createdAt)}
                 inBag={isInBag(p.id)}
                 bagged={bagCounts[p.id]?.baggedCount || 0}
                 sold={p.salesCount || 0}

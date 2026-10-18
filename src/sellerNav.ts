@@ -33,6 +33,16 @@ export const BROWSE: SellerNavItem = { label: 'Browse', path: '/browse', icon: '
 export const SHOPPERTAINMENT: SellerNavItem = { label: 'Shoppertainment', path: '/shoppertainment', icon: '🛍️', play: true, short: 'Shops' }
 export const LIVE: SellerNavItem = { label: 'Live', path: '/live', icon: '🔴' }
 export const STUDIO: SellerNavItem = { label: 'Studio', path: '/studio', icon: '＋' }
+export const SERVICES: SellerNavItem = { label: 'Services & Delivery', path: '/services-delivery', icon: '🧰' }
+/**
+ * The seller as a *buyer*: what they have ordered from other shops.
+ *
+ * `/orders` is the shop's own order book — other people's purchases. This one is their own, and it
+ * used to be unreachable from the seller panel even though a seller is a buyer too (the comment
+ * below has said so since the panel was built). Same page as the buyer's My Orders, so there is one
+ * list of purchases in the app rather than two.
+ */
+export const MY_ORDERS: SellerNavItem = { label: 'My Orders', path: '/my-orders', icon: '🧾' }
 
 /** Every destination in the seller panel, in the order the seller sees them. */
 export const SELLER_NAV: SellerNavItem[] = [
@@ -43,6 +53,11 @@ export const SELLER_NAV: SellerNavItem[] = [
   { label: 'Nearby', path: '/nearby', icon: '📍' },
   { label: 'Analytics', path: '/analytics', icon: '📈', tab: true },
   { label: 'Marketing', path: '/marketing', icon: '📣' },
+  // The seller's own purchases, next to the shop's order book so the two are never confused.
+  MY_ORDERS,
+  // 🧰 Services & Delivery — the promise that a shop can sell its time and its legs, not only what
+  // sits on a shelf. A Coming Soon page until it opens (see `ComingSoon.tsx`).
+  SERVICES,
   // A seller is a buyer too — nothing a seller *is* may be unreachable from their own panel. These
   // four sit above the admin tail (Payouts / Settings / Reviews) rather than at the end of the list,
   // so the things a seller does around the shop stay together.
