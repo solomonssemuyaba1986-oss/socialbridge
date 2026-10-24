@@ -2,6 +2,9 @@ import { collection, doc, setDoc, updateDoc, getDoc, addDoc, serverTimestamp } f
 import { db } from './firebase'
 import { getConversationId } from './useConversation'
 import { orderBubbleText, variantLabel } from './productSheetUtils'
+import type { OrderLine } from './orderLines'
+
+export type CheckoutState = 'paying' | 'published' | 'abandoned'
 
 export type BuyerOrderFields = {
   buyerName: string
@@ -15,7 +18,8 @@ export type BuyerOrderFields = {
   quantity: string
   deliveryArea: string
   status: 'pending' | 'paid' | 'awaiting_payment'
-  read: false
+  /** `true` while the order is a hidden draft; flipped to `false` by the server on publish. */
+  read: boolean
   sourcePlatform: string
   createdAt: Date
   paymentMethod?: string
@@ -32,6 +36,39 @@ export type BuyerOrderFields = {
    */
   color?: string
   size?: string
+  /**
+   * One shop's lines. A combined bag order keeps `productPrice` as the sum and `quantity` as `1`,
+   * so every older reader still computes the right total. `orderLines.ts` is the reader.
+   */
+  items?: OrderLine[]
+  /**
+   * `paying` = a hidden draft, visible to the buyer but not the seller. The server changes it to
+   * `published` only when the money (or a pay-on-delivery choice) settles. Legacy orders have no
+   * field and are treated as published.
+   */
+  checkoutState?: CheckoutState
+  publishedAt?: Date
+  /** The buyer's own note to the seller — shown in the thread, never part of the price. */
+  buyerNote?: string
+}
+
+/**
+ * Create the order as a hidden draft, before any money moves.
+ *
+ * The seller must not be told about an order that has not been paid for. `read: true` keeps it out
+ * of their unread badge, and `checkoutState: 'paying'` keeps it out of their list, their stats and
+ * analytics. The server publishes it on payment — or when the buyer chooses pay-on-delivery.
+ */
+export async function createCheckoutOrder(
+  sellerId: string,
+  fields: Omit<BuyerOrderFields, 'status' | 'read' | 'checkoutState'>,
+) {
+  return createBuyerOrder(sellerId, {
+    ...fields,
+    status: 'pending',
+    read: true,
+    checkoutState: 'paying',
+  })
 }
 
 /** One Firestore write — buyers are not allowed to patch orders after create (see firestore.rules). */

@@ -16,7 +16,7 @@
     "backfill:seller-stats": "node functions/backfill-seller-stats.js",
     "deploy:rules": "firebase deploy --only firestore:rules",
     "deploy:indexes": "firebase deploy --only firestore:indexes",
-    "deploy:payments": "firebase deploy --only functions:pawapayStartDeposit,functions:pawapayPaymentStatus,functions:pawapayCallback"
+    "deploy:payments": "firebase deploy --only functions:pawapayStartDeposit,functions:pawapayPaymentStatus,functions:pawapayCallback,functions:publishCashOrder,functions:cleanupAbandonedCheckouts,functions:recomputeSellerCompletion"
   },
   "dependencies": {
     "firebase": "^12.13.0",

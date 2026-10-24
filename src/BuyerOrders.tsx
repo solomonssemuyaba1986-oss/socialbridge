@@ -17,6 +17,7 @@ import {
 import { green, toMillis } from './productCardUtils'
 import { useBag } from './useBag'
 import { variantLabel } from './productSheetUtils'
+import { lineVariantWords, orderLinesOf, orderLinesTotal } from './orderLines'
 import ReviewForm from './ReviewForm'
 import RatePrompt from './RatePrompt'
 import { getMyReview, markRatingAsked, wasRatingAsked } from './useProductReviews'
@@ -576,8 +577,9 @@ function OrderRow({
   const tone = TONES[status.tone]
   const age = orderAge(changedMs || null)
   const updated = wasUpdatedAfterPlacing({ createdAt: placedMs, updatedAt: changedMs })
-  const quantity = Number(order.quantity) || 1
-  const total = orderTotal(order.productPrice, order.quantity)
+  const lines = orderLinesOf(order)
+  const quantity = lines.reduce((sum, line) => sum + line.quantity, 0) || (Number(order.quantity) || 1)
+  const total = lines.length > 0 ? orderLinesTotal(lines) : orderTotal(order.productPrice, order.quantity)
   const delivered = order.status === 'fulfilled'
   /** ↩️ The return on this order, if any: its words, its tone, and whether it is still running. */
   const returnWords = returnStateWords(order.returnState, 'buyer')
@@ -598,10 +600,20 @@ function OrderRow({
             {order.productName || 'Product'}
           </p>
           <p style={{ margin: '3px 0 0', color: green, fontWeight: 800, fontSize: 13 }}>
-            UGX {order.productPrice || '—'}{quantity > 1 ? ` × ${quantity}` : ''}
-            {variantLabel(order.color, order.size) && <span style={{ color: '#ddd' }}> · {variantLabel(order.color, order.size)}</span>}
+            {lines.length > 1 ? `${lines.length} items` : `UGX ${order.productPrice || '—'}${quantity > 1 ? ` × ${quantity}` : ''}`}
+            {lines.length === 1 && lineVariantWords(lines[0]) && <span style={{ color: '#ddd' }}> · {lineVariantWords(lines[0])}</span>}
+            {lines.length === 1 && !lineVariantWords(lines[0]) && variantLabel(order.color, order.size) && <span style={{ color: '#ddd' }}> · {variantLabel(order.color, order.size)}</span>}
           </p>
-          {quantity > 1 && total > 0 && (
+          {lines.length > 1 && (
+            <div style={{ margin: '4px 0 0' }}>
+              {lines.map((line, index) => (
+                <p key={`${line.productId || line.productName}-${index}`} style={{ margin: '1px 0', color: '#999', fontSize: 12 }}>
+                  {line.quantity} × {line.productName}{lineVariantWords(line) ? ` · ${lineVariantWords(line)}` : ''}
+                </p>
+              ))}
+            </div>
+          )}
+          {total > 0 && (
             <p style={{ margin: '2px 0 0', color: '#777', fontSize: 12 }}>Total UGX {total.toLocaleString()}</p>
           )}
           <button

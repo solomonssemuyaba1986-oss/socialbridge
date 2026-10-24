@@ -63,8 +63,14 @@ export function SellerLiveProvider({ children }: { children: ReactNode }) {
       const ordersUnsub = onSnapshot(collection(db, 'sellers', uid, 'orders'), snap => {
         let pending = 0
         snap.forEach(d => {
-          const status = d.data().status
-          if (status === 'pending' || !status) pending++
+          const data = d.data()
+          // A hidden draft is not an order a seller has received — it must not beep or badge.
+          if (data.checkoutState === 'paying' || data.checkoutState === 'abandoned') return
+          // A paid order still needs the seller's ✓ Confirm, so it belongs in this badge exactly
+          // like an unpaid one. (Payment-first means most new orders arrive as `paid`.)
+          if (data.read === true) return
+          const status = data.status
+          if (!status || ['pending', 'paid', 'awaiting_payment', 'needs_details'].includes(status)) pending++
         })
         setPendingOrdersCount(pending)
       }, err => console.warn('sellerLive: orders', err))

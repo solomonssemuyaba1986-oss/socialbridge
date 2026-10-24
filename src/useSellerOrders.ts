@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth, db } from './firebase'
+import { isPublishedOrder, type OrderLine } from './orderLines'
 
 export interface SellerOrder {
   id: string
@@ -11,6 +12,10 @@ export interface SellerOrder {
   productName: string
   productPrice: string
   quantity: number | string
+  /** A combined bag order's lines. Older orders have none. */
+  items?: OrderLine[]
+  /** `paying` / `abandoned` drafts are not orders this shop received. */
+  checkoutState?: string
   deliveryArea?: string
   orderId?: string
   status?: string
@@ -100,7 +105,10 @@ export function useSellerOrders(onNewUnread?: () => void) {
       )
 
       ordersUnsub = onSnapshot(q, (snap) => {
-        const next = snap.docs.map(d => ({ id: d.id, ...d.data() } as SellerOrder))
+        // The buyer's unfinished checkout is not an order yet: no list, no badge, no sound.
+        const next = snap.docs
+          .map(d => ({ id: d.id, ...d.data() } as SellerOrder))
+          .filter(order => isPublishedOrder(order))
         const unread = next.filter(isUnread).length
 
         if (prevUnreadRef.current !== null && unread > prevUnreadRef.current) {

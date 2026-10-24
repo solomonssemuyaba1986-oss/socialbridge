@@ -108,6 +108,15 @@ check('the line a seller reads is money, a rail and a time — or nothing', () =
   assert.ok(paymentWhen(settled()).length > 0)
 })
 
+check('pay on delivery is its own arrangement, not a failed payment', () => {
+  const cod = { status: 'pending', paymentStatus: 'pay_on_delivery', paymentMethod: 'cash' }
+  assert.strictEqual(orderPaymentState(cod), 'none')
+  assert.strictEqual(paymentSummary(cod), '')
+  const badge = paymentBadge(cod)
+  assert.strictEqual(badge.tone, 'waiting')
+  assert.ok(badge.text.includes('Pay on delivery'))
+})
+
 check('the number a seller actually wants is how many are already paid', () => {
   const orders = [
     settled(),

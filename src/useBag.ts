@@ -23,6 +23,13 @@ export interface BagItem {
    */
   color?: string
   size?: string
+  /**
+   * ⏸ "Hold on" — when the buyer paused this line. Held lines stay in the bag but are left out of
+   * the total and of every shop payment. `0` (or no field) means ready to buy; a ms timestamp makes
+   * the decision survive a reload and a second device. `firestore.rules` needs nothing new: the
+   * line already belongs to the buyer.
+   */
+  heldAt?: number
 }
 
 const STORAGE_KEY = 'rachett_bag'
@@ -37,6 +44,7 @@ function loadBag(): BagItem[] {
       ...item,
       quantity: item.quantity || 1,
       sellerId: item.sellerId || '',
+      heldAt: Number(item.heldAt) || 0,
     })) as BagItem[]
   } catch {
     return []
@@ -171,7 +179,8 @@ export function useBag() {
           setItems(prev => {
             if (prev.length === next.length && prev.every((item, idx) =>
               item.productId === next[idx].productId &&
-              item.quantity === next[idx].quantity
+              item.quantity === next[idx].quantity &&
+              Number(item.heldAt || 0) === Number(next[idx].heldAt || 0)
             )) return prev
             return next
           })
@@ -226,6 +235,7 @@ export function useBag() {
       size: (item.size || '').trim(),
       addedAt: Date.now(),
       quantity: Math.max(1, Math.floor(Number(quantity) || 1)),
+      heldAt: 0,
     }
     setItems(prev => (prev.some(i => i.productId === item.productId) ? prev : [...prev, newItem]))
 
@@ -262,6 +272,23 @@ export function useBag() {
     if (uid) firestoreWrite('remove-line', () => deleteDoc(doc(db, 'users', uid, 'bag', productId)))
   }, [])
 
+  /**
+   * Pause / resume one bag line. A held line is still in the bag — it is just not part of today's
+   * checkout. The timestamp is written to Firestore as well, so "hold on" survives a reload and
+   * follows the buyer to another phone.
+   */
+  const setBagHold = useCallback((productId: string, held: boolean) => {
+    const heldAt = held ? Date.now() : 0
+    setItems(prev => prev.map(i => (i.productId === productId ? { ...i, heldAt } : i)))
+    const uid = uidRef.current
+    if (!uid) return
+    if (!itemsRef.current.some(i => i.productId === productId)) return
+    firestoreWrite('hold', () => updateDoc(doc(db, 'users', uid, 'bag', productId), { heldAt }))
+  }, [])
+
+  const holdBagItem = useCallback((productId: string) => setBagHold(productId, true), [setBagHold])
+  const resumeBagItem = useCallback((productId: string) => setBagHold(productId, false), [setBagHold])
+
   const setQuantity = useCallback((productId: string, quantity: number) => {
     const safeQty = Math.max(1, Math.floor(Number(quantity) || 1))
     setItems(prev => prev.map(i => (i.productId === productId ? { ...i, quantity: safeQty } : i)))
@@ -289,5 +316,16 @@ export function useBag() {
     setItems([])
   }, [items])
 
-  return { items, addToBag, removeFromBag, isInBag, setQuantity, updateBagVariant, clearBag, count: items.length }
+  return {
+    items,
+    addToBag,
+    removeFromBag,
+    isInBag,
+    setQuantity,
+    updateBagVariant,
+    holdBagItem,
+    resumeBagItem,
+    clearBag,
+    count: items.length,
+  }
 }

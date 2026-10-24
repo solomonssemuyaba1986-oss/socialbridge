@@ -100,6 +100,11 @@ export interface PaymentBadge {
 
 /** The badge an order wears because of its money, or null when it has nothing to say about money. */
 export function paymentBadge(order: OrderPaymentFields | null | undefined): PaymentBadge | null {
+  // The honest third outcome: no online rail, and the seller collects on delivery. It is not a
+  // failed payment and it is not "waiting for money" — it is the arrangement the buyer chose.
+  if (word(order?.paymentStatus).toLowerCase() === 'pay_on_delivery') {
+    return { text: '💵 Pay on delivery', tone: 'waiting' }
+  }
   const state = orderPaymentState(order)
   if (state === 'paid') return { text: '💰 Paid', tone: 'paid' }
   if (state === 'waiting') return { text: '⏳ Waiting for money', tone: 'waiting' }

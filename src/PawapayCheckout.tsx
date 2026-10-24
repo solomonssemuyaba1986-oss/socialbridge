@@ -1,32 +1,41 @@
 /**
- * The buyer's payment step — what happens after they tap Buy on Browse, once the order exists.
+ * The buyer's payment step. It sits inside an order sheet, after the order has been written as a
+ * **hidden draft** and before the seller has been told anything.
  *
- * It is a separate component on purpose: `BrowsePage` is enormous, and this is the one part of that
- * flow with its own state machine (choosing, waiting on a prompt, done, failed). Keeping it here
- * means the order form stays untouched and this can be read on its own.
- *
- * Three things it refuses to do, by design:
+ * Three promises it keeps, by design:
  *   - **never decides** whether a payment succeeded. It asks `pawapayPaymentStatus`, and the server
  *     asks pawaPay. A screen that believes itself is how money goes missing.
- *   - **never invents a price.** The amount charged is computed by the server from the order
- *     document; the number shown here is the same arithmetic — for the buyer's sake, not as a
- *     second opinion.
- *   - **never offers a rail the seller has not enabled** (read live from their own document).
+ *   - **never invents a price.** The server computes the charge from the order document; the lines
+ *     shown here are the same arithmetic, for the buyer's sake.
+ *   - **never offers a rail the seller has not enabled.** The number determines the network;
+ *     `pawapayStartDeposit` predicts it and the server checks the seller's real `paymentMethods`.
+ *
+ * Saving the phone number is deliberately late: only after pawaPay accepts the prompt. Typing a
+ * number into a box is not proof that it belongs to the buyer — a successful prompt is.
  */
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import { auth, db } from './firebase'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { doc, onSnapshot } from 'firebase/firestore'
+import { db } from './firebase'
 import { COUNTRY_CODES } from './countryCodes'
-import { startPawapayDeposit, checkPawapayPayment, paymentErrorMessage } from './pawapayService'
+import { checkPawapayPayment, paymentErrorMessage, startPawapayDeposit } from './pawapayService'
 import { methodWords } from './orderPayment'
+import { comparePaymentPhone, displayPhone, paymentPhoneHint } from './paymentPhone'
+import { usePaymentPhone } from './usePaymentPhone'
+import { publishCashOrder } from './orderCheckout'
+import {
+  orderLineTotal,
+  orderLinesOf,
+  orderLinesTotal,
+  type OrderLine,
+} from './orderLines'
 
 const green = '#adff2f'
 const POLL_MS = 3000
 const POLL_MAX_TRIES = 60 // ~3 minutes, then we stop asking — and say so rather than spin
 
-type Rail = 'mtn' | 'airtel'
 /** The stages of paying, exported because the sheet that hosts this needs to know which one we are in. */
-export type Stage = 'choice' | 'waiting' | 'done' | 'failed'
+export type Stage = 'choice' | 'waiting' | 'unknown' | 'done' | 'failed'
+export type PaymentOutcome = 'paid' | 'cash'
 
 interface MethodShape {
   enabled?: boolean
@@ -41,20 +50,19 @@ interface Methods {
 type Props = {
   sellerId: string
   sellerName: string
-  productName: string
-  /** As it comes off the product document — a string like "40,000". */
-  productPrice: string
-  quantity: string
-  /** The Firestore id of the order just created — the server reads the amount from it. */
+  /** The order's lines. `productName` / `productPrice` / `quantity` remain as a one-line fallback. */
+  items?: OrderLine[]
+  productName?: string
+  productPrice?: string
+  quantity?: string
+  /** The Firestore id of the draft order — the server reads the amount from it. */
   orderDocId: string
-  /**
-   * Which stage the payment has reached, told to whoever is showing this sheet.
-   *
-   * It exists because unmounting this component stops the only thing watching the buyer's deposit:
-   * the sheet uses this to hold itself open while a prompt is on a phone, and to close once pawaPay
-   * has settled it. Optional — a host that ignores it still gets a working payment step.
-   */
+  /** The human reference ("RT-AB12CD"), shown for recognition only. */
+  orderRef?: string
+  /** Which stage the payment has reached, told to whoever is showing this sheet. */
   onStageChange?: (stage: Stage) => void
+  /** Fired once when the order is actually sent — paid, or pay-on-delivery. */
+  onComplete?: (outcome: PaymentOutcome) => void
 }
 
 /** The seller's country gives the buyer's number its country code. Uganda, unless we know better. */
@@ -63,65 +71,62 @@ function dialFor(countryName: string): string {
   return (hit ? hit.dialCode : '+256').replace(/\D/g, '')
 }
 
-/**
- * pawaPay wants digits, a country code and no trunk zero. Buyers type "0771…" (that is how everyone
- * here types it) and a signed-in buyer's account number arrives as "+256771…", so both must end up
- * as "256771…" — neither may be sent half-formed.
- */
-function fullNumber(input: string, dial: string): string {
-  const digits = String(input || '').replace(/\D/g, '')
-  if (!digits) return ''
-  if (digits.startsWith(dial)) return digits
-  if (digits.startsWith('0')) return `${dial}${digits.replace(/^0+/, '')}`
-  if (digits.length <= 10) return `${dial}${digits}`
-  return digits
-}
-
-/** "40,000" → 40000. The same reading the server does, so what is shown is what is charged. */
-function priceNumber(raw: unknown): number {
-  const cleaned = String(raw === null || raw === undefined ? '' : raw).replace(/[^\d.]/g, '')
-  const value = Number(cleaned)
-  return Number.isFinite(value) ? value : 0
-}
-
-function quantityNumber(raw: unknown): number {
-  const digits = String(raw === null || raw === undefined ? '' : raw).replace(/\D/g, '')
-  const value = Math.floor(Number(digits) || 1)
-  return Math.min(Math.max(1, value), 99)
-}
-
 export default function PawapayCheckout({
-  sellerId, sellerName, productName, productPrice, quantity, orderDocId, onStageChange,
+  sellerId,
+  sellerName,
+  items,
+  productName,
+  productPrice,
+  quantity,
+  orderDocId,
+  orderRef,
+  onStageChange,
+  onComplete,
 }: Props) {
   const [methods, setMethods] = useState<Methods | null>(null)
   const [country, setCountry] = useState('Uganda')
-  // A buyer who signed in with a phone already gave us their number — that was the point of doing it
-  // that way. Anybody else types it.
-  const [phone, setPhone] = useState(() => auth.currentUser?.phoneNumber || '')
-  const [rail, setRail] = useState<Rail | ''>('')
   const [stage, setStage] = useState<Stage>('choice')
+  const [outcome, setOutcome] = useState<PaymentOutcome>('paid')
   const [error, setError] = useState('')
   const [paidWith, setPaidWith] = useState('')
   const [note, setNote] = useState('')
+  const [editingPhone, setEditingPhone] = useState(true)
+  const [savedNotice, setSavedNotice] = useState(false)
+  const [cashBusy, setCashBusy] = useState(false)
   const pollRef = useRef<number | null>(null)
-  // How many times in a row the status question has failed. A dropped question and a server that
-  // cannot be asked look identical from here — three in a row means the second.
   const failedChecksRef = useRef(0)
+  const editTouchedRef = useRef(false)
+  const completedRef = useRef(false)
+  const onCompleteRef = useRef(onComplete)
+  useEffect(() => {
+    onCompleteRef.current = onComplete
+  }, [onComplete])
 
-  const qty = quantityNumber(quantity)
-  const unit = priceNumber(productPrice)
-  const total = unit * qty
+  const { phone, setPhone, verifiedPhone, savedPhone, remember, forget } = usePaymentPhone()
 
-  // What does *this* seller accept? Read live from their own document, so a rail they switch on
+  const lines = useMemo(() => orderLinesOf({ items, productName, productPrice, quantity }), [
+    items, productName, productPrice, quantity,
+  ])
+  const total = orderLinesTotal(lines)
+  const dial = dialFor(country)
+  const check = comparePaymentPhone(phone, verifiedPhone, savedPhone, dial)
+  const hasSavedCard = Boolean(savedPhone || verifiedPhone)
+
+  // A saved or verified number is the default; the buyer can always choose Change.
+  useEffect(() => {
+    if (!editTouchedRef.current && hasSavedCard) setEditingPhone(false)
+  }, [hasSavedCard])
+
+  // What does *this* seller accept? Read live from their own document, so switching a rail on
   // appears here at once.
   useEffect(() => {
     if (!sellerId) return
-    const unsub = onSnapshot(doc(db, 'sellers', sellerId), (snap) => {
+    const unsub = onSnapshot(doc(db, 'sellers', sellerId), snap => {
       if (!snap.exists()) { setMethods({}); return }
       const data = snap.data()
       setMethods((data.paymentMethods || {}) as Methods)
       if (typeof data.nationality === 'string' && data.nationality) setCountry(data.nationality)
-    }, (err) => {
+    }, err => {
       console.warn('Could not read the payment methods:', err)
       setMethods({})
     })
@@ -133,13 +138,17 @@ export default function PawapayCheckout({
     if (pollRef.current !== null) window.clearInterval(pollRef.current)
   }, [])
 
-  /**
-   * Report each stage, once per change — never once per render, so a host can hold the sheet open
-   * without the callback firing in a loop. The host is expected to pass a stable function.
-   */
+  /** Report each stage, once per change — never once per render. */
   useEffect(() => {
     if (onStageChange) onStageChange(stage)
   }, [stage, onStageChange])
+
+  /** One completion per sheet: the host may clear lines or close the sheet exactly once. */
+  useEffect(() => {
+    if (stage !== 'done' || completedRef.current) return
+    completedRef.current = true
+    onCompleteRef.current?.(outcome)
+  }, [stage, outcome])
 
   const stopPolling = () => {
     if (pollRef.current !== null) {
@@ -159,47 +168,45 @@ export default function PawapayCheckout({
     pollRef.current = window.setInterval(async () => {
       tries += 1
       try {
-        const check = await checkPawapayPayment({ depositId })
+        const checkResult = await checkPawapayPayment({ depositId })
         failedChecksRef.current = 0
-        if (check.note) setNote(check.note)
-        if (check.paid) {
+        if (checkResult.note) setNote(checkResult.note)
+        if (checkResult.paid) {
           stopPolling()
-          setPaidWith(check.method)
+          setPaidWith(checkResult.method)
+          setOutcome('paid')
           setStage('done')
           return
         }
-        if (check.status === 'failed') {
+        if (checkResult.status === 'failed') {
           stopPolling()
-          setError(check.note || 'That payment did not go through. Try again, or the seller will contact you.')
+          setError(checkResult.note || 'That payment did not go through. Try again, or the seller will contact you.')
           setStage('failed')
           return
         }
       } catch (err) {
         console.warn('Payment check failed:', err)
         failedChecksRef.current += 1
-        // "Waiting for your network…" is a lie when we are the ones who cannot be reached: we would
-        // keep saying it for three minutes while the buyer stares at a phone that never rang.
         if (failedChecksRef.current >= 3) {
           stopPolling()
           setNote('We cannot check this payment right now. If your phone showed a charge, nothing is lost — this order updates on its own as soon as the network confirms.')
+          // `unknown` lets the buyer close the sheet; the server still settles and publishes it.
+          setStage('unknown')
           return
         }
       }
       if (tries >= POLL_MAX_TRIES) {
         stopPolling()
         setNote('Still waiting on your network. We will update this order as soon as it lands.')
+        setStage('unknown')
       }
     }, POLL_MS)
   }
 
+
   const handlePay = async () => {
     setError('')
-    if (!rail) {
-      setError('Choose MTN MoMo or Airtel Money first.')
-      return
-    }
-    const number = fullNumber(phone, dialFor(country))
-    if (number.length < 11) {
+    if (!check.valid) {
       setError('That number looks short. Type it with a leading 0, or with the country code.')
       return
     }
@@ -210,12 +217,14 @@ export default function PawapayCheckout({
 
     setStage('waiting')
     try {
-      const started = await startPawapayDeposit(sellerId, orderDocId, number)
+      const started = await startPawapayDeposit(sellerId, orderDocId, check.number)
       if (!started.depositId) {
         setStage('failed')
         setError('That payment could not be started. Try again.')
         return
       }
+      // pawaPay has accepted the prompt: only now is this number worth keeping.
+      void remember(check.number).then(() => setSavedNotice(true))
       startWatching(started.depositId)
     } catch (err) {
       setStage('failed')
@@ -223,110 +232,188 @@ export default function PawapayCheckout({
     }
   }
 
+  /** No online rail: the order is real, and the seller knows to collect on delivery. */
+  const handleCash = async () => {
+    setError('')
+    if (!orderDocId) {
+      setError('We could not match this to your order. Close this and open it again.')
+      return
+    }
+    setCashBusy(true)
+    try {
+      const result = await publishCashOrder(sellerId, orderDocId)
+      setNote(result.published ? 'The seller has been notified.' : 'This order was already sent.')
+      setOutcome('cash')
+      setStage('done')
+    } catch (err) {
+      setError(paymentErrorMessage(err))
+    } finally {
+      setCashBusy(false)
+    }
+  }
+
+  const handleChangePhone = () => {
+    editTouchedRef.current = true
+    setEditingPhone(true)
+    setPhone('')
+    setSavedNotice(false)
+  }
+
+  const handleForgetPhone = async () => {
+    editTouchedRef.current = true
+    await forget()
+    setEditingPhone(true)
+    setPhone('')
+    setSavedNotice(false)
+  }
+
   const railsReady = methods !== null && Boolean(methods.mtn?.enabled || methods.airtel?.enabled)
+  const acceptedRails = methods
+    ? [methods.mtn?.enabled ? 'MTN MoMo' : '', methods.airtel?.enabled ? 'Airtel Money' : ''].filter(Boolean).join(' · ')
+    : ''
 
   return (
     <div style={{ textAlign: 'left' }}>
-      {/* Order summary — what is being paid for, and what it adds up to. */}
+      {/* Order summary — every line, and what it adds up to. */}
       <div style={{ background: '#111', border: '1px solid #333', borderRadius: 12, padding: 12, marginBottom: 14 }}>
         <p style={{ margin: 0, color: '#888', fontSize: 11, fontWeight: 700, letterSpacing: '0.4px' }}>ORDER SUMMARY</p>
-        <p style={{ margin: '6px 0 2px', color: '#fff', fontWeight: 700, fontSize: 15 }}>{productName}</p>
-        <p style={{ margin: 0, color: '#888', fontSize: 13 }}>from {sellerName || 'this seller'}</p>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 10, paddingTop: 10, borderTop: '1px solid #222' }}>
-          <span style={{ color: '#888', fontSize: 13 }}>{qty} × UGX {unit.toLocaleString('en-US')}</span>
-          <span style={{ color: green, fontWeight: 800, fontSize: 15 }}>UGX {total.toLocaleString('en-US')}</span>
+        <p style={{ margin: '6px 0 2px', color: '#fff', fontWeight: 700, fontSize: 15 }}>
+          {sellerName || 'This seller'}
+          {orderRef ? <span style={{ color: '#666', fontWeight: 600, fontSize: 12 }}> · {orderRef}</span> : null}
+        </p>
+        <div style={{ marginTop: 8, borderTop: '1px solid #222', paddingTop: 8 }}>
+          {lines.map((line, index) => (
+            <div key={`${line.productId || line.productName}-${index}`} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 5 }}>
+              <span style={{ color: '#ddd', fontSize: 13, lineHeight: 1.4 }}>
+                {line.quantity} × {line.productName}
+                {(line.color || line.size) && (
+                  <span style={{ color: '#777' }}> · {[line.color, line.size].filter(Boolean).join(' / ')}</span>
+                )}
+              </span>
+              <span style={{ color: '#aaa', fontSize: 12, whiteSpace: 'nowrap' }}>UGX {orderLineTotal(line).toLocaleString('en-US')}</span>
+            </div>
+          ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 8, paddingTop: 8, borderTop: '1px solid #222' }}>
+            <span style={{ color: '#888', fontSize: 13 }}>Total</span>
+            <span style={{ color: green, fontWeight: 800, fontSize: 16 }}>UGX {total.toLocaleString('en-US')}</span>
+          </div>
         </div>
       </div>
+
 
       {stage === 'done' ? (
         <div style={{ textAlign: 'center', padding: '6px 0' }}>
           <div style={{ width: 56, height: 56, borderRadius: '50%', background: green, color: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: 26, fontWeight: 800 }}>✓</div>
-          <p style={{ margin: '0 0 4px', color: '#fff', fontWeight: 800, fontSize: 17 }}>Payment confirmed ✓</p>
+          <p style={{ margin: '0 0 4px', color: '#fff', fontWeight: 800, fontSize: 17 }}>
+            {outcome === 'paid' ? 'Paid ✓ Order sent' : 'Order sent ✓'}
+          </p>
           <p style={{ margin: 0, color: '#888', fontSize: 13, lineHeight: 1.5 }}>
-            {paidWith ? `Paid with ${methodWords(paidWith) || 'mobile money'}. ` : ''}The seller will contact you to confirm delivery.
+            {outcome === 'paid'
+              ? `${paidWith ? `Paid with ${methodWords(paidWith) || 'mobile money'}. ` : ''}${sellerName || 'The seller'} has been notified and will confirm delivery.`
+              : `Pay ${sellerName || 'the seller'} on delivery. They have been notified and can see your order.`}
           </p>
           {note && <p style={{ margin: '10px 0 0', color: '#ffb020', fontSize: 12, lineHeight: 1.5 }}>{note}</p>}
         </div>
-      ) : stage === 'waiting' ? (
+      ) : stage === 'waiting' || stage === 'unknown' ? (
         <div style={{ textAlign: 'center', padding: '6px 0' }}>
-          <div style={{ fontSize: 34, marginBottom: 8 }}>📲</div>
-          <p style={{ margin: '0 0 4px', color: '#fff', fontWeight: 800, fontSize: 16 }}>Check your phone for a prompt</p>
-          <p style={{ margin: 0, color: '#888', fontSize: 13, lineHeight: 1.5 }}>
-            Approve UGX {total.toLocaleString('en-US')} and this updates on its own.
+          <div style={{ fontSize: 34, marginBottom: 8 }}>{stage === 'unknown' ? '⏳' : '📲'}</div>
+          <p style={{ margin: '0 0 4px', color: '#fff', fontWeight: 800, fontSize: 16 }}>
+            {stage === 'unknown' ? 'Still checking this payment' : 'Check your phone for a prompt'}
           </p>
-          <p style={{ margin: '12px 0 0', color: '#666', fontSize: 12 }}>Waiting for your network…</p>
+          <p style={{ margin: 0, color: '#888', fontSize: 13, lineHeight: 1.5 }}>
+            {stage === 'unknown'
+              ? `If you approved UGX ${total.toLocaleString('en-US')}, this order will appear in your Inbox as soon as the network confirms. You can close this safely.`
+              : `Approve UGX ${total.toLocaleString('en-US')} on ${displayPhone(check.number, dial) || 'your phone'} and this updates on its own.`}
+          </p>
+          <p style={{ margin: '12px 0 0', color: '#666', fontSize: 12 }}>{stage === 'unknown' ? 'Waiting for the network' : 'Waiting for your network…'}</p>
+          {savedNotice && <p style={{ margin: '8px 0 0', color: green, fontSize: 12, fontWeight: 700 }}>Saved for next time</p>}
           {note && <p style={{ margin: '8px 0 0', color: '#666', fontSize: 12, lineHeight: 1.5 }}>{note}</p>}
         </div>
       ) : methods === null ? (
         <p style={{ color: '#666', fontSize: 13 }}>Checking how this seller gets paid…</p>
       ) : railsReady ? (
         <>
-          <p style={{ margin: '0 0 8px', color: '#aaa', fontSize: 12, fontWeight: 700 }}>PAY WITH</p>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-            {methods.mtn?.enabled && (
-              <button type="button" onClick={() => setRail('mtn')} style={rail === 'mtn' ? railOnStyle : railOffStyle}>
-                📱 MTN MoMo
-              </button>
-            )}
-            {methods.airtel?.enabled && (
-              <button type="button" onClick={() => setRail('airtel')} style={rail === 'airtel' ? railOnStyle : railOffStyle}>
-                📶 Airtel Money
-              </button>
-            )}
-          </div>
+          <p style={{ margin: '0 0 6px', color: '#aaa', fontSize: 12, fontWeight: 700 }}>PAY WITH MOBILE MONEY</p>
+          {acceptedRails && (
+            <p style={{ margin: '0 0 10px', color: '#666', fontSize: 12 }}>
+              {sellerName || 'This seller'} accepts {acceptedRails}. Your number decides which one it is.
+            </p>
+          )}
 
-          <label htmlFor="buyer-momo" style={{ display: 'block', fontSize: 12, color: '#aaa', fontWeight: 700, marginBottom: 6 }}>
-            Your mobile money number
-          </label>
-          <input
-            id="buyer-momo"
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            placeholder="07XX XXX XXX"
-            value={phone}
-            onChange={e => setPhone(e.target.value)}
-            style={buyerInputStyle}
-          />
-          <p style={{ margin: '6px 0 14px', color: '#666', fontSize: 12, lineHeight: 1.5 }}>
-            {auth.currentUser?.phoneNumber
-              ? 'Filled in from your account — change it if you are paying from another number.'
-              : `Type it however you like — we add ${dialFor(country)} for you.`}
-          </p>
+
+          {editingPhone || !hasSavedCard ? (
+            <>
+              <label htmlFor="buyer-momo" style={{ display: 'block', fontSize: 12, color: '#aaa', fontWeight: 700, marginBottom: 6 }}>
+                Your mobile money number
+              </label>
+              <input
+                id="buyer-momo"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="07XX XXX XXX"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                style={buyerInputStyle}
+              />
+              <p style={{ margin: '6px 0 4px', color: check.valid ? '#888' : '#ffb020', fontSize: 12, lineHeight: 1.5 }}>
+                {paymentPhoneHint(check, dial)}
+              </p>
+              {hasSavedCard && (
+                <button type="button" onClick={() => { editTouchedRef.current = false; setEditingPhone(false); setPhone(savedPhone || verifiedPhone) }} style={linkButtonStyle}>
+                  Use the saved number instead
+                </button>
+              )}
+            </>
+          ) : (
+            <div style={{ background: '#151515', border: '1px solid #333', borderRadius: 12, padding: 12, marginBottom: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                <div>
+                  <p style={{ margin: 0, color: '#fff', fontWeight: 800, fontSize: 15 }}>{displayPhone(phone, dial)}</p>
+                  <p style={{ margin: '3px 0 0', color: check.matchesVerified ? green : '#888', fontSize: 12, fontWeight: 700 }}>
+                    {check.matchesVerified ? '✓ Verified with your account' : 'Saved for next time'}
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button type="button" onClick={handleChangePhone} style={smallButtonStyle}>Change</button>
+                  {savedPhone && (
+                    <button type="button" onClick={handleForgetPhone} style={smallButtonStyle}>Forget</button>
+                  )}
+                </div>
+              </div>
+              {check.changedFromVerified && (
+                <p style={{ margin: '8px 0 0', color: '#ffb020', fontSize: 12, lineHeight: 1.5 }}>
+                  This is different from your verified account number. It was saved after your network accepted it — make sure it is still yours.
+                </p>
+              )}
+            </div>
+          )}
 
           <button type="button" onClick={handlePay} style={payStyle}>
-            Pay UGX {total.toLocaleString('en-US')}
+            {check.matchesVerified || (savedPhone && check.matchesSaved) ? 'Confirm & pay' : 'Save & pay'} · UGX {total.toLocaleString('en-US')}
           </button>
+          <p style={{ margin: '8px 0 0', color: '#555', fontSize: 11, lineHeight: 1.5, textAlign: 'center' }}>
+            We save your number only after your network accepts the prompt.
+          </p>
 
           {error && <p role="alert" style={alertStyle}>{error}</p>}
         </>
       ) : (
         <div style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 12, padding: 14 }}>
           <p style={{ margin: '0 0 4px', color: '#fff', fontWeight: 700, fontSize: 14 }}>No online payment set up yet</p>
-          <p style={{ margin: 0, color: '#888', fontSize: 13, lineHeight: 1.5 }}>
-            {sellerName || 'This seller'} has not turned on mobile money, so the seller will contact you
-            to arrange payment and delivery.
+          <p style={{ margin: '0 0 12px', color: '#888', fontSize: 13, lineHeight: 1.5 }}>
+            {sellerName || 'This seller'} has not turned on mobile money. Send the order and pay them on delivery.
           </p>
+          <button type="button" onClick={handleCash} disabled={cashBusy} style={{ ...payStyle, opacity: cashBusy ? 0.7 : 1, cursor: cashBusy ? 'wait' : 'pointer' }}>
+            {cashBusy ? 'Sending…' : 'Send order — pay on delivery'}
+          </button>
+          {error && <p role="alert" style={alertStyle}>{error}</p>}
         </div>
       )}
     </div>
   )
 }
 
-const railBase: CSSProperties = {
-  flex: 1,
-  padding: '12px 10px',
-  borderRadius: 10,
-  fontSize: 13,
-  fontWeight: 700,
-  cursor: 'pointer',
-  background: '#111',
-  color: '#ccc',
-  border: '1px solid #333',
-}
-
-const railOffStyle: CSSProperties = railBase
-const railOnStyle: CSSProperties = { ...railBase, border: `1px solid ${green}`, color: green, background: '#1a2a1a' }
 
 const buyerInputStyle: CSSProperties = {
   width: '100%',
@@ -350,6 +437,29 @@ const payStyle: CSSProperties = {
   fontWeight: 800,
   fontSize: 16,
   cursor: 'pointer',
+  marginTop: 4,
+}
+
+const linkButtonStyle: CSSProperties = {
+  background: 'transparent',
+  border: 'none',
+  color: green,
+  padding: 0,
+  margin: '0 0 12px',
+  fontSize: 12,
+  fontWeight: 700,
+  cursor: 'pointer',
+}
+
+const smallButtonStyle: CSSProperties = {
+  padding: '6px 9px',
+  borderRadius: 8,
+  border: '1px solid #444',
+  background: '#1e1e1e',
+  color: '#ddd',
+  fontSize: 11,
+  fontWeight: 700,
+  cursor: 'pointer',
 }
 
 const alertStyle: CSSProperties = {
@@ -362,3 +472,4 @@ const alertStyle: CSSProperties = {
   fontSize: 13,
   lineHeight: 1.5,
 }
+

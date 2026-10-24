@@ -1,5 +1,6 @@
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https')
 const { onDocumentWritten, onDocumentCreated } = require('firebase-functions/v2/firestore')
+const { onSchedule } = require('firebase-functions/v2/scheduler')
 const { defineSecret } = require('firebase-functions/params')
 const admin = require('firebase-admin')
 const { Resend } = require('resend')
@@ -8,6 +9,7 @@ const pawapay = require('./pawapay')
 const pawapayRules = require('./pawapayRules')
 const pawapaySignatures = require('./pawapaySignatures')
 const sellerStats = require('./sellerStats')
+const orderDraft = require('./orderDraft')
 const { decideOutcome, amountAgrees } = require('./paymentRules')
 const { orderTotal } = require('./orderAmount')
 const crypto = require('crypto')
@@ -226,6 +228,9 @@ exports.pesapalStartPayment = onCall(
     if (order.status === 'paid' || order.paymentStatus === 'completed') {
       throw new HttpsError('failed-precondition', 'This order is already paid.')
     }
+    if (order.checkoutState === 'abandoned') {
+      throw new HttpsError('failed-precondition', 'This checkout expired. Start the order again.')
+    }
 
     // The amount comes from the order's own arithmetic (`orderAmount.js`), never from the browser.
     const totals = orderTotal(order)
@@ -368,7 +373,15 @@ async function verifyPaymentStatus(payment, reference) {
     }
   }
 
-  await orderRef.set(orderPatch, { merge: true })
+  // A hidden draft becomes a real order only after the processor says the money landed. The
+  // publish helper claims that transition once, so an IPN and a status poll cannot double-notify.
+  const shouldPublish = order.checkoutState === 'paying' && resolved === 'completed' && !mismatch
+  if (shouldPublish && !orderPatch.status) orderPatch.status = 'paid'
+  const published = shouldPublish
+    ? await publishDraftOrder(orderRef, order, orderPatch, { allowAbandoned: true })
+    : { published: false }
+  if (!published.published) await orderRef.set(orderPatch, { merge: true })
+
   return {
     mapped,
     status,
@@ -378,7 +391,7 @@ async function verifyPaymentStatus(payment, reference) {
     mismatch,
     method,
     amountPaid,
-    orderStatus: orderPatch.status || order.status || null,
+    orderStatus: shouldPublish ? (orderPatch.status || 'paid') : (orderPatch.status || order.status || null),
   }
 }
 
@@ -558,13 +571,137 @@ async function pawapayPublicKeys() {
 async function sellerAcceptsRail(sellerId, provider) {
   try {
     const snap = await db.collection('sellers').doc(text(sellerId)).get()
-    const prefs = snap.exists ? snap.data().paymentPrefs : null
-    const rails = Array.isArray(prefs && prefs.rails) ? prefs.rails : []
-    if (!rails.length) return { known: false, accepts: true }
-    return { known: true, accepts: rails.includes(text(provider)) }
+    const methods = snap.exists ? snap.data().paymentMethods : null
+    const enabled = ['mtn', 'airtel'].filter(
+      key => methods && methods[key] && methods[key].enabled === true,
+    )
+    // A shop that has never saved a payment setting is legacy, not a refusal: the old behaviour
+    // (allow it, and tell the seller) is still the least harmful reading.
+    if (enabled.length === 0) return { known: false, accepts: true }
+    const rail = text(provider).toUpperCase()
+    return { known: true, accepts: enabled.some(key => rail.includes(key.toUpperCase())) }
   } catch (err) {
-    console.warn('[pawapay] could not read paymentPrefs:', err && err.message)
+    console.warn('[pawapay] could not read paymentMethods:', err && err.message)
     return { known: false, accepts: true }
+  }
+}
+
+/**
+ * Turn a hidden draft into an order the seller can see — once.
+ *
+ * The buyer's browser cannot do this (`firestore.rules` allows create, never update), and it must
+ * not: the moment an order becomes real is the moment the seller is told, and that moment belongs
+ * to a payment the server has verified. The transaction claims the publish exactly once, so a
+ * callback and a status poll racing each other still produce one bubble and one counter bump.
+ */
+async function publishDraftOrder(orderRef, order, extraPatch = {}, options = {}) {
+  const sellerId = orderRef.parent.parent.id
+  const buyerUid = text(order && order.buyerUid)
+  if (!buyerUid) return { published: false }
+  let published = null
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(orderRef)
+    if (!snap.exists) return
+    const fresh = snap.data()
+    // A payment already in flight must still publish even if the cleanup job marked the draft
+    // abandoned a moment earlier — the money is real. A brand-new cash send may not.
+    const publishable = fresh.checkoutState === 'paying'
+      || (options.allowAbandoned === true && fresh.checkoutState === 'abandoned')
+    if (!publishable || fresh.publishedAt) return
+    const now = admin.firestore.FieldValue.serverTimestamp()
+    tx.set(orderRef, {
+      ...extraPatch,
+      checkoutState: 'published',
+      publishedAt: now,
+      publishedBy: 'server',
+      read: false,
+    }, { merge: true })
+    published = { ...fresh, ...extraPatch }
+  })
+  if (!published) return { published: false }
+
+  try {
+    await announcePublishedOrder(sellerId, buyerUid, orderRef.id, published)
+    await bumpPublishedOrderCounts(sellerId, published)
+  } catch (err) {
+    // The order is already published and paid; a chat/counter side effect must not un-pay it.
+    console.error('[orders] publish side effects failed:', err && err.message)
+  }
+  return { published: true }
+}
+
+/** The order bubble the seller finds in the thread — the same shape the client used to write. */
+async function announcePublishedOrder(sellerId, buyerUid, orderDocId, order) {
+  const sellerSnap = await db.collection('sellers').doc(sellerId).get()
+  const sellerName = sellerSnap.exists ? text(sellerSnap.data().businessName) : ''
+  const conversationId = [sellerId, buyerUid].sort().join('_')
+  const convoRef = db.collection('conversations').doc(conversationId)
+  const convoSnap = await convoRef.get()
+  const message = orderDraft.orderBubbleText(order, text(order.orderId) || orderDocId)
+  const now = admin.firestore.FieldValue.serverTimestamp()
+  const lines = orderDraft.itemsOf(order)
+  const first = lines[0] || {}
+  const variant = lines.length === 1 ? orderDraft.variantWords(first) : ''
+
+  if (!convoSnap.exists) {
+    await convoRef.set({
+      sellerId,
+      buyerId: buyerUid,
+      ...(sellerName ? { sellerName } : {}),
+      ...(order.buyerName ? { buyerName: text(order.buyerName) } : {}),
+      lastMessage: message,
+      lastMessageAt: now,
+      lastMessageBy: buyerUid,
+      lastMessageStatus: 'sent',
+      unreadBySeller: true,
+      unreadBySellerCount: 1,
+      unreadByBuyer: false,
+      unreadByBuyerCount: 0,
+    })
+  } else {
+    await convoRef.set({
+      lastMessage: message,
+      lastMessageAt: now,
+      lastMessageBy: buyerUid,
+      lastMessageStatus: 'sent',
+      unreadBySeller: true,
+      unreadBySellerCount: admin.firestore.FieldValue.increment(1),
+    }, { merge: true })
+  }
+
+  await db.collection('conversations').doc(conversationId).collection('messages').add({
+    senderId: buyerUid,
+    type: 'order',
+    text: message,
+    orderId: text(order.orderId) || orderDocId,
+    orderDocId,
+    ...(first.productId ? { productId: first.productId } : {}),
+    productName: text(order.productName),
+    productPrice: text(order.productPrice),
+    quantity: text(order.quantity) || '1',
+    ...(variant ? { variant } : {}),
+    ...(lines.length > 0 ? { items: lines } : {}),
+    ...(text(order.buyerNote) ? { buyerNote: text(order.buyerNote) } : {}),
+    status: 'sent',
+    createdAt: now,
+  })
+}
+
+/** "Bought" is per product, and one combined order can credit several products. */
+async function bumpPublishedOrderCounts(sellerId, order) {
+  const lines = orderDraft.itemsOf(order)
+  const productIds = [...new Set(
+    lines.map(line => text(line.productId)).filter(Boolean),
+  )]
+  for (const productId of productIds) {
+    try {
+      const ref = db.collection('sellers').doc(sellerId).collection('products').doc(productId)
+      const snap = await ref.get()
+      if (!snap.exists) continue
+      await ref.update({ orderCount: admin.firestore.FieldValue.increment(1) })
+    } catch (err) {
+      console.warn('[orders] could not bump product orderCount:', productId, err && err.message)
+    }
   }
 }
 
@@ -607,6 +744,9 @@ exports.pawapayStartDeposit = onCall(
     if (order.status === 'paid' || order.paymentStatus === 'completed') {
       throw new HttpsError('failed-precondition', 'This order is already paid.')
     }
+    if (order.checkoutState === 'abandoned') {
+      throw new HttpsError('failed-precondition', 'This checkout expired. Start the order again.')
+    }
 
     const totals = orderTotal(order)
     const amount = totals ? pawapay.toAmountString(totals.total, PAWAPAY_CURRENCY) : null
@@ -615,6 +755,15 @@ exports.pawapayStartDeposit = onCall(
     const prediction = await pawapay.predictProvider({ ...pawapayCredentials(), phoneNumber: typedNumber })
     if (!pawapayRules.isProviderCode(prediction.provider)) {
       throw new HttpsError('failed-precondition', 'We could not tell which mobile money network that number is on.')
+    }
+    // The buyer's number picks the network; the seller's saved payment methods decide whether that
+    // network is welcome here. This is a real check, not a cosmetic picker in the sheet.
+    const rail = await sellerAcceptsRail(sellerId, prediction.provider)
+    if (rail.known && !rail.accepts) {
+      throw new HttpsError(
+        'failed-precondition',
+        'That mobile money network is not one this seller accepts. Try a number on the network they listed.',
+      )
     }
 
     const depositId = pawapayRules.buildDepositId(crypto)
@@ -680,6 +829,7 @@ exports.pawapayStartDeposit = onCall(
       currency: PAWAPAY_CURRENCY,
       status: 'initiated',
       message: 'Check your phone and approve the payment.',
+      payerPhone: prediction.msisdn,
     }
   }
 )
@@ -762,12 +912,21 @@ async function verifyPawaPayDeposit(payment) {
     if (decision.nextOrderStatus) patch.status = decision.nextOrderStatus
   }
 
-  await orderRef.set(patch, { merge: true })
+  // Same publish boundary as the card flow: the seller is told only once pawaPay's answer is in.
+  const shouldPublish = order.checkoutState === 'paying'
+    && decision.resolved === 'completed'
+    && !decision.mismatch
+  if (shouldPublish && !patch.status) patch.status = 'paid'
+  const published = shouldPublish
+    ? await publishDraftOrder(orderRef, order, patch, { allowAbandoned: true })
+    : { published: false }
+  if (!published.published) await orderRef.set(patch, { merge: true })
+
   return {
     reading,
     resolved: decision.resolved,
     applied: decision.applied,
-    orderStatus: patch.status || order.status || null,
+    orderStatus: shouldPublish ? (patch.status || 'paid') : (patch.status || order.status || null),
     method,
     note,
   }
@@ -907,6 +1066,99 @@ exports.pawapayPaymentStatus = onCall(
   }
 )
 
+/**
+ * The buyer chose to pay on delivery (the shop has no online rail). This is the same publish
+ * boundary as a paid order, with one difference: no money has moved, so the order stays `pending`
+ * and carries the honest word `pay_on_delivery`.
+ *
+ * A draft with a live or completed online payment is refused — a buyer must not be able to turn a
+ * payment in progress into a delivery promise by tapping a second button.
+ */
+exports.publishCashOrder = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid
+  if (!uid) throw new HttpsError('unauthenticated', 'Sign in to send this order.')
+  const sellerId = text(request.data && request.data.sellerId)
+  const orderId = text(request.data && request.data.orderId)
+  if (!sellerId || !orderId) throw new HttpsError('invalid-argument', 'We could not find that order.')
+
+  const orderRef = db.collection('sellers').doc(sellerId).collection('orders').doc(orderId)
+  const snap = await orderRef.get()
+  if (!snap.exists) throw new HttpsError('not-found', 'We could not find that order.')
+  const order = snap.data()
+  if (order.buyerUid !== uid) {
+    throw new HttpsError('permission-denied', 'That order belongs to someone else.')
+  }
+  if (order.paymentStatus === 'completed' || order.status === 'paid') {
+    throw new HttpsError('failed-precondition', 'This order is already paid.')
+  }
+  if (order.paymentStatus === 'initiated') {
+    throw new HttpsError('failed-precondition', 'A payment for this order is still on your phone. Finish or wait for it before choosing pay on delivery.')
+  }
+  if (order.checkoutState === 'abandoned') {
+    throw new HttpsError('failed-precondition', 'This checkout expired. Start the order again.')
+  }
+  if (order.checkoutState !== 'paying') {
+    return {
+      orderId: text(order.orderId) || orderId,
+      orderStatus: text(order.status) || 'pending',
+      published: false,
+    }
+  }
+
+  // Pay-on-delivery is the fallback for a shop that has no online rail — not a way around paying
+  // one that does. A direct call cannot turn an online checkout into an unpaid order.
+  const sellerSnap = await db.collection('sellers').doc(sellerId).get()
+  const methods = sellerSnap.exists ? sellerSnap.data().paymentMethods : null
+  const hasOnlineRail = Boolean(methods && ((methods.mtn && methods.mtn.enabled) || (methods.airtel && methods.airtel.enabled)))
+  if (hasOnlineRail) {
+    throw new HttpsError('failed-precondition', 'This shop accepts mobile money. Pay online to send the order.')
+  }
+
+  const result = await publishDraftOrder(orderRef, order, {
+    paymentMethod: 'cash',
+    paymentStatus: 'pay_on_delivery',
+    paymentUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  })
+  return {
+    orderId: text(order.orderId) || orderId,
+    orderStatus: result.published ? 'pending' : (text(order.status) || 'pending'),
+    published: result.published,
+  }
+})
+
+
+/**
+ * A checkout that was opened and then abandoned leaves a hidden draft. Nothing can see it, but it
+ * should not sit there for ever: after a day it is marked `abandoned` and the buyer's own list
+ * stops considering it. This never touches a draft with a payment in progress.
+ */
+exports.cleanupAbandonedCheckouts = onSchedule('every 6 hours', async () => {
+  const cutoffMs = Date.now() - 24 * 60 * 60 * 1000
+  try {
+    const snap = await db.collectionGroup('orders')
+      .where('checkoutState', '==', 'paying')
+      .where('createdAt', '<', admin.firestore.Timestamp.fromMillis(cutoffMs))
+      .limit(300)
+      .get()
+    const now = admin.firestore.FieldValue.serverTimestamp()
+    let abandoned = 0
+    for (const entry of snap.docs) {
+      const data = entry.data()
+      if (data.paymentStatus === 'initiated' || data.paymentStatus === 'completed') continue
+      await entry.ref.set({
+        checkoutState: 'abandoned',
+        abandonedAt: now,
+        read: true,
+      }, { merge: true })
+      abandoned += 1
+    }
+    if (abandoned > 0) console.log(`[orders] marked ${abandoned} abandoned checkout(s)`)
+  } catch (err) {
+    console.error('[orders] abandoned checkout cleanup failed:', err && err.message)
+  }
+})
+
+
 /* ─── 💎 Reliable Seller — the two things rachett measures for the badge ────────────────────────
  *
  * The 🟢 Real Seller badge is a profile check: a seller can see for themselves whether they filled
@@ -940,7 +1192,10 @@ exports.recomputeSellerCompletion = onDocumentWritten(
     const sellerId = event.params.sellerId
     try {
       const snap = await db.collection('sellers').doc(sellerId).collection('orders').get()
-      const orders = snap.docs.map((d) => d.data())
+      // A hidden draft is not an order the shop received — it must not lower their completion rate.
+      const orders = snap.docs
+        .map((d) => d.data())
+        .filter((order) => orderDraft.isPublishedOrder(order))
       const total = orders.length
       const completed = sellerStats.countCompleted(orders)
       await statsRef(sellerId).set(

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { collection, collectionGroup, getDocs, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import { db, auth } from './firebase'
+import { isPublishedOrder, type OrderLine } from './orderLines'
 
 /**
  * "Everything I have ever ordered, from every shop."
@@ -31,6 +32,10 @@ export interface BuyerOrder {
   /** Only on orders placed after this was added — older ones have no thumbnail. */
   productImage?: string
   quantity?: number | string
+  /** A combined bag order's lines. Older orders have none. */
+  items?: OrderLine[]
+  /** `paying` / `abandoned` drafts never appear in the buyer's order history. */
+  checkoutState?: string
   deliveryArea?: string
   /** The colour/size chosen in the details sheet — absent on older orders, and on products
    *  that never listed any options. */
@@ -134,7 +139,9 @@ async function readOrdersTheSlowWay(uid: string, pageSize: number): Promise<{ ro
     try {
       const snap = await getDocs(query(collection(db, 'sellers', sellerId, 'orders'), where('buyerUid', '==', uid)))
       snap.docs.forEach(d => {
-        rows.push({ ...(d.data() as Omit<BuyerOrder, 'id' | 'sellerId'>), id: d.id, sellerId })
+        const data = d.data() as Omit<BuyerOrder, 'id' | 'sellerId'>
+        if (!isPublishedOrder(data)) return
+        rows.push({ ...data, id: d.id, sellerId })
       })
     } catch (err) {
       if (isBlocked(err)) refusals++
@@ -199,10 +206,12 @@ export function useBuyerOrders() {
     const unsub = onSnapshot(
       q,
       snap => {
-        setOrders(snap.docs.map(d => {
-          const data = d.data() as Omit<BuyerOrder, 'id' | 'sellerId'>
-          return { ...data, id: d.id, sellerId: d.ref.parent.parent?.id || '' }
-        }))
+        setOrders(snap.docs
+          .map(d => {
+            const data = d.data() as Omit<BuyerOrder, 'id' | 'sellerId'>
+            return { ...data, id: d.id, sellerId: d.ref.parent.parent?.id || '' }
+          })
+          .filter(order => isPublishedOrder(order)))
         // A full page means there is probably more behind it.
         setHasMore(snap.size >= pageSize)
         setError(null)

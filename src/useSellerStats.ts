@@ -3,6 +3,7 @@ import { doc, onSnapshot, collection, query, getDocs } from 'firebase/firestore'
 import { auth, db } from './firebase'
 import { TRUST_COLLECTION, isPhoneProven } from './trust'
 import { meetsReliableCriteria } from './reliableBadge'
+import { isPublishedOrder, orderLinesOf } from './orderLines'
 
 export type BadgeStatus = 'none' | 'active' | 'grace'
 
@@ -295,17 +296,22 @@ export function useSellerStats(sellerId: string | null) {
 
     try {
       const ordersSnap = await getDocs(query(collection(db, 'sellers', sid, 'orders')))
-      const fulfilledOrdersArr = ordersSnap.docs.filter(d => d.data().status === 'fulfilled')
-      const totalSales = fulfilledOrdersArr.reduce((sum, d) => {
-        const qty = Number(d.data().quantity) || 1
-        return sum + qty
+      // Hidden checkout drafts are not orders this shop received — they must not move its numbers.
+      const visibleOrders = ordersSnap.docs
+        .map(d => d.data())
+        .filter(order => isPublishedOrder(order))
+      const fulfilledOrdersArr = visibleOrders.filter(order => order.status === 'fulfilled')
+      const totalSales = fulfilledOrdersArr.reduce((sum, order) => {
+        // A combined bag order carries every line; its `quantity: 1` is only the price multiplier.
+        const units = orderLinesOf(order).reduce((lineSum, line) => lineSum + line.quantity, 0)
+        return sum + (units || 1)
       }, 0)
       const fulfilledOrders = fulfilledOrdersArr.length
 
-      const buyerNames = new Set(fulfilledOrdersArr.map(d => d.data().buyerName?.toLowerCase()).filter(Boolean))
+      const buyerNames = new Set(fulfilledOrdersArr.map(order => order.buyerName?.toLowerCase()).filter(Boolean))
       const repeatBuyers = fulfilledOrders > buyerNames.size ? fulfilledOrders - buyerNames.size : 0
 
-      const cancelledOrders = ordersSnap.docs.filter(d => d.data().status === 'cancelled').length
+      const cancelledOrders = visibleOrders.filter(order => order.status === 'cancelled').length
       const totalProcessed = fulfilledOrders + cancelledOrders
       const deliverySuccess = totalProcessed > 0 ? Math.round((fulfilledOrders / totalProcessed) * 100) : 0
 

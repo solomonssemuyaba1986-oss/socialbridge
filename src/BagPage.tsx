@@ -5,13 +5,13 @@ import { db, auth } from './firebase'
 import { detectSource } from './tracking'
 import { trackEvent } from './analytics'
 import { useBag } from './useBag'
-import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder'
 import { useAllDrafts, useDraft } from './useDraft'
 import QuickRepliesPanel from './QuickRepliesPanel'
 import { uploadImageToCloudinary } from './uploadImage'
 import ProductPreview from './ProductPreview'
 import ProductSheet from './ProductSheet'
-import PawapayCheckout, { type Stage } from './PawapayCheckout'
+import BagCheckoutSheet from './BagCheckoutSheet'
+import { bagCheckoutLabel, groupBagForCheckout, isHeld, type BagCheckoutItem } from './bagCheckout'
 import { getConversationId, sendConversationMessage } from './useConversation'
 import { notify } from './notifications'
 import { consumePendingAction, requireSignIn } from './signInGate'
@@ -21,7 +21,6 @@ import { formatCount } from './productCardUtils'
 import type { CardProduct } from './productCardUtils'
 import { variantLabel } from './productSheetUtils'
 import { useBuyerName } from './useBuyerName'
-import { nameLabel } from './buyerName'
 import { useProductFeed } from './useProductFeed'
 import { useSellerDirectory } from './useSellerDirectory'
 import { useViewHistory } from './useViewHistory'
@@ -88,22 +87,16 @@ interface BagTarget {
 
 function BagPage() {
   const navigate = useNavigate()
-  const { items, removeFromBag, clearBag, setQuantity, count } = useBag()
+  const { items, removeFromBag, clearBag, setQuantity, holdBagItem, resumeBagItem, count } = useBag()
 
-  const [orderTarget, setOrderTarget] = useState<BagTarget | null>(null)
+  /** The lines the checkout sheet was opened for — all ready lines, or one "Buy Now" row. */
+  const [checkoutIds, setCheckoutIds] = useState<string[] | null>(null)
+  const [checkoutIncludeHeld, setCheckoutIncludeHeld] = useState(false)
   /** The payment step for the order just placed from the bag. */
-  const [orderDocId, setOrderDocId] = useState('')
-  const [placedQuantity, setPlacedQuantity] = useState('1')
-  const [payStage, setPayStage] = useState<Stage | null>(null)
   const [messageTarget, setMessageTarget] = useState<BagTarget | null>(null)
-  const [orderSuccess, setOrderSuccess] = useState(false)
-  const [buyerName, setBuyerName] = useState('')
   /** What sellers call this buyer — the order form pre-fills from it and remembers what they keep. */
   const myName = useBuyerName()
-  const shownName = buyerName.trim() || myName.name
-  const [orderQty, setOrderQty] = useState('1')
-  const [deliveryArea, setDeliveryArea] = useState('')
-  const [orderMessage, setOrderMessage] = useState('')
+
   /**
    * One thread, one draft — keyed by the conversation this message would create;
    * product-keyed when the uid isn't known yet, so nothing is ever dropped.
@@ -306,16 +299,37 @@ function BagPage() {
   }
 
   // Deleted products can't be bought — keep them out of the total; otherwise use the live price.
-  const total = items
-    .filter(i => !missingProducts[i.productId])
-    .reduce((sum, i) => {
-      const live = liveProducts[i.productId]
-      const price = live?.price || i.productPrice
-      return sum + (Number(String(price).replace(/[^0-9]/g, '')) || 0) * i.quantity
-    }, 0)
+  /**
+   * The bag as the checkout sees it: live price/name, held state and the seller. A deleted product
+   * is marked unavailable so it cannot enter a total, but stays visible so the buyer can remove it.
+   */
+  const pricedItems: BagCheckoutItem[] = useMemo(() => items.map(item => {
+    const live = liveProducts[item.productId]
+    return {
+      productId: item.productId,
+      productName: live?.name || item.productName,
+      productPrice: live?.price || item.productPrice,
+      imageUrl: live?.imageUrl || item.imageUrl,
+      sellerId: item.sellerId,
+      sellerSlug: item.sellerSlug,
+      businessName: item.businessName,
+      quantity: item.quantity,
+      addedAt: item.addedAt,
+      ...(item.color ? { color: item.color } : {}),
+      ...(item.size ? { size: item.size } : {}),
+      heldAt: Number(item.heldAt) || 0,
+    }
+  }), [items, liveProducts])
 
-  /** Each seller is paid separately, so "Pay now" starts with the first buyable item in the bag. */
-  const firstPayable = items.find(i => !missingProducts[i.productId])
+  const checkoutSummary = useMemo(
+    () => groupBagForCheckout(pricedItems, { unavailable: missingProducts }),
+    [pricedItems, missingProducts],
+  )
+  const checkoutItems = useMemo(
+    () => (checkoutIds || []).map(id => pricedItems.find(item => item.productId === id)).filter((item): item is BagCheckoutItem => Boolean(item)),
+    [checkoutIds, pricedItems],
+  )
+  const firstPayable = checkoutSummary.groups[0]?.lines[0] || null
 
   const toTarget = (item: typeof items[number]): BagTarget => {
     const lv = liveView(item)
@@ -375,16 +389,33 @@ function BagPage() {
     }
   }, [])
 
+  /** One row's "Buy Now": a one-line checkout, even if that line is on hold. */
   const openOrder = async (item: typeof items[number]) => {
     const sid = await resolveSellerId(item.sellerSlug, item.sellerId)
     if (!sid) { alert('Could not find this seller. They may have closed their store.'); return }
+    if (!auth.currentUser || auth.currentUser.isAnonymous) {
+      requireSignIn(navigate, { action: 'order', returnTo: '/bag', productId: item.productId })
+      return
+    }
+    trackEvent('checkout_started', { size: 1 })
+    setCheckoutIncludeHeld(true)
+    setCheckoutIds([item.productId])
+  }
+
+  /** The total's one button: every ready line, grouped into one payment per shop. */
+  const openBagCheckout = () => {
+    if (!auth.currentUser || auth.currentUser.isAnonymous) {
+      requireSignIn(navigate, { action: 'order', returnTo: '/bag' })
+      return
+    }
     trackEvent('checkout_started', { size: items.length })
-    setOrderTarget(toTarget(item))
-    setBuyerName('')
-    setOrderQty('1')
-    setDeliveryArea('')
-    setOrderMessage('')
-    setOrderSuccess(false)
+    setCheckoutIncludeHeld(false)
+    setCheckoutIds(items.map(item => item.productId))
+  }
+
+  /** The lines a shop payment just released from the bag. Held/unavailable lines are untouched. */
+  const handlePaidLines = (productIds: string[]) => {
+    productIds.forEach(id => removeFromBag(id))
   }
 
   const openMessage = async (item: typeof items[number]) => {
@@ -412,83 +443,6 @@ function BagPage() {
     // Runs once, the moment the bag is on screen.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items])
-
-  const handleOrder = async () => {
-    if (!auth.currentUser) {
-      // Sign in first — then straight back to this bag item.
-      requireSignIn(navigate, { action: 'order', returnTo: '/bag', productId: orderTarget?.id })
-      return
-    }
-    if (!shownName.trim() || !deliveryArea.trim() || !orderTarget) return
-    // Checkout is where a buyer tells us what to call them — remember it once, quietly.
-    void myName.rememberIfNew(shownName, 'checkout')
-    const sourcePlatform = detectSource()
-    // The chosen colour/size lives on the bag line, not on the live product.
-    const bagItem = items.find(i => i.productId === orderTarget.id)
-    try {
-      const { orderRef: orderDocRef, orderId } = await createBuyerOrder(orderTarget.sellerId, {
-        buyerName: shownName.trim(),
-        buyerUid: auth.currentUser.uid,
-        productName: orderTarget.name,
-        productPrice: orderTarget.price,
-        productId: orderTarget.id,
-        productImage: orderTarget.imageUrl || '',
-        quantity: orderQty,
-        deliveryArea: deliveryArea.trim(),
-        // What they picked in the details sheet, remembered on the bag line and carried here.
-        ...(bagItem?.color ? { color: bagItem.color } : {}),
-        ...(bagItem?.size ? { size: bagItem.size } : {}),
-        status: 'pending',
-        read: false,
-        sourcePlatform,
-        createdAt: new Date(),
-      })
-      await createOrderConversation({
-        sellerId: orderTarget.sellerId,
-        buyerId: auth.currentUser.uid,
-        sellerName: orderTarget.businessName,
-        buyerName: shownName.trim(),
-        orderId,
-        productId: orderTarget.id,
-        productName: orderTarget.name,
-        productPrice: orderTarget.price,
-        quantity: orderQty,
-        color: bagItem?.color,
-        size: bagItem?.size,
-      })
-      await incrementProductOrderCount(orderTarget.sellerId, orderTarget.id, orderTarget.orderCount || 0)
-      trackEvent('order_placed', {
-        productId: orderTarget.id,
-        sellerId: orderTarget.sellerId,
-        price: orderTarget.price,
-        quantity: orderQty,
-        bagSize: items.length,
-        channel: sourcePlatform,
-        surface: 'bag',
-      })
-      setOrderDocId(orderDocRef.id)
-      setPlacedQuantity(orderQty)
-      setPayStage('choice')
-      setOrderSuccess(true)
-    } catch (err) {
-      console.error('Order failed:', err)
-      alert('Failed to place order. Try again.')
-    }
-  }
-
-  /** Closing the bag checkout — never while a mobile-money prompt is live. */
-  const closeOrder = () => {
-    if (payStage === 'waiting') return
-    setOrderTarget(null)
-    setOrderSuccess(false)
-    setOrderDocId('')
-    setPlacedQuantity('1')
-    setPayStage(null)
-    setBuyerName('')
-    setOrderQty('1')
-    setDeliveryArea('')
-    setOrderMessage('')
-  }
 
   const closeMessageModal = () => {
     // Flush before the key changes to 'none' — a last-millisecond draft must survive.
@@ -648,6 +602,7 @@ function BagPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {items.map(item => {
             const isMissing = !!missingProducts[item.productId]
+            const held = isHeld(item)
             const lv = liveView(item)
             const live = liveProducts[item.productId]
             const reviews = live?.reviewCount || 0
@@ -716,6 +671,11 @@ function BagPage() {
                         style={{ padding: '6px 12px', background: '#222', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '11px', whiteSpace: 'nowrap' }}>
                         💬 Message
                       </button>
+                      <button onClick={() => { if (held) resumeBagItem(item.productId); else holdBagItem(item.productId) }}
+                        title={held ? 'Put this back in the checkout' : 'Keep this in the bag, but out of today’s payment'}
+                        style={{ padding: '6px 12px', background: held ? '#241f0c' : '#222', color: held ? '#ffcc33' : '#fff', border: `1px solid ${held ? '#4a3d12' : '#333'}`, borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                        {held ? '▶ Resume' : '⏸ Hold on'}
+                      </button>
                       <button onClick={() => openOrder(item)}
                         style={{ padding: '6px 12px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '11px', whiteSpace: 'nowrap' }}>
                         Buy Now
@@ -735,20 +695,36 @@ function BagPage() {
         {/* Total — with the one button that turns a saved bag into a purchase. */}
         <div style={{ marginTop: '20px', padding: '16px', background: '#1a1a1a', borderRadius: '12px', border: `1px solid ${firstPayable ? green : '#222'}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-            <span style={{ color: '#888', fontSize: '14px' }}>Total</span>
-            <span style={{ fontWeight: '800', fontSize: '18px', color: green }}>UGX {total.toLocaleString()}</span>
+            <span style={{ color: '#888', fontSize: '14px' }}>
+              Ready to pay{checkoutSummary.readyCount > 0 ? ` · ${checkoutSummary.readyCount} item${checkoutSummary.readyCount === 1 ? '' : 's'}` : ''}
+            </span>
+            <span style={{ fontWeight: '800', fontSize: '18px', color: green }}>UGX {checkoutSummary.readyTotal.toLocaleString()}</span>
           </div>
+          {checkoutSummary.heldCount > 0 && (
+            <p style={{ margin: '8px 0 0', color: '#ffcc33', fontSize: 12, lineHeight: 1.5 }}>
+              ⏸ {checkoutSummary.heldCount} held item{checkoutSummary.heldCount === 1 ? '' : 's'} · UGX {checkoutSummary.heldTotal.toLocaleString()} stays in your bag until you resume.
+            </p>
+          )}
+          {checkoutSummary.unavailableCount > 0 && (
+            <p style={{ margin: '6px 0 0', color: '#ff6b6b', fontSize: 12 }}>
+              {checkoutSummary.unavailableCount} unavailable line{checkoutSummary.unavailableCount === 1 ? '' : 's'} cannot be bought.
+            </p>
+          )}
           <button
-            onClick={() => { if (firstPayable) void openOrder(firstPayable) }}
+            onClick={openBagCheckout}
             disabled={!firstPayable}
             style={{ width: '100%', marginTop: 12, padding: '14px', background: firstPayable ? green : '#242424', color: firstPayable ? '#000' : '#666', border: 'none', borderRadius: 10, fontWeight: 900, cursor: firstPayable ? 'pointer' : 'not-allowed', fontSize: 15 }}
           >
-            ⚡ Pay now — UGX {total.toLocaleString()}
+            {bagCheckoutLabel(checkoutSummary)}
           </button>
           <p style={{ margin: '8px 0 0', color: '#777', fontSize: 11, lineHeight: 1.5, textAlign: 'center' }}>
             {firstPayable
-              ? `We start with “${firstPayable.productName}”. Items from different sellers are paid separately — every receipt lands in your Inbox.`
-              : 'Nothing in this bag can be bought right now.'}
+              ? (checkoutSummary.shopCount > 1
+                  ? `${checkoutSummary.shopCount} shops — one payment per shop. Each receipt lands in your Inbox.`
+                  : 'One payment, one order. The seller is told only once it succeeds.')
+              : checkoutSummary.heldCount > 0
+                ? 'Everything is on hold — resume an item when you are ready to pay.'
+                : 'Nothing in this bag can be bought right now.'}
           </p>
         </div>
 
@@ -763,76 +739,15 @@ function BagPage() {
         </div>
       </div>
 
-      {/* Order Modal */}
-      {orderTarget && (
-        <div className="rt-modal-overlay" onClick={closeOrder}
-          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
-          <div onClick={e => e.stopPropagation()}
-            style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222', textAlign: 'center' }}>
-            {orderSuccess ? (
-              <div>
-                <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '28px', color: '#000', fontWeight: '800' }}>
-                  ✓
-                </div>
-                <h3 style={{ color: '#fff', fontWeight: '800', fontSize: '18px', margin: '0 0 8px' }}>Order in — pay now</h3>
-                <p style={{ color: '#888', fontSize: '14px', margin: '0 0 16px' }}>
-                  {orderTarget.name} · {placedQuantity} × UGX {orderTarget.price}
-                </p>
-                {orderDocId && (
-                  <PawapayCheckout
-                    sellerId={orderTarget.sellerId}
-                    sellerName={orderTarget.businessName || 'Seller'}
-                    productName={orderTarget.name}
-                    productPrice={orderTarget.price}
-                    quantity={placedQuantity}
-                    orderDocId={orderDocId}
-                    onStageChange={setPayStage}
-                  />
-                )}
-                <button onClick={closeOrder}
-                  style={{ width: '100%', marginTop: '14px', padding: '12px', background: 'transparent', color: '#888', border: '1px solid #333', borderRadius: '10px', cursor: payStage === 'waiting' ? 'default' : 'pointer', fontSize: '14px', fontWeight: 700 }}>
-                  {payStage === 'waiting' ? 'Close — the payment carries on to my phone' : 'Done'}
-                </button>
-                <button onClick={() => navigate('/inbox')} style={{ marginTop: '10px', padding: '8px 12px', background: 'transparent', color: green, border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 700 }}>Track it in your Inbox →</button>
-              </div>
-            ) : !auth.currentUser || auth.currentUser.isAnonymous ? (
-              <SignInPrompt
-                action="order"
-                returnTo="/bag"
-                productId={orderTarget?.id}
-                onLeave={() => { setOrderTarget(null); setOrderSuccess(false) }}
-              />
-            ) : (
-              <>
-                <h3 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: '800', color: '#fff', textAlign: 'left' }}>
-                  Order {orderTarget.name}
-                </h3>
-                <p style={{ margin: '0 0 24px', color: green, fontSize: '14px', fontWeight: '700', textAlign: 'left' }}>
-                  UGX {orderTarget.price} each
-                </p>
-                <input placeholder="Your name" value={shownName} onChange={e => setBuyerName(e.target.value)}
-                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '6px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
-                <p style={{ margin: '0 0 12px', color: '#777', fontSize: 12, textAlign: 'left' }}>
-                  Sellers see you as <strong style={{ color: green }}>{nameLabel(shownName)}</strong>
-                </p>
-                <input placeholder="Quantity" value={orderQty} onChange={e => setOrderQty(e.target.value)} type="number" min="1"
-                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
-                <input placeholder="Delivery area e.g. Nakawa, Kampala" value={deliveryArea} onChange={e => setDeliveryArea(e.target.value)}
-                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
-                <textarea placeholder="Write a message to the seller (optional)" value={orderMessage} onChange={e => setOrderMessage(e.target.value)}
-                  style={{ width: '100%', minHeight: '80px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '20px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
-                <button onClick={handleOrder}
-                  style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
-                  Send Order
-                </button>
-                <button onClick={closeOrder}
-                  style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
-                  Cancel
-                </button>
-              </>
-            )}
-          </div>
-        </div>
+      {checkoutIds && (
+        <BagCheckoutSheet
+          items={checkoutItems}
+          missingProducts={missingProducts}
+          includeHeld={checkoutIncludeHeld}
+          title={checkoutIncludeHeld ? 'Buy this item' : 'Pay & send order'}
+          onClose={() => setCheckoutIds(null)}
+          onPaidLines={handlePaidLines}
+        />
       )}
 
       {/* Message Modal */}

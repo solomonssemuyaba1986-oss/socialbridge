@@ -9,6 +9,7 @@ import ConfirmDialog from './ConfirmDialog'
 import Sidebar from './Sidebar'
 import SellerTabs from './SellerTabs'
 import { variantLabel } from './productSheetUtils'
+import { lineVariantWords, orderLinesOf, orderLinesTotal } from './orderLines'
 import { paymentBadge, paymentSummary, paidCount } from './orderPayment'
 import {
   MAX_RETURN_NOTE,
@@ -56,11 +57,7 @@ function platformMeta(platform?: string) {
   return { icon: '🌐', label: platform || 'Web' }
 }
 
-function orderTotal(price: string, quantity: number | string): number {
-  const unit = Number(String(price).replace(/,/g, '')) || 0
-  const qty = Number(quantity) || 1
-  return unit * qty
-}
+
 
 /**
  * ↩️ The seller's side of the policy: every answer that is an answer.
@@ -136,11 +133,19 @@ function OrderHistory() {
       productId: order?.productId,
     })
     // A real sale only when an order FIRST becomes fulfilled — never on repeats.
-    if (!wasFulfilled && status === 'fulfilled' && order?.productId) {
-      try {
-        await updateDoc(doc(db, 'sellers', userId, 'products', order.productId), { salesCount: increment(1) })
-      } catch (err) {
-        console.warn('Failed to bump product salesCount:', err)
+    if (!wasFulfilled && status === 'fulfilled' && order) {
+      // One combined bag order can contain several products; each one's "bought" number moves.
+      const soldProductIds = [...new Set(
+        orderLinesOf(order)
+          .map(line => line.productId)
+          .filter((id): id is string => Boolean(id)),
+      )]
+      for (const productId of soldProductIds) {
+        try {
+          await updateDoc(doc(db, 'sellers', userId, 'products', productId), { salesCount: increment(1) })
+        } catch (err) {
+          console.warn('Failed to bump product salesCount:', err)
+        }
       }
     }
     // The buyer finds out where they already track the order — and that bubble is where they
@@ -323,6 +328,8 @@ function OrderHistory() {
                 const st = statusLabel(o)
                 const isSelected = selectedId === o.id
                 const pm = platformMeta(o.sourcePlatform)
+                const lines = orderLinesOf(o)
+                const itemCount = lines.reduce((sum, line) => sum + line.quantity, 0) || Number(o.quantity) || 1
                 // What the money says about this order — empty unless it is actually in.
                 const payLine = paymentSummary(o)
                 // ↩️ A return is a clock the seller is on, not a detail — so it gets its own line.
@@ -351,8 +358,9 @@ function OrderHistory() {
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <p style={{ margin: '0 0 4px', fontWeight: '700', fontSize: '15px' }}>{o.buyerName}</p>
                           <p style={{ margin: 0, color: '#888', fontSize: '13px' }}>
-                            {o.productName} × {o.quantity}
-                            {variantLabel(o.color, o.size) && <span style={{ color: '#ddd', fontWeight: 700 }}> · {variantLabel(o.color, o.size)}</span>}
+                            {lines.length > 1 ? `${lines.length} items · ${itemCount} units` : `${o.productName} × ${o.quantity}`}
+                            {lines.length === 1 && lineVariantWords(lines[0]) && <span style={{ color: '#ddd', fontWeight: 700 }}> · {lineVariantWords(lines[0])}</span>}
+                            {lines.length === 1 && !lineVariantWords(lines[0]) && variantLabel(o.color, o.size) && <span style={{ color: '#ddd', fontWeight: 700 }}> · {variantLabel(o.color, o.size)}</span>}
                           </p>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
                             <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', borderRadius: '999px', background: '#111', border: '1px solid #222', fontSize: '14px' }}>
@@ -387,8 +395,17 @@ function OrderHistory() {
                         {o.deliveryArea && <p style={{ margin: '0 0 8px', color: '#888', fontSize: '13px' }}>📍 {o.deliveryArea}</p>}
                         {o.orderId && <p style={{ margin: '0 0 8px', color: '#666', fontSize: '13px' }}>#{o.orderId}</p>}
                         <p style={{ margin: '0 0 4px', color: '#888', fontSize: '13px' }}>Channel: {pm.icon} {pm.label}</p>
+                        {lines.length > 1 && (
+                          <div style={{ margin: '0 0 6px', padding: '8px 10px', background: '#161616', border: '1px solid #262626', borderRadius: 8 }}>
+                            {lines.map((line, index) => (
+                              <p key={`${line.productId || line.productName}-${index}`} style={{ margin: '1px 0', color: '#ccc', fontSize: 12 }}>
+                                {line.quantity} × {line.productName}{lineVariantWords(line) ? ` · ${lineVariantWords(line)}` : ''}
+                              </p>
+                            ))}
+                          </div>
+                        )}
                         <p style={{ margin: '0 0 4px', color: green, fontSize: '13px', fontWeight: '700' }}>
-                          Total: UGX {orderTotal(o.productPrice, o.quantity).toLocaleString()}
+                          Total: UGX {orderLinesTotal(lines).toLocaleString()}
                         </p>
                         {payLine && (
                           <p style={{ margin: '0 0 4px', color: green, fontSize: '13px', fontWeight: '700' }}>{payLine}</p>

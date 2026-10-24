@@ -28,6 +28,8 @@ export interface PawapayStart {
   amount: number
   currency: string
   message: string
+  /** The number the prompt actually went to, normalised by pawaPay. Kept so a screen need not guess. */
+  payerPhone: string
 }
 
 export interface PawapayCheck {
@@ -98,6 +100,7 @@ export async function startPawapayDeposit(
     amount: Number(data.amount) || 0,
     currency: text(data.currency) || 'UGX',
     message: text(data.message) || 'Check your phone and approve the payment.',
+    payerPhone: text(data.payerPhone),
   }
 }
 

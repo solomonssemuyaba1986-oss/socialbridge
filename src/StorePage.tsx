@@ -2,7 +2,6 @@ import { useEffect, useState, useRef, useCallback, useMemo, type ChangeEvent } f
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { collection, query, where, getDocs, addDoc, setDoc, doc } from 'firebase/firestore'
 import { db, auth } from './firebase'
-import { suppressNextSellerOrderAlert } from './orderAlerts'
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, FacebookAuthProvider, OAuthProvider } from 'firebase/auth'
 import { CATEGORIES, getSubcategories } from './categories'
 import { notify } from './notifications'
@@ -26,7 +25,9 @@ import QuickRepliesPanel from './QuickRepliesPanel'
 import FloatingBag from './FloatingBag'
 import StoreProblem from './StoreProblem'
 import SignInPrompt from './SignInPrompt'
-import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder.ts'
+import { createCheckoutOrder } from './createBuyerOrder.ts'
+import PawapayCheckout, { type Stage } from './PawapayCheckout'
+import { orderPriceNumber, orderQuantityNumber, type OrderLine } from './orderLines'
 import { consumePendingAction, requireSignIn } from './signInGate'
 import { haversineKm } from './geo'
 import { formatDistance, isApproximatePin, type GeoSource, type Place } from './place'
@@ -404,6 +405,10 @@ const messageDeepLinkId = searchParams.get('messageId')
   const [subCategory, setSubCategory] = useState('')
 
   const [orderProduct, setOrderProduct] = useState<Product | null>(null)
+  const [orderDocId, setOrderDocId] = useState('')
+  const [orderRef, setOrderRef] = useState('')
+  const [placedQuantity, setPlacedQuantity] = useState('1')
+  const [payStage, setPayStage] = useState<Stage>('choice')
   const [messageProduct, setMessageProduct] = useState<Product | null>(null)
   /** One thread, one draft — product-keyed until the uid is known, so nothing is lost. */
   const draftUid = auth.currentUser?.uid ?? ''
@@ -721,69 +726,73 @@ const handleOrder = async () => {
 
   const sourcePlatform = detectPlatform(searchParams)
   const buyerUid = auth.currentUser.uid
+  const qty = orderQuantityNumber(quantity)
+  const line: OrderLine = {
+    productId: orderProduct.id,
+    productName: orderProduct.name,
+    productPrice: orderProduct.price,
+    quantity: qty,
+    ...(orderProduct.imageUrl ? { productImage: orderProduct.imageUrl } : {}),
+    ...(orderVariant.color ? { color: orderVariant.color } : {}),
+    ...(orderVariant.size ? { size: orderVariant.size } : {}),
+  }
 
   try {
-    const { orderId } = await createBuyerOrder(sellerId, {
+    const { orderRef: orderDoc, orderId } = await createCheckoutOrder(sellerId, {
       buyerName: shownName.trim(),
       buyerUid,
       productName: orderProduct.name,
       productPrice: orderProduct.price,
       productId: orderProduct.id,
       productImage: orderProduct.imageUrl || '',
-      quantity,
+      quantity: String(qty),
       deliveryArea,
-      // From the details sheet, so the seller knows which colour/size to pack.
       ...(orderVariant.color ? { color: orderVariant.color } : {}),
       ...(orderVariant.size ? { size: orderVariant.size } : {}),
-      status: 'pending',
-      read: false,
+      items: [line],
+      ...(message.trim() ? { buyerNote: message.trim() } : {}),
       sourcePlatform,
       createdAt: new Date(),
     })
 
-    await createOrderConversation({
-      sellerId,
-      buyerId: buyerUid,
-      sellerName: seller?.businessName || 'Seller',
-      buyerName: shownName.trim(),
-      orderId,
-      productId: orderProduct.id,
-      productName: orderProduct.name,
-      productPrice: orderProduct.price,
-      quantity,
-      color: orderVariant.color,
-      size: orderVariant.size,
-    })
-
-    await incrementProductOrderCount(sellerId, orderProduct.id, orderProduct.orderCount || 0)
-    trackEvent('order_placed', {
-      productId: orderProduct.id,
-      sellerId,
-      price: orderProduct.price,
-      quantity,
-      channel: sourcePlatform,
-      surface: 'store',
-    })
-
-    if (auth.currentUser?.uid === sellerId) {
-      suppressNextSellerOrderAlert()
-    }
-
+    setOrderDocId(orderDoc.id)
+    setOrderRef(orderId)
+    setPlacedQuantity(String(qty))
     setOrderSuccess(true)
-    showFeedback('Order placed!', 'success')
-    setTimeout(() => {
-      setBuyerName('')
-      setQuantity('1')
-      setDeliveryArea('')
-      setMessage('')
-      setOrderVariant({})
-      setOrderProduct(null)
-      setOrderSuccess(false)
-    }, 3000)
+    setPayStage('choice')
+    showFeedback('Order ready — pay to send it.', 'success')
+    setBuyerName('')
+    setQuantity('1')
+    setDeliveryArea('')
+    setMessage('')
   } catch (err) {
     console.error('Order failed:', err)
     showFeedback('Failed to place order. Try again.', 'error')
   }
+}
+
+/** Fired once, after the payment sheet has genuinely sent the order. */
+const handleOrderComplete = () => {
+  if (!orderProduct) return
+  trackEvent('order_placed', {
+    productId: orderProduct.id,
+    sellerId,
+    price: orderProduct.price,
+    quantity: placedQuantity,
+    channel: detectPlatform(searchParams),
+    surface: 'store',
+  })
+}
+
+/** Close the order sheet, but never while a prompt is live on the buyer's phone. */
+const closeOrderSheet = () => {
+  if (payStage === 'waiting') return
+  setOrderProduct(null)
+  setOrderSuccess(false)
+  setOrderDocId('')
+  setOrderRef('')
+  setPlacedQuantity('1')
+  setPayStage('choice')
 }
 
 /**
@@ -1199,19 +1208,40 @@ const handleSignupForAction = async (provider: any) => {
 
       {/* Order Modal */}
       {orderProduct && (
-        <div className="rt-modal-overlay" onClick={() => { setOrderProduct(null); setOrderSuccess(false) }}
+        <div className="rt-modal-overlay" onClick={closeOrderSheet}
           style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
           <div className="rt-modal-box" style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222', textAlign: 'center' }}>
             {orderSuccess ? (
               <div>
-                <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '28px', color: '#000', fontWeight: '800' }}>
-                  ✓
+                <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#12210d', border: `2px solid ${green}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', fontSize: 24 }}>
+                  📦
                 </div>
-                <h3 style={{ color: '#fff', fontWeight: '800', fontSize: '18px', margin: '0 0 8px' }}>Order Sent!</h3>
-                <p style={{ color: '#888', fontSize: '14px', margin: 0 }}>Order sent to {seller?.businessName || 'the seller'}! They'll confirm soon.</p>
-                <button onClick={() => { setOrderProduct(null); setOrderSuccess(false) }}
-                  style={{ width: '100%', padding: '12px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginTop: '20px' }}>
-                  Done
+                <h3 style={{ color: '#fff', fontWeight: '800', fontSize: 18, margin: '0 0 4px', textAlign: 'left' }}>Pay &amp; send order</h3>
+                <p style={{ color: '#777', fontSize: 12, margin: '0 0 14px', textAlign: 'left' }}>
+                  {seller?.businessName || 'The seller'} is only told once the order is sent.
+                </p>
+                {orderDocId && (
+                  <PawapayCheckout
+                    sellerId={sellerId}
+                    sellerName={seller?.businessName || 'Seller'}
+                    items={[{
+                      productId: orderProduct.id,
+                      productName: orderProduct.name,
+                      productPrice: orderProduct.price,
+                      quantity: orderQuantityNumber(placedQuantity),
+                      ...(orderProduct.imageUrl ? { productImage: orderProduct.imageUrl } : {}),
+                      ...(orderVariant.color ? { color: orderVariant.color } : {}),
+                      ...(orderVariant.size ? { size: orderVariant.size } : {}),
+                    }]}
+                    orderDocId={orderDocId}
+                    orderRef={orderRef}
+                    onStageChange={setPayStage}
+                    onComplete={handleOrderComplete}
+                  />
+                )}
+                <button onClick={closeOrderSheet}
+                  style={{ width: '100%', marginTop: 14, padding: 12, background: 'transparent', color: '#888', border: '1px solid #333', borderRadius: 10, cursor: payStage === 'waiting' ? 'default' : 'pointer', fontSize: 14, fontWeight: 700 }}>
+                  {payStage === 'waiting' ? 'Waiting for your phone — keep this open' : 'Close'}
                 </button>
               </div>
             ) : !auth.currentUser || auth.currentUser.isAnonymous ? (
@@ -1246,13 +1276,13 @@ const handleSignupForAction = async (provider: any) => {
                   style={{ width: '100%', minHeight: '100px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '24px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
                 <button onClick={handleOrder}
                   style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
-                  Send Order
+                  Pay &amp; send order · UGX {(orderPriceNumber(orderProduct.price) * orderQuantityNumber(quantity)).toLocaleString('en-US')}
                 </button>
                 <a href={`tel:+${seller.whatsapp}`}
                   style={{ display: 'block', width: '100%', padding: '14px', background: 'transparent', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', marginBottom: '12px', textAlign: 'center', textDecoration: 'none', boxSizing: 'border-box' }}>
                   📞 Call Seller
                 </a>
-                <button onClick={() => { setOrderProduct(null); setOrderSuccess(false) }}
+                <button onClick={closeOrderSheet}
                   style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
                   Cancel
                 </button>

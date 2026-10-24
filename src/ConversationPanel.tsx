@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useMemo, type ChangeEvent } from 'react'
 import { useConversation } from './useConversation'
 import QuickRepliesPanel from './QuickRepliesPanel'
-import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder'
+import { createCheckoutOrder } from './createBuyerOrder'
+import { orderPriceNumber, orderQuantityNumber, type OrderLine } from './orderLines'
 import { auth } from './firebase'
 import { notify } from './notifications'
 import { useDraft } from './useDraft'
@@ -33,10 +34,9 @@ type Props = {
   productPrice?: string
   productImage?: string
   productId?: string
-  orderCount?: number
 }
 
-export default function ConversationPanel({ sellerId, buyerId, sellerName, buyerName, productName, productPrice, productImage, productId, orderCount }: Props) {
+export default function ConversationPanel({ sellerId, buyerId, sellerName, buyerName, productName, productPrice, productImage, productId }: Props) {
   const { messages, loading, sendMessage, sendImageBatch, conversationId } = useConversation(sellerId, buyerId)
   /** Who I am on this thread — decides the draft's counterpart and sender role. */
   const meIsSeller = Boolean(auth.currentUser?.uid) && auth.currentUser?.uid === sellerId
@@ -144,51 +144,39 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
       return
     }
     const orderQuantity = item.quantity || quantity || '1'
+    const qty = orderQuantityNumber(orderQuantity)
+    const line: OrderLine = {
+      ...(item.productId ? { productId: item.productId } : {}),
+      productName: item.productName,
+      productPrice: item.productPrice,
+      quantity: qty,
+      ...(item.productImage ? { productImage: item.productImage } : {}),
+    }
 
     try {
-      const { orderRef: orderDocRef, orderId } = await createBuyerOrder(sellerId, {
+      const { orderRef: orderDocRef, orderId } = await createCheckoutOrder(sellerId, {
         buyerName: shownBuyerName.trim(),
         buyerUid: buyerId,
         productName: item.productName,
         productPrice: item.productPrice,
-        productId: item.productId,
+        ...(item.productId ? { productId: item.productId } : {}),
         productImage: item.productImage || '',
-        quantity: orderQuantity,
+        quantity: String(qty),
         deliveryArea,
-        status: 'pending',
-        read: false,
+        items: [line],
+        ...(orderMessage.trim() ? { buyerNote: orderMessage.trim() } : {}),
         sourcePlatform: 'Chat',
         createdAt: new Date(),
       })
 
-      if (item.productId) {
-        await incrementProductOrderCount(sellerId, item.productId, orderCount || 0)
-      }
-
       setOrderRef(orderId || '')
       setOrderDocIdForPay(orderDocRef.id)
-      setPlacedQuantity(orderQuantity)
+      setPlacedQuantity(String(qty))
       setOrderSuccess(true)
-      showFeedback(notify.orderSent, 'success')
+      showFeedback('Order ready — pay to send it.', 'success')
 
-      // Persist the order into the chat thread (creates it if needed) — visible to both sides
-      await createOrderConversation({
-        sellerId,
-        buyerId,
-        sellerName: sellerName || 'Seller',
-        buyerName: shownBuyerName.trim(),
-        orderId: orderId || '',
-        // The document id rides along, so the receipt bubble can later prove the purchase and
-        // offer the rating with one tap.
-        orderDocId: orderDocRef.id,
-        productId: item.productId,
-        productName: item.productName || '',
-        productPrice: item.productPrice || '',
-        quantity: orderQuantity,
-      })
-
-      // The order is in. The sheet now stays open on the "pay" step instead of closing itself —
-      // a buyer who placed the order from inside the chat used to have no way to pay for it at all.
+      // The seller hears nothing yet. The server publishes the order (and posts the bubble) only
+      // when the payment lands, or when the buyer chooses pay-on-delivery.
       setBuyerNameOrder(''); setQuantity('1'); setDeliveryArea(''); setOrderMessage('')
     } catch (err) {
       console.error('Order error:', err)
@@ -207,6 +195,19 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
     setPlacedQuantity('1')
     setPayStage(null)
     setBuyerNameOrder(''); setQuantity('1'); setDeliveryArea(''); setOrderMessage('')
+  }
+
+  /** Fired once, after the payment sheet has genuinely sent the order. */
+  const handleOrderComplete = () => {
+    trackEvent('order_placed', {
+      productId: orderBubble?.productId || productId,
+      productName: orderBubble?.productName || productName || '',
+      sellerId,
+      price: orderBubble?.productPrice || productPrice || '',
+      quantity: placedQuantity,
+      channel: 'chat',
+      surface: 'inbox',
+    })
   }
 
   // Role-based quick replies: sellers see seller replies, buyers see buyer questions
@@ -500,6 +501,11 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
                       {m.productName} · UGX {m.productPrice} × {m.quantity}
                       {m.variant && <span style={{ color: '#ddd', fontWeight: 700 }}> · {m.variant}</span>}
                     </div>
+                    {m.buyerNote && (
+                      <div style={{ marginTop: 6, padding: '6px 8px', background: '#0d1909', border: '1px solid #2f4a1a', borderRadius: 8, color: '#cbd5c0', fontSize: 12, lineHeight: 1.5, textAlign: 'left' }}>
+                        “{m.buyerNote}”
+                      </div>
+                    )}
                     {delivered ? (
                       askToRate ? (
                         <RatePrompt
@@ -787,29 +793,33 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
             style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222', textAlign: 'center' }}>
             {orderSuccess ? (
               <div>
-                <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '28px', color: '#000', fontWeight: '800' }}>
-                  ✓
+                <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#12210d', border: `2px solid ${green}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', fontSize: 24 }}>
+                  📦
                 </div>
-                <h3 style={{ color: '#fff', fontWeight: '800', fontSize: '18px', margin: '0 0 8px' }}>Order Placed!</h3>
-                <p style={{ color: '#888', fontSize: '14px', margin: '0 0 16px' }}>
-                  Ref: <span style={{ color: green, fontWeight: '800' }}>{orderRef || 'RT-...'}</span> — pay now to lock it in, or {sellerName || 'the seller'} will confirm in your Inbox.
+                <h3 style={{ color: '#fff', fontWeight: '800', fontSize: 18, margin: '0 0 4px', textAlign: 'left' }}>Pay &amp; send order</h3>
+                <p style={{ color: '#777', fontSize: 12, margin: '0 0 14px', textAlign: 'left' }}>
+                  Ref: <span style={{ color: green, fontWeight: '800' }}>{orderRef || 'RT-...'}</span> · {sellerName || 'the seller'} is only told once the order is sent.
                 </p>
-                {/* Pay, right here. The order already exists, so the amount comes from the server's
-                    own reading of it — this is the same step Browse shows after its order form. */}
                 {orderDocIdForPay && (
                   <PawapayCheckout
                     sellerId={sellerId}
                     sellerName={sellerName || 'Seller'}
-                    productName={activeOrderProduct.productName || ''}
-                    productPrice={activeOrderProduct.productPrice || ''}
-                    quantity={placedQuantity}
+                    items={[{
+                      ...(activeOrderProduct.productId ? { productId: activeOrderProduct.productId } : {}),
+                      productName: activeOrderProduct.productName || 'Product',
+                      productPrice: activeOrderProduct.productPrice || '',
+                      quantity: orderQuantityNumber(placedQuantity),
+                      ...(activeOrderProduct.productImage ? { productImage: activeOrderProduct.productImage } : {}),
+                    }]}
                     orderDocId={orderDocIdForPay}
+                    orderRef={orderRef}
                     onStageChange={setPayStage}
+                    onComplete={handleOrderComplete}
                   />
                 )}
                 <button type="button" onClick={closeOrderSheet}
                   style={{ width: '100%', marginTop: '14px', padding: '12px', background: 'transparent', color: '#888', border: '1px solid #333', borderRadius: '10px', cursor: payStage === 'waiting' ? 'default' : 'pointer', fontSize: '14px', fontWeight: '700' }}>
-                  {payStage === 'waiting' ? 'Close — the payment carries on to my phone' : 'Close'}
+                  {payStage === 'waiting' ? 'Waiting for your phone — keep this open' : 'Close'}
                 </button>
               </div>
             ) : (
@@ -836,7 +846,7 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
                   style={{ width: '100%', minHeight: '100px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '24px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
                 <button onClick={handleBuyNow}
                   style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: 800, cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
-                  Continue to payment
+                  Pay &amp; send order · UGX {(orderPriceNumber(activeOrderProduct.productPrice || '') * orderQuantityNumber(quantity)).toLocaleString('en-US')}
                 </button>
                 <button onClick={closeOrderSheet}
                   style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>

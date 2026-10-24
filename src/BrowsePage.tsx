@@ -7,7 +7,8 @@ import { detectSource } from './tracking'
 import { trackEvent } from './analytics'
 import { IMPRESSION_ATTR, IMPRESSION_SELLER_ATTR, observeImpressions } from './analytics/impressions'
 import { useBag, getBagCounts, type BagCountData } from './useBag'
-import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder'
+import { createCheckoutOrder } from './createBuyerOrder'
+import { orderPriceNumber, orderQuantityNumber, type OrderLine } from './orderLines'
 import QuickRepliesPanel from './QuickRepliesPanel'
 import PawapayCheckout, { type Stage } from './PawapayCheckout'
 import { getMainCategories, canonicalCategory } from './categories'
@@ -181,6 +182,8 @@ function BrowsePage() {
   const [orderSuccess, setOrderSuccess] = useState(false)
   /** The order document id — what the payment function needs. The visible ref is `RT-XXXXXX`. */
   const [orderDocId, setOrderDocId] = useState('')
+  const [orderRef, setOrderRef] = useState('')
+  const [placedQuantity, setPlacedQuantity] = useState('1')
   /**
    * How far the payment on this order has got — told to us by the `PawapayCheckout` inside the sheet.
    *
@@ -538,67 +541,66 @@ function BrowsePage() {
     // Checkout is where a buyer tells us what to call them — remember it once, silently.
     void myName.rememberIfNew(shownName, 'checkout')
     const sourcePlatform = detectSource()
+    const qty = orderQuantityNumber(quantity)
+    const line: OrderLine = {
+      productId: orderProduct.id,
+      productName: orderProduct.name,
+      productPrice: orderProduct.price,
+      quantity: qty,
+      ...(orderProduct.imageUrl ? { productImage: orderProduct.imageUrl } : {}),
+      ...(orderVariant.color ? { color: orderVariant.color } : {}),
+      ...(orderVariant.size ? { size: orderVariant.size } : {}),
+    }
     try {
-      const { orderRef, orderId } = await createBuyerOrder(orderProduct.sellerId, {
+      const { orderRef: orderDoc, orderId } = await createCheckoutOrder(orderProduct.sellerId, {
         buyerName: shownName.trim(),
         buyerUid: auth.currentUser.uid,
         productName: orderProduct.name,
         productPrice: orderProduct.price,
         productId: orderProduct.id,
         productImage: orderProduct.imageUrl || '',
-        quantity,
+        quantity: String(qty),
         deliveryArea: deliveryArea.trim(),
-        // What they picked in the details sheet, carried onto the order so the seller never
-        // has to guess which colour or size to pack.
         ...(orderVariant.color ? { color: orderVariant.color } : {}),
         ...(orderVariant.size ? { size: orderVariant.size } : {}),
-        status: 'pending',
-        read: false,
+        items: [line],
+        ...(orderMessage.trim() ? { buyerNote: orderMessage.trim() } : {}),
         sourcePlatform,
         createdAt: new Date(),
       })
       // The payment step needs the *document* id, not the RT-XXXXXX the buyer sees on the order.
-      setOrderDocId(orderRef.id)
-      await createOrderConversation({
-        sellerId: orderProduct.sellerId,
-        buyerId: auth.currentUser.uid,
-        sellerName: orderProduct.businessName,
-        buyerName: shownName.trim(),
-        orderId,
-        productId: orderProduct.id,
-        productName: orderProduct.name,
-        productPrice: orderProduct.price,
-        quantity,
-        color: orderVariant.color,
-        size: orderVariant.size,
-      })
-      await incrementProductOrderCount(orderProduct.sellerId, orderProduct.id, orderProduct.orderCount || 0)
-      trackEvent('order_placed', {
-        productId: orderProduct.id,
-        sellerId: orderProduct.sellerId,
-        price: orderProduct.price,
-        quantity,
-        bagSize: bagCount,
-        channel: sourcePlatform,
-        surface: 'browse',
-      })
+      setOrderDocId(orderDoc.id)
+      setOrderRef(orderId)
+      setPlacedQuantity(String(qty))
       setOrderSuccess(true)
       setPayStage('choice')
-      // The *form* is cleared; the sheet is not. It now holds the payment step, and closing it here
-      // would unmount `PawapayCheckout` mid-prompt — the buyer would pay into a page that stopped
-      // listening. It closes when the buyer closes it, or shortly after pawaPay says "paid".
+      // The form is cleared; the sheet stays on the payment step. It closes when the buyer closes
+      // it, or shortly after pawaPay says the money landed.
       setTimeout(() => {
         setBuyerName('')
         setQuantity('1')
         setDeliveryArea('')
         setOrderMessage('')
-        setOrderVariant({})
       }, 2500)
     } catch (err) {
       console.error('Order failed:', err)
       alert('Failed to place order. Try again.')
     }
   }
+
+  /** Fired once, by the payment sheet, after the order is genuinely sent. */
+  const handleOrderComplete = useCallback(() => {
+    if (!orderProduct) return
+    trackEvent('order_placed', {
+      productId: orderProduct.id,
+      sellerId: orderProduct.sellerId,
+      price: orderProduct.price,
+      quantity: placedQuantity,
+      bagSize: bagCount,
+      channel: detectSource(),
+      surface: 'browse',
+    })
+  }, [orderProduct, placedQuantity, bagCount])
 
   /**
    * Close the order sheet — deliberately, by the buyer.
@@ -611,6 +613,8 @@ function BrowsePage() {
     setOrderSuccess(false)
     setPayStage('choice')
     setOrderDocId('')
+    setOrderRef('')
+    setPlacedQuantity('1')
   }, [])
 
   /** Stable, so the checkout's stage effect fires on a real change rather than on every render. */
@@ -1635,23 +1639,33 @@ function BrowsePage() {
             style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222', textAlign: 'center' }}>
             {orderSuccess ? (
               <div>
-                <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '28px', color: '#000', fontWeight: '800' }}>
-                  ✓
+                <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#12210d', border: `2px solid ${green}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', fontSize: 24 }}>
+                  📦
                 </div>
-                <h3 style={{ color: '#fff', fontWeight: '800', fontSize: '18px', margin: '0 0 8px' }}>Order Sent!</h3>
-                <p style={{ color: '#888', fontSize: '14px', margin: '0 0 16px' }}>Your order is in. Pay now to lock it in — or the seller will contact you to arrange it.</p>
+                <h3 style={{ color: '#fff', fontWeight: '800', fontSize: 18, margin: '0 0 4px', textAlign: 'left' }}>Pay &amp; send order</h3>
+                <p style={{ color: '#777', fontSize: 12, margin: '0 0 14px', textAlign: 'left' }}>
+                  {orderProduct.businessName || 'The seller'} is only told once the order is sent.
+                </p>
                 <PawapayCheckout
                   sellerId={orderProduct.sellerId}
                   sellerName={orderProduct.businessName}
-                  productName={orderProduct.name}
-                  productPrice={orderProduct.price}
-                  quantity={quantity}
+                  items={[{
+                    productId: orderProduct.id,
+                    productName: orderProduct.name,
+                    productPrice: orderProduct.price,
+                    quantity: orderQuantityNumber(placedQuantity),
+                    ...(orderProduct.imageUrl ? { productImage: orderProduct.imageUrl } : {}),
+                    ...(orderVariant.color ? { color: orderVariant.color } : {}),
+                    ...(orderVariant.size ? { size: orderVariant.size } : {}),
+                  }]}
                   orderDocId={orderDocId}
+                  orderRef={orderRef}
                   onStageChange={handlePayStage}
+                  onComplete={handleOrderComplete}
                 />
                 <button type="button" onClick={closeOrderSheet}
-                  style={{ width: '100%', marginTop: '14px', padding: '12px', background: 'transparent', color: '#888', border: '1px solid #333', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '700' }}>
-                  {payStage === 'waiting' ? 'Close — the payment carries on to my phone' : 'Close'}
+                  style={{ width: '100%', marginTop: '14px', padding: '12px', background: 'transparent', color: '#888', border: '1px solid #333', borderRadius: '10px', cursor: payStage === 'waiting' ? 'default' : 'pointer', fontSize: '14px', fontWeight: '700' }}>
+                  {payStage === 'waiting' ? 'Waiting for your phone — keep this open' : 'Close'}
                 </button>
               </div>
             ) : !auth.currentUser || auth.currentUser.isAnonymous ? (
@@ -1686,9 +1700,9 @@ function BrowsePage() {
                   style={{ width: '100%', minHeight: '80px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '20px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
                 <button onClick={handleOrder}
                   style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
-                  Send Order
+                  Pay &amp; send order · UGX {(orderPriceNumber(orderProduct.price) * orderQuantityNumber(quantity)).toLocaleString('en-US')}
                 </button>
-                <button onClick={() => { setOrderProduct(null); setOrderSuccess(false) }}
+                <button onClick={closeOrderSheet}
                   style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
                   Cancel
                 </button>

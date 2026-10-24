@@ -5,6 +5,7 @@ import { db, auth } from './firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 import Sidebar from './Sidebar'
 import SellerTabs from './SellerTabs'
+import { isPublishedOrder } from './orderLines'
 
 const green = '#adff2f'
 const amber = '#ffaa00'
@@ -181,7 +182,9 @@ function AnalyticsPage() {
       setVisitsData([])
       const onErr = (e: Error) => { console.error('Live analytics fetch failed:', e) }
       unsubs.push(
-        onSnapshot(collection(db, 'sellers', user.uid, 'orders'), snap => setOrdersData(snap.docs.map(d => d.data())), onErr),
+        onSnapshot(collection(db, 'sellers', user.uid, 'orders'), snap => setOrdersData(
+          snap.docs.map(d => d.data()).filter(order => isPublishedOrder(order)),
+        ), onErr),
         onSnapshot(collection(db, 'sellers', user.uid, 'messages'), snap => setMessagesData(snap.docs.map(d => d.data())), onErr),
         onSnapshot(collection(db, 'sellers', user.uid, 'visits'), snap => setVisitsData(snap.docs.map(d => d.data())), onErr),
       )
