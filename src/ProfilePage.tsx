@@ -25,7 +25,10 @@ import { useBuyerName } from './useBuyerName'
 import { useBuyerOrders } from './useBuyerOrders'
 import { useDemographics } from './useDemographics'
 import { demographicsSummary } from './demographics'
+import { useInterests } from './useInterests'
+import { interestsSummary } from './interests'
 import AgeGenderAsk from './AgeGenderAsk'
+import InterestPicker from './InterestPicker'
 import { nameLabel } from './buyerName'
 import { summariseBuyerOrders } from './buyerOrderUtils'
 import { avatarColor, initialOf } from './avatar'
@@ -40,8 +43,6 @@ const green = '#adff2f'
 /** A sign-in method in the words a person would use for it. Anything else is shown as it is. */
 const PROVIDERS: Record<string, string> = {
   'google.com': 'Google',
-  'facebook.com': 'Facebook',
-  'apple.com': 'Apple',
   phone: 'a phone number',
 }
 
@@ -81,6 +82,8 @@ function ProfilePage() {
   const myName = useBuyerName()
   /** The other half of what we know about them — the two things a recommendation needs. */
   const myDemographics = useDemographics()
+  /** The optional signal: the shelves they chose, and the place to change them. */
+  const myInterests = useInterests()
   const { count: bagCount } = useBag()
   const { orders, loading: ordersLoading } = useBuyerOrders()
   /** The two device-only lists, counted. Nothing is fetched — these are reads of this phone. */
@@ -90,6 +93,8 @@ function ProfilePage() {
   const [editingName, setEditingName] = useState(false)
   /** The age & gender editor, next to the name one: both are answers a person can change. */
   const [editingAbout, setEditingAbout] = useState(false)
+  /** The interests editor, beside the age & gender one: both are answers a person can change. */
+  const [editingInterests, setEditingInterests] = useState(false)
   const [confirmSignOut, setConfirmSignOut] = useState(false)
 
   /** Anonymous accounts are guests: they can shop, but nothing of theirs is on our servers. */
@@ -182,6 +187,35 @@ function ProfilePage() {
           )}
         </div>
 
+        {/* Interests: optional, chosen on the onboarding screen, and editable here because a taste
+            changes. The same picker, so "up to seven" means the same thing in both places. */}
+        <div style={card}>
+          <p style={cardTitle}>Your interests</p>
+          <p style={smallPrint}>{interestsSummary(myInterests.state)}</p>
+          {editingInterests ? (
+            <>
+              <InterestPicker
+                interests={myInterests}
+                surface="profile"
+                title="What are you into?"
+                blurb="Pick up to seven. Your choices aim what we show you; a seller never sees them."
+                ctaLabel="Save"
+                bare
+                allowSkip={false}
+                onDone={() => setEditingInterests(false)}
+              />
+              <button onClick={() => setEditingInterests(false)}
+                style={{ ...rowButton, textAlign: 'center', marginTop: 8 }}>
+                Close without saving
+              </button>
+            </>
+          ) : (
+            <button onClick={() => setEditingInterests(true)} style={rowButton}>
+              {myInterests.answered ? 'Change your interests →' : 'Pick your interests →'}
+            </button>
+          )}
+        </div>
+
         {isGuest && (
           <div style={{ background: '#1a1a2e', border: '1px solid #3333aa', borderRadius: 14, padding: 16, marginBottom: 14 }}>
             <p style={{ margin: '0 0 4px', color: '#88aaff', fontWeight: 800, fontSize: 14 }}>
@@ -250,6 +284,7 @@ function ProfilePage() {
           <p style={smallPrint}>Every field, item by item, is listed in the project's data-collection document.</p>
           <Where what="Your name" where="On your account, and this phone remembers the last name it gave a seller so no form ever starts blank. Changing it above updates both." />
           <Where what="Age & gender" where="On your own account, as a group rather than a birthday. It is what picks what we show you — and it is never written onto an order, onto a shop, or anywhere a seller can read." />
+          <Where what="Interests" where="Up to seven category names on your own account, so the market can be aimed at what you actually shop for. Optional, editable above, and never shown to a seller." />
           <Where what="Orders" where="With the seller you bought from — they own the record of the sale. Your own copy of them is what My Orders gathers." />
           <Where what="Chats" where="With the seller you messaged: one thread per shop, shared by the two of you." />
           <Where what="Delivery details" where="The name, area and notes a delivery needs are kept on that order itself, so a seller can still read them next week." />

@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback, useMemo, type ChangeEvent } f
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { collection, query, where, getDocs, addDoc, setDoc, doc } from 'firebase/firestore'
 import { db, auth } from './firebase'
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, FacebookAuthProvider, OAuthProvider } from 'firebase/auth'
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
 import { CATEGORIES, getSubcategories } from './categories'
 import { notify } from './notifications'
 import { getConversationId, useConversation } from './useConversation.ts'
@@ -1391,20 +1391,12 @@ const handleSignupForAction = async (provider: any) => {
               <img src="https://www.google.com/favicon.ico" width="18" alt="Google" /> Continue with Google
             </button>
 
-            {/* Apple */}
-            <button onClick={() => handleSignupForAction(new OAuthProvider('apple.com'))}
-              style={{ width: '100%', padding: '14px', background: '#000', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '14px', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '18px' }}></span> Continue with Apple
+            {/* Phone — the code flow lives on /signin, so this hands over with the way back kept. */}
+            <button onClick={() => { setShowSignupSheet(false); navigate('/signin', { state: { returnTo: `/store/${slugParam}` } }) }}
+              style={{ width: '100%', padding: '14px', background: '#1a1a1a', color: '#fff', border: '1px solid #333', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '14px', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '18px' }}>📱</span> Continue with phone number
             </button>
-
-            {/* Facebook */}
-            <button onClick={() => handleSignupForAction(new FacebookAuthProvider())}
-              style={{ width: '100%', padding: '14px', background: '#4267B2', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '14px', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '18px' }}>f</span> Continue with Facebook
-            </button>
-
-            {/* Phone Auth Note */}
-            <p style={{ margin: '12px 0', color: '#666', fontSize: '12px' }}>Phone sign-up coming soon</p>
+            <p style={{ margin: '12px 0', color: '#666', fontSize: '12px' }}>One number, one account. Phone sign-in takes you back to this shop.</p>
 
             {/* Cancel */}
             <button onClick={() => setShowSignupSheet(false)}

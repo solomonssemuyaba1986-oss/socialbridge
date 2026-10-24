@@ -37,6 +37,7 @@ import ComingSoon from './ComingSoon.tsx'
 import BuyerTabs from './BuyerTabs.tsx'
 import FeedbackNudge from './FeedbackNudge.tsx'
 import DemographicsGate from './DemographicsGate.tsx'
+import InterestsAdoption from './InterestsAdoption.tsx'
 import NotFound from './NotFound.tsx'
 import CookieConsent from './CookieConsent.tsx'
 import { getRole, MARKET_HOME } from './role.ts'
@@ -130,6 +131,8 @@ function App() {
       {/* Age & gender — one time, and it cannot be walked past: it is what recommendations are
           built on. A card rather than an overlay, so it never covers a half-filled order. */}
       <DemographicsGate />
+      {/* Optional, so no gate: this only adopts a guest's interests after they sign in. */}
+      <InterestsAdoption />
       {location.pathname !== '/terms' && <TopNav variant={location.pathname === '/bag' ? 'bag' : 'default'} />}
       {/* The buyer's phone navigation — mounted once, for every screen. It hides itself for a seller,
           on the screens that own the whole phone, and (in `responsive.css`) on desktop, where the

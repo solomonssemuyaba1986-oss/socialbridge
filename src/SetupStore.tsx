@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { auth, db, googleProvider, facebookProvider, appleProvider } from './firebase'
+import { auth, db, googleProvider } from './firebase'
 import { signInWithCustomToken, signInWithPopup, type AuthProvider } from 'firebase/auth'
 import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore'
 import { useNavigate } from 'react-router-dom'
@@ -185,8 +185,7 @@ function SetupStore() {
   /** The whole point of the country rule: say the expected length before it's broken. */
   const phoneHint = lengthHint(dialCode, selectedCountry.name)
 
-  // Two steps. Step 2 is "create your rachett shop" in this order: ① the account (Google ·
-  // Apple · Facebook · phone), ② country + location, ③ verify the phone number LAST, then
+  // Two steps. Step 2 is "create your rachett shop" in this order: ① the account (Google or phone), ② country + location, ③ verify the phone number LAST, then
   // ④ Create My Shop — and nothing is created before ③ has passed.
   const [step, setStep] = useState(() => {
     const saved = readSetupDraft().step
@@ -218,9 +217,9 @@ function SetupStore() {
   const serverProven = proof.proven && proof.key === `${signedInUid || ''}|${getFullWhatsapp()}`
   const phoneIsProven = serverProven || (provenPhone !== '' && provenPhone === getFullWhatsapp())
   /**
-   * How the shop account gets made. Google/Apple/Facebook leave the phone unproven, so they
-   * get one extra step; signing in with the phone number settles it with the same code — no
-   * extra step, exactly as promised.
+   * How the shop account gets made. Google leaves the phone unproven, so it gets one extra step;
+   * signing in with the phone number settles it with the same code — no extra step, exactly as
+   * promised.
    */
   const phoneMode: 'signed-out' | 'verify' | 'done' = phoneIsProven ? 'done' : signedInUid ? 'verify' : 'signed-out'
 
@@ -544,9 +543,8 @@ function SetupStore() {
       const slug = storeHandle
       const fullNumber = getFullWhatsapp()
 
-      // Logo, in order: what they chose in step 1 → the sign-in photo (Google/Facebook/
-      // Apple) → nothing, and the shop keeps its own letter tile (see `avatar.ts`) until
-      // they add one in Edit Store.
+      // Logo, in order: what they chose in step 1 → the sign-in photo (Google) → nothing, and
+      // the shop keeps its own letter tile (see `avatar.ts`) until they add one in Edit Store.
       const finalLogoUrl = logoUrl || user.photoURL || ''
 
       // Phone-only sign-in (no email): prompt for recovery email later
@@ -650,7 +648,7 @@ function SetupStore() {
     else setTimeout(finish, 300)
   }
 
-  /** Google · Facebook · Apple — inline, right on the last step. */
+  /** Google — inline, right on the last step. Phone has its own code field below. */
   const socialSignIn = async (provider: AuthProvider, name: string) => {
     setSigningIn(name)
     setSignInError('')
@@ -692,8 +690,8 @@ function SetupStore() {
    *
    * Signed out: the code that comes back creates the account AND proves the number in one go —
    * `/api/otp/verify` finds or makes the account for this number and signs us in as it.
-   * Signed in with Google/Apple/Facebook: the same code attaches this number to the account they
-   * already chose, so the shop is saved under the account they picked.
+   * Signed in with Google: the same code attaches this number to the account they already chose,
+   * so the shop is saved under the account they picked.
    *
    * The country rule has to pass FIRST — that is the fix for "it silently accepted 8 digits".
    */
@@ -778,7 +776,7 @@ function SetupStore() {
   if (!nationality) missing.push({ label: 'Country', step: 2, anchor: 'setup-field-country' })
   // Required, and the one thing on this screen that is about the person rather than the shop.
   if (!myDemographics.answered) missing.push({ label: 'Your age group & gender', step: 2, anchor: 'setup-field-demographics' })
-  if (!signedInUid) missing.push({ label: 'How to create your shop (Google · Apple · Facebook · phone)', step: 2, anchor: 'setup-field-account' })
+  if (!signedInUid) missing.push({ label: 'How to create your shop (Google or phone)', step: 2, anchor: 'setup-field-account' })
   if (!whatsappIsValid) missing.push({ label: 'Phone number', step: 2, anchor: 'setup-field-phone' })
   else if (!phoneIsProven) missing.push({ label: 'Verify your phone number', step: 2, anchor: 'setup-field-phone' })
   const isFormReady = missing.length === 0
@@ -923,8 +921,8 @@ function SetupStore() {
         {step === 2 && (
           <>
         {/* ① The account, at the TOP of the step — never a surprise at the end.
-            Google/Apple/Facebook get one extra step (verify the phone, last); signing in
-            with the phone number settles both with that one code. */}
+            Google gets one extra step (verify the phone, last); signing in with the phone
+            number settles both with that one code. */}
         {!signedInUid ? (
           <div id="setup-field-account" style={{ marginBottom: '20px', padding: '14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
             <h2 style={{ fontSize: '17px', fontWeight: '800', margin: '0 0 4px', color: '#1a1a1a' }}>Create your rachett shop</h2>
@@ -936,14 +934,6 @@ function SetupStore() {
                 style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '12px', background: '#fff', color: '#000', border: '1px solid #ddd', borderRadius: '8px', fontWeight: '700', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
                 <img src="https://www.google.com/favicon.ico" width="18" alt="" />
                 {signingIn === 'Google' ? 'Signing in…' : 'Continue with Google'}
-              </button>
-              <button onClick={() => socialSignIn(facebookProvider, 'Facebook')} disabled={!!signingIn}
-                style={{ width: '100%', padding: '12px', background: '#1877F2', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
-                {signingIn === 'Facebook' ? 'Signing in…' : 'Continue with Facebook'}
-              </button>
-              <button onClick={() => socialSignIn(appleProvider, 'Apple')} disabled={!!signingIn}
-                style={{ width: '100%', padding: '12px', background: '#000', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: signingIn ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
-                {signingIn === 'Apple' ? 'Signing in…' : 'Continue with Apple'}
               </button>
               <button
                 onClick={() => document.getElementById('setup-field-phone')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
@@ -1097,7 +1087,7 @@ function SetupStore() {
         </p>
 
         {/* One field, one code. Signed out, that code creates the account AND proves the
-            number; signed in with Google/Apple/Facebook, the same code attaches this number
+            number; signed in with Google, the same code attaches this number
             to the account they picked. Either way, no shop until it is proven. */}
         {!phoneIsProven && (
           <>

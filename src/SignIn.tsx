@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { signInWithPopup, signInWithRedirect, signInWithPhoneNumber } from 'firebase/auth'
 import type { AuthProvider, ConfirmationResult } from 'firebase/auth'
-import { auth, db, googleProvider, facebookProvider, appleProvider, createRecaptchaVerifier } from './firebase'
+import { auth, db, googleProvider, createRecaptchaVerifier } from './firebase'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { collection, getDocs, query, limit } from 'firebase/firestore'
 import { notify } from './notifications'
@@ -16,6 +16,8 @@ interface SavedUser {
   email: string | null
   photoURL: string | null
   uid: string
+  /** `google.com` / `phone`; older devices may also hold the removed providers. */
+  providerId?: string
 }
 
 function getSavedUser(): SavedUser | null {
@@ -47,6 +49,13 @@ function SignIn() {
 
   /** Set when a guest was blocked mid-action — tells them why they're here. */
   const pendingNotice = (location.state as { pendingAction?: 'order' | 'message' | 'inbox' } | null)?.pendingAction
+
+  /**
+   * The one-tap banner is a Google popup, so it is only offered to a remembered Google account.
+   * A phone account signs in with a code below; a remembered Facebook/Apple account now has no
+   * provider and is not offered a button that would open the wrong account.
+   */
+  const savedUserIsGoogle = !!savedUser && (!savedUser.providerId || savedUser.providerId === 'google.com')
 
   // Phone auth state
   const [selectedCountry, setSelectedCountry] = useState<CountryCode>(
@@ -115,8 +124,6 @@ function SignIn() {
   }
 
   const handleGoogleSignIn = () => handleSignInWithProvider(googleProvider)
-  const handleFacebookSignIn = () => handleSignInWithProvider(facebookProvider)
-  const handleAppleSignIn = () => handleSignInWithProvider(appleProvider)
 
   const handleContinueAsSaved = async () => {
     if (!ensureTerms()) return
@@ -252,7 +259,7 @@ function SignIn() {
       </nav>
 
       {/* Welcome Back Banner */}
-      {savedUser && (
+      {savedUser && savedUserIsGoogle && (
         <div style={{
           background: '#0f2910',
           borderBottom: `1px solid ${green}`,
@@ -326,20 +333,6 @@ function SignIn() {
               Continue with Google
             </button>
 
-            {/* Facebook */}
-            <button onClick={handleFacebookSignIn}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: '#4267B2', color: '#fff', border: 'none', padding: '16px 32px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px' }}>
-              <span style={{ fontSize: '18px' }}>f</span>
-              Continue with Facebook
-            </button>
-
-            {/* Apple */}
-            <button onClick={handleAppleSignIn} disabled={authLoading}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: '#000', color: '#fff', border: 'none', padding: '16px 32px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '16px' }}>
-              <span style={{ fontSize: '18px' }}></span>
-              Continue with Apple
-            </button>
-
             {/* Trust signals */}
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '10px', fontSize: '11px', color: '#888', marginTop: '2px' }}>
               <span>🔒 Secure login</span>
@@ -370,8 +363,11 @@ function SignIn() {
 
             {/* Phone Sign-In */}
             <div style={{ width: '100%', background: '#1a1a1a', borderRadius: '10px', padding: '20px', border: '1px solid #222' }}>
-              <p style={{ color: '#fff', fontWeight: '700', fontSize: '14px', margin: '0 0 12px', textAlign: 'left' }}>
+              <p style={{ color: '#fff', fontWeight: '700', fontSize: '14px', margin: '0 0 4px', textAlign: 'left' }}>
                 📱 Sign in with phone number
+              </p>
+              <p style={{ color: '#777', fontSize: 12, margin: '0 0 12px', textAlign: 'left', lineHeight: 1.5 }}>
+                One number, one rachett account. Signing in with this number takes you to the account it already belongs to — it never creates a second one.
               </p>
 
               {!phoneOtpSent ? (

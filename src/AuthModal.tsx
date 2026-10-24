@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { signInWithPopup, signInWithPhoneNumber } from 'firebase/auth'
 import type { AuthProvider, ConfirmationResult } from 'firebase/auth'
-import { auth, googleProvider, appleProvider, facebookProvider, createRecaptchaVerifier } from './firebase'
+import { auth, googleProvider, createRecaptchaVerifier } from './firebase'
 import { COUNTRY_CODES } from './countryCodes'
 import { rememberUser } from './userMemory'
 import ContinueAs from './ContinueAs'
@@ -122,20 +122,6 @@ function AuthModal({ open, title, subtitle, onSuccess, onClose }: Props) {
               {authLoading === 'Google' ? 'Signing in...' : 'Continue with Google'}
             </button>
 
-            {/* Apple */}
-            <button onClick={() => handleSocialSignIn(appleProvider, 'Apple')} disabled={!!authLoading}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, background: '#000', color: '#fff', border: '1px solid #333', padding: '14px 24px', borderRadius: 10, fontWeight: 700, cursor: authLoading ? 'not-allowed' : 'pointer', fontSize: 15, marginBottom: 10, opacity: authLoading && authLoading !== 'Apple' ? 0.5 : 1 }}>
-              <span style={{ fontSize: 18 }}></span>
-              {authLoading === 'Apple' ? 'Signing in...' : 'Continue with Apple'}
-            </button>
-
-            {/* Facebook */}
-            <button onClick={() => handleSocialSignIn(facebookProvider, 'Facebook')} disabled={!!authLoading}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, background: '#4267B2', color: '#fff', border: 'none', padding: '14px 24px', borderRadius: 10, fontWeight: 700, cursor: authLoading ? 'not-allowed' : 'pointer', fontSize: 15, marginBottom: 10, opacity: authLoading && authLoading !== 'Facebook' ? 0.5 : 1 }}>
-              <span style={{ fontSize: 18 }}>f</span>
-              {authLoading === 'Facebook' ? 'Signing in...' : 'Continue with Facebook'}
-            </button>
-
             {/* Divider */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '16px 0' }}>
               <div style={{ flex: 1, height: 1, background: '#222' }} />
@@ -144,7 +130,8 @@ function AuthModal({ open, title, subtitle, onSuccess, onClose }: Props) {
             </div>
             {/* Phone */}
             <div style={{ textAlign: 'left', marginBottom: 8 }}>
-              <label style={{ color: '#aaa', fontSize: 13, fontWeight: 600, marginBottom: 8, display: 'block' }}>Phone number</label>
+              <label style={{ color: '#aaa', fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>Phone number</label>
+              <p style={{ margin: '0 0 8px', color: '#666', fontSize: 11, lineHeight: 1.5 }}>One number, one account.</p>
               <div style={{ position: 'relative', marginBottom: 8 }}>
                 <div onClick={() => setShowCountryDropdown(!showCountryDropdown)}
                   style={{ display: 'flex', alignItems: 'center', border: '1px solid #333', borderRadius: 8, overflow: 'hidden', cursor: 'pointer', background: '#111' }}>

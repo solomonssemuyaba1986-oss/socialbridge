@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { signInWithPopup, GoogleAuthProvider, FacebookAuthProvider, OAuthProvider } from 'firebase/auth'
+import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
 import type { AuthProvider } from 'firebase/auth'
 import { auth } from './firebase'
 import { getRememberedUser, rememberUser, clearRememberedUser, type RememberedUser } from './userMemory'
@@ -11,12 +11,16 @@ type Props = {
   beforeSignIn?: () => boolean
 }
 
-/** Build the right popup provider for a remembered account, pre-selecting it via login_hint. */
+/**
+ * Build the right popup provider for a remembered account, pre-selecting it via login_hint.
+ *
+ * Phone accounts re-verify with a code instead, and a remembered Facebook/Apple account has no
+ * provider here any more — those buttons were removed because the APIs are not configured. They
+ * fall through to the normal Google/phone choices rather than opening a popup that cannot work.
+ */
 function providerFor(user: RememberedUser): AuthProvider | null {
   const pid = user.providerId || 'google.com'
-  if (pid === 'facebook.com') return new FacebookAuthProvider()
-  if (pid === 'apple.com') return new OAuthProvider('apple.com')
-  if (pid === 'phone') return null // phone accounts re-verify via OTP instead
+  if (pid === 'phone' || pid === 'facebook.com' || pid === 'apple.com') return null
   const gp = new GoogleAuthProvider()
   if (user.email) gp.setCustomParameters({ login_hint: user.email })
   return gp

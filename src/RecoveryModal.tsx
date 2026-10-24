@@ -184,7 +184,7 @@ export default function RecoveryModal({ open, onClose }: Props) {
                 style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px', background: '#111', border: '1px solid #333', borderRadius: '12px', cursor: 'pointer', color: '#fff', textAlign: 'left' }}>
                 <span style={{ fontSize: '22px' }}>🔑</span>
                 <span>
-                  <span style={{ display: 'block', fontWeight: '700', fontSize: '14px' }}>Google / Apple / Facebook</span>
+                  <span style={{ display: 'block', fontWeight: '700', fontSize: '14px' }}>Google</span>
                   <span style={{ display: 'block', color: '#888', fontSize: '12px' }}>Sign in the way I did before — fastest way back</span>
                 </span>
               </button>
@@ -303,14 +303,14 @@ export default function RecoveryModal({ open, onClose }: Props) {
               <>
                 <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: '800' }}>Contact updated!</h3>
                 <p style={{ color: '#888', fontSize: '14px', margin: '0 0 16px' }}>
-                  Your store's phone is now <strong style={{ color: '#fff' }}>{getFullNewPhone()}</strong>. Sign in with your new number or your Google/Apple/Facebook to continue.
+                  Your store's phone is now <strong style={{ color: '#fff' }}>{getFullNewPhone()}</strong>. Sign in with your new number or your Google account to continue.
                 </p>
               </>
             ) : (
               <>
                 <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: '800' }}>Identity verified!</h3>
                 <p style={{ color: '#888', fontSize: '14px', margin: '0 0 16px' }}>
-                  Sign in with the <strong style={{ color: '#fff' }}>Google / Apple / Facebook</strong> you used before — you'll get straight back into your account. If you're a seller and changed your number, update it in Settings after signing in.
+                  Sign in with the <strong style={{ color: '#fff' }}>Google</strong> account or phone number you used before — you'll get straight back into your account. If you're a seller and changed your number, update it in Settings after signing in.
                 </p>
               </>
             )}

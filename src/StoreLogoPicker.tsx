@@ -27,7 +27,7 @@ interface StoreLogoPickerProps {
   businessName: string
   /** The chosen logo URL ('' = nothing chosen). */
   value: string
-  /** An account photo to show while nothing has been chosen (Google · Apple · Facebook). */
+  /** An account photo to show while nothing has been chosen (Google). */
   fallbackUrl?: string
   /** Where this instance lives — carried on the `store_logo_added` event. */
   source: 'setup' | 'edit'

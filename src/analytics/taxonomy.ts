@@ -44,6 +44,11 @@ export const EVENT_PROPS = {
   // this file: never a name, a number or anything that identifies a person (DATA_COLLECTION §8).
   demographics_prompt_shown: ['surface'],
   demographics_answered: ['ageBand', 'gender', 'surface', 'changed'],
+  // What a buyer wants to see. The optional onboarding pick: how many shelves, which ones (as one
+  // pipe-separated category string), whether they skipped, and whether they changed an earlier
+  // answer. Category names only — the same rule as everywhere else: no person in the props.
+  interests_prompt_shown: ['surface'],
+  interests_saved: ['count', 'categories', 'skipped', 'changed', 'surface'],
   store_created: ['sellerId', 'slug', 'country', 'hasLogo', 'logoSource'],
   phone_verification_sent: ['country', 'method'],
   phone_verified: ['country', 'method'],

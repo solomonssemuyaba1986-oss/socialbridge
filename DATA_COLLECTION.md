@@ -3,11 +3,13 @@
 **Purpose:** the single source of truth for (1) what we hold on sellers and buyers, and (2) what we may use for machine learning / AI training.
 **Verified against the code** — each claim carries a `file:line` so it can be re-checked. If you change a write path, update this file.
 
-**Last updated:** 8 Oct 2026 — three changes since the first draft: conversation rules hardened (§11), National ID capture switched off until there is a review path (§2.2, §2.4, §8, §10), payments deliberately left alone until they've been tested (§7).
+**Last updated:** 24 Oct 2026 — buyer interests added (§3.1), and sign-in reduced to **Google + phone only** (§2.1, §7). Three earlier changes still shape the file: conversation rules hardened (§11), National ID capture switched off until there is a review path (§2.2, §2.4, §8, §10), and payments deliberately left alone until they've been tested (§7).
 
 **Ratings are stars now (8 Oct 2026):** the ♥/🙂/👎 reaction is gone from the interface — a comment is worth the **star its buyer tapped, a whole number 1–5** (§2.3), and the same number is what the product counters and the shop average add up. Comments written in the ♥ era are read through one legacy table (5 / 3 / 1), so no shop's average moved. Four moments now ask for a rating (the receipt bubble, a thread that has moved on, the seller's own request, and a three-day fallback on My Orders), all gated by the same rule; `users/{uid}/ratingAsks/{orderId}` records that we asked (§3.1).
 
 **Buyer experience (new):** buyers now have their own home at `/home` — **Unknown**, the discovery shelf that mixes the age bracket before theirs, the one after, and a little of their own (`unknownFeed.ts`, `BuyerHome.tsx`). The nav carries a **Browse** door, and a guest who taps Buy or Message is returned to that exact action after signing in (`role.ts`, `signInGate.ts`, plus `users/{uid}.role` in §3.1). The age band is used only as a category-level cohort; no individual purchase history is inferred.
+
+**Interests + two ways in (24 Oct 2026):** a buyer who taps **I'm a Buyer** is now asked "what are you into?" before the rest of onboarding. It is **optional**, visible **Skip**, and capped at **7** shelves from the same `categories.ts` list sellers use. The answer is `users/{uid}.interests[]` (canonical category names) + `interestsAt` / `interestsAskedAt` / `interestsSkipped` / `interestsSource`; a guest's answer waits on this phone (`rachett_interests`) and is adopted at sign-in. Interests are a recommendation signal for our AI systems, are never written onto an order or a shop, and are editable in `/profile`. Sign-in was simultaneously reduced to **Google and phone number only** — Facebook and Apple were removed from every surface because those APIs are not configured. A phone number belongs to **one** account: Firebase Auth enforces that, and `api/_lib/identity.js` keeps the `phones/{phoneKey}` ledger as the second guard.
 
 **Market-first + accounts required (16 Sep 2026):** `/` now sends everyone without a shop to `/home` — logged-out visitors included — and sign-in lives on its own `/signin` route. **Messaging and buying require a real account**: anonymous accounts count as logged out, the guest OTP path was removed (`useGuestOTP.ts` deleted, `sendGuestOrderRequest` deleted), and every order/message sheet now shows a sign-in prompt. Browsing, Nearby and the local bag stay open to guests.
 
@@ -20,7 +22,7 @@
 | Who | What we hold |
 |---|---|
 | **Seller** | 1 Auth account + 1 `sellers/{uid}` doc + 5 subcollections (`products`, `orders`, `messages`, `visits`, `stats`) |
-| **Buyer (signed in)** | 1 Auth account + `users/{uid}` + `users/{uid}/bag/*` + `conversations/*` + orders |
+| **Buyer (signed in)** | 1 Auth account + `users/{uid}` (name, role, age band/gender, up to 7 interests) + `users/{uid}/bag/*` + `conversations/*` + orders |
 | **Buyer (anonymous)** | An anonymous Auth uid (guest checkout) — orders and chats carry that uid |
 | **Buyer (guest, no account)** | Phone + name only: on their device, plus their phone inside the seller's `messages` |
 | **Behavioural lake** | `events/` — 7 event types, each with uid-or-`guest`, source platform and payload |
@@ -40,7 +42,7 @@
 | **Cloudinary** | Store logos, product photos, chat photos |
 | **OTP server** (`api/otp/send.js`, `api/otp/verify.js` — Vercel serverless functions) | Phone numbers + OTP codes, held in Firestore (`otpCodes/{phoneKey}`, `phones/{phoneKey}`, `meta/otpSends` — all closed to the browser, and none holding a readable number, because the key is an HMAC of one) — and the code never in the clear: only its HMAC is written, and it expires after 5 minutes or on first use |
 | **Device (localStorage/sessionStorage)** | Drafts, bag, buyer area, remembered user, guest verification |
-| **Third parties** | Cloudinary, Yoola, Resend, Formspree*, Nominatim/OSM, Google/Facebook/Apple |
+| **Third parties** | Cloudinary, Yoola, Resend, Formspree*, Nominatim/OSM, Google |
 
 \* Formspree only receives anything if `VITE_FORMSPREE_ID` is set.
 
@@ -50,7 +52,7 @@
 
 ### 2.1 Account (Firebase Auth)
 
-`uid`, `email` **or** `phoneNumber` (E.164, e.g. `+256771234567`), `displayName`, `photoURL`, `providerId` (`google.com` / `facebook.com` / `apple.com` / `phone`), `emailVerified`, `creationTime`, `lastSignInTime`. Firebase also keeps its own IP/timestamp logs server-side. **A shop's `phoneNumber` is written by our server, never by the browser** (`api/_lib/identity.js:70,84` — only after a code it texted came back correct), and the wizard reads it back rather than setting it.
+`uid`, `email` **or** `phoneNumber` (E.164, e.g. `+256771234567`), `displayName`, `photoURL`, `providerId` (`google.com` / `phone` only — Facebook and Apple sign-in were removed on 24 Oct 2026), `emailVerified`, `creationTime`, `lastSignInTime`. Firebase also keeps its own IP/timestamp logs server-side. **A shop's `phoneNumber` is written by our server, never by the browser** (`api/_lib/identity.js:70,84` — only after a code it texted came back correct), and the wizard reads it back rather than setting it. **One number = one account:** Firebase Auth refuses to attach a phone number to a second user, and `claimNumber` (`api/_lib/identity.js`) refuses when the `phones/{phoneKey}` ledger already names a different uid. Signing in with a number therefore *finds* that account; it never creates a duplicate.
 
 ### 2.2 `sellers/{uid}` — field dictionary
 
@@ -62,7 +64,7 @@ Written by `SetupStore.tsx:552` (create), `EditStore.tsx:234-258` (edit), `Dashb
 > code texted by *our* server to that exact number has come back correct (`api/otp/send.js` → Yoola,
 > checked by `api/otp/verify.js`, which re-runs the same per-country rule in `api/_lib/phone.js`;
 > the proof lands in `trust/{uid}`, written server-side). Signing in with
-> Google/Apple/Facebook gets one extra step (verify your phone number, last); signing in with
+> Google gets one extra step (verify your phone number, last); signing in with
 > the number itself settles both at once, so that path has no extra step. (The `/signin`
 > screen still opens Firebase's own phone *session* for `+number` accounts, but a session is not the
 > proof — the wizard asks our server for a code all the same.) This is what
@@ -141,6 +143,7 @@ Written by `SetupStore.tsx:552` (create), `EditStore.tsx:234-258` (edit), `Dashb
 - **`users/{uid}.feedbackAskedAt` / `feedbackDoneAt`** — when we last asked "what didn't you like?", and when they answered. Only used so the ask never follows someone onto a second device (`feedback.ts`).
 - **`users/{uid}.displayName` + `nameSource` / `nameAskedAt` / `nameConfirmedAt` / `nameSkipped`** — **what we call this person**, which a seller reads on every order and message. `displayName` is the name they confirmed: either accepted from our suggestion (their social account name, shortened to "Aisha N.") or typed themselves; `nameSource` records which of those it was. The timestamps mark the one-time ask and `nameSkipped` means they tapped "Later" — so we never ask twice, on any device. It is written by the buyer on their own document, and **mirrored into the Firebase Auth profile** (`updateProfile`) so the many places that previously fell back to the word "Buyer" now show a real name. A name is a *label* — the uid stays the identity — and links, handles, phone numbers and digits-only are refused (`buyerName.ts`).
 - **`users/{uid}.ageBand` + `gender` / `demographicsAt` / `demographicsAskedAt` / `demographicsSource`** — **the two things a recommendation is built on**, and the only facts we hold about somebody's body or life stage. `ageBand` is a *group*, never a birthday: `under-18` / `18-24` / `25-34` / `35-44` / `45-54` / `55+` / `undisclosed`, and `gender` is `female` / `male` / `other` / `undisclosed` — where **`undisclosed` is a real answer meaning "asked, and chose not to say"**, not a missing field. It is asked **once**, and it cannot be walked past: at sign-up (`Onboarding.tsx`, the step after the name), on the store setup screen (`SetupStore.tsx` step 2), or by the one-time card for anybody already here (`DemographicsGate.tsx`, mounted next to `FeedbackNudge`). `demographicsAt` is the marker that stops the asking, `demographicsAskedAt` records the ask itself, and `demographicsSource` says which surface it came from. Written by the person on **their own** document (`firestore.rules:221-222` already allowed it — no rule was added), or kept on their phone (`rachett_demographics`) until an account exists, and adopted on first sign-in. **It is never written onto an order, onto a shop, or anywhere a seller can read**, and nothing outside the recommender reads it: `recommendationAudience()` in `demographics.ts` is that seam, and it returns `null` rather than a guess when the answer is missing or "prefer not to say" (see gap 11).
+- **`users/{uid}.interests[]` + `interestsAt` / `interestsAskedAt` / `interestsSkipped` / `interestsSource`** — **the shelves this buyer chose**, at most **7**, from the same names sellers pick from (`categories.ts`). `interests` is a canonical category-name array (unknown or renamed values are dropped through `canonicalCategory`); `interestsAt` is when they answered (the marker that stops the ask), `interestsAskedAt` records the ask, `interestsSkipped` says they deliberately chose none, and `interestsSource` is `onboarding` / `profile` / `device-adopted`. The ask is **optional** and sits first in the buyer onboarding flow (`Onboarding.tsx`), with a visible **Skip**. Guests' choices wait on this phone (`rachett_interests`) and are adopted at first sign-in. Editable in `/profile`. **Never written onto an order, a shop, or anything a seller can read.** `interests.ts` is the pure parser/validator, pinned by `_interests_check.cjs`.
 - **`users/{uid}/likes/{productId}`** — `{ sellerId, at }`: a mirror of **your own** ♥ votes only, so any page can draw every heart on it from one listener. The vote itself lives on the product (§5) — this is just the index of yours.
 - **`users/{uid}/comments/{productId}`** — `{ sellerId, at }`: a private index of "products I have commented on", so a later **rename** knows exactly which of my published comments to relabel (`useProductReviews.postReview`, `spreadNameEverywhere`). Renaming reaches those comments and my chat threads; **orders keep the name they were placed under**, because that is the name a delivery was actually made in. This document is owner-only — nobody else can read your index.
 - **`users/{uid}/loveAnswers/{orderId}`** — `{ answer: 'yes' | 'no', productId, sellerId, at }`: the post-delivery "Did you love it?" answer, kept so the buyer is never asked twice. A **`no` exists nowhere else** — nothing public is ever written for it.
@@ -185,7 +188,7 @@ Shop names and logos are joined client-side (one read per *distinct* shop, cache
 
 The buyer was the one person the app never showed to themselves: their name, orders, bag and looks were each held somewhere, and no screen said so. `/profile` is that screen. It is reached from the top bar (`👤 Profile`, buyers only — sellers keep "Manage Store") and from the buyer's home (`/home`), and it is open to guests.
 
-**It writes almost nothing new.** The age & gender card below is the one addition (§3.1) — the same two-question ask every other surface uses, so a person can correct an answer without hunting for the screen that first asked them. The name goes through `useBuyerName` exactly as the Inbox header and the checkout forms do — `users/{uid}` (`displayName` / `nameSource` / `nameAskedAt` / `nameSkipped`) plus the device copy (`rachett_last_name`) — and everything else is a read: orders through `useBuyerOrders` (the same collection-group query as `/my-orders`), the bag count, and the two device histories. The age & gender fields (§3.1) are the only document change of any kind, and they needed no rule either — the person already owns `users/{uid}`.
+**It writes almost nothing new.** The age & gender card and the interests card below are the additions (§3.1) — the same asks every other surface uses, so a person can correct an answer without hunting for the screen that first asked them. The name goes through `useBuyerName` exactly as the Inbox header and the checkout forms do — `users/{uid}` (`displayName` / `nameSource` / `nameAskedAt` / `nameSkipped`) plus the device copy (`rachett_last_name`) — and everything else is a read: orders through `useBuyerOrders` (the same collection-group query as `/my-orders`), the bag count, and the two device histories. The age & gender and interests fields (§3.1) are the only document changes of any kind, and they needed no rule either — the person already owns `users/{uid}`.
 
 The one number it computes is money: `summariseBuyerOrders` (`buyerOrderUtils.ts`, pinned by `_orders_check.cjs`) counts every order that is not `cancelled` / `out_of_stock`, because those were never a purchase — an order still waiting on the seller **is** counted, since the buyer has committed to it.
 
@@ -248,6 +251,7 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 | `rachett_quick_replies_guest` | Guest quick replies | `useQuickReplies.ts:6` |
 | `rachett_role` | The buyer/seller choice made on the onboarding screen — stops us asking twice (`role.ts`) | `role.ts` |
 | `rachett_name` | The name chosen *before* there is an account (`{ name, skipped, at }`) — a "just looking" visitor can choose one, and it is adopted onto `users/{uid}` at their first sign-in rather than evaporating. Written only when nobody is signed in, cleared the moment it is adopted | `buyerNameDevice.ts` → `buyerName.ts` |
+| `rachett_interests` | The shelves chosen *before* there is an account (`{ interests, skipped, at }`, ≤7 canonical category names) — a "just looking" visitor can answer the optional onboarding ask, and it is adopted onto `users/{uid}` at their first sign-in rather than evaporating. Written only when nobody is signed in, cleared the moment it is adopted | `interestsDevice.ts` → `interests.ts` |
 | `rachett_feedback` | When the "what didn't you like?" ask was last shown, and when they answered (ms). "Later" = a week; answered = three months of quiet. Mirrored onto `users/{uid}` so a second phone doesn't ask again | `feedbackRules.ts` |
 | `rachett_feedback_visit` (session) | The distinct pages seen this visit — that is what "they have actually used it" means (3+ pages before the ask is deserved) | `feedbackRules.ts` |
 | `rachett_nearby_sort` | The Nearby quick control the buyer prefers (`closest` / `newest` / `popular`) — remembered so the page opens the way they like it (`NearbyPage.tsx`) | `NearbyPage.tsx` |
@@ -275,7 +279,7 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 | **Yoola** (the sender the phone-verification flow uses now) | Phone numbers + OTP SMS text | ✅ `api/_lib/sms.js:87`, sent by `api/otp/send.js` |
 | **Nominatim / OpenStreetMap** | Seller's typed area text **and** GPS coordinates; buyer area lookup | ✅ `place.ts:30` |
 | **Resend** | Seller's `recoveryEmail` + 6-digit code | ✅ `functions/index.js` |
-| **Google / Facebook / Apple** | OAuth identity (name, email, photo) | ✅ |
+| **Google** | OAuth identity (name, email, photo) — the only social sign-in; phone sign-in uses our own OTP server, not a third-party identity provider | ✅ |
 | **Formspree** | Feedback text, name, contact, page URL, user email | ⚠️ only if `VITE_FORMSPREE_ID` is set |
 | **Flutterwave** | *Nothing* — `paymentService.ts` is **dead code** (no file imports it). **Decision (15 Sep 2026): leave it untouched until payments have been tested.** | ❌ |
 | **FCM / push** | *Nothing* — no messaging SDK anywhere; `notifications.ts` is UI copy only | ❌ |
@@ -293,7 +297,7 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 - Payment instruments, card/mobile-money details, payment statuses (no provider is wired).
 - Push notification tokens.
 - Buyer GPS coordinates in the database (device-only) — orders carry a free-text `deliveryArea`.
-- Dwell time, scroll depth, "not interested" signals, session recording, heatmaps.
+- Dwell time, scroll depth, negative "not interested" signals (a buyer's positive interests are collected — §3.1), session recording, heatmaps.
   (Product **impressions** *are* recorded now — see §13 — against a device-level
   anonymous id, never against a name.)
 - Anything about a person we don't need: no ad-network identifiers, no IP logged
@@ -329,6 +333,7 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 4. **Consent:** review `/terms` against "we use your data to train AI" before shipping a model trained on live user data. Today the terms describe the service, not training.
 5. **Retention:** agree a retention window for `events` and chat content, and honour deletion requests — which needs gap 10 solved first.
 6. **Access:** `events` and `feedback` are client-unreadable (`read: false`) and `recoveries` is fully closed. Everything else is readable by the intended party at minimum; `sellers` and `products` are world-readable by design (public storefronts).
+7. **Interests are a category signal, not a person.** The only recommendable form is canonical shelf names (≤7) on `users/{uid}`, plus the `interests_saved` event's `categories` string. No name, number, email or free-text taste is collected; "skipped" is stored as a decision, never as a guess. Training work may use the categories, must not infer sensitive traits from them, and must keep them out of anything a seller can read.
 
 ---
 
@@ -386,8 +391,11 @@ Deploy with `npm run deploy:rules`. Worth doing before the closed beta — chat 
 ```bash
 cd functions && npm install        # once — installs firebase-admin
 
-# the ML core (default targets): events, orders, products, messages, conversations
+# the ML core (default targets): events, orders, products, messages, conversations, profiles
 node export-training-data.js --out=../training-data
+
+# just buyer interests + age band (allowlisted fields only — no name/email/phone/drafts)
+node export-training-data.js --only=profiles --out=../training-data
 
 # just the event lake since 1 Jan, with hashed phone numbers
 node export-training-data.js --only=events --since=2026-01-01 --pii=hash
@@ -401,13 +409,15 @@ Credentials: point `GOOGLE_APPLICATION_CREDENTIALS` at a service-account JSON, o
 | Flag | Default | Meaning |
 |---|---|---|
 | `--out=DIR` | `training-data` | Output directory (created if missing) |
-| `--only=a,b,c` | `events,orders,products,messages,conversations` | Which targets to export (`sellers` and `feedback` are also available) |
+| `--only=a,b,c` | `events,orders,products,messages,conversations,profiles` | Which targets to export (`sellers` and `feedback` are also available) |
 | `--since=YYYY-MM-DD` | none | Keep rows created on/after this date (filtered inside the script — no Firestore index needed) |
 | `--limit=N` | `0` (all) | Max rows per target |
 | `--pii=drop\|hash\|keep` | `drop` | Phone/email/name handling; `hash` = SHA-256 hex |
 | `--dry-run` | off | Count rows only, write nothing |
 
 Every row carries `_id` (document id) and `_path` (full document path) so it can be traced back and joined — `_path` is also what separates the two chat systems (`sellers/*/messages` vs `conversations/*/messages`). Timestamps are normalised to ISO-8601 strings and `GeoPoint`s to `{ lat, lng }`. Delete the output directory when you are done; exports are git-ignored.
+
+**`profiles` is an allowlist, not a copy.** It projects only `role`, `interests`, the interests timestamps/flags/source, `ageBand`, `gender`, the demographics timestamps/source, `signupAt` and `lastSeen`. Names, emails, phone numbers, payment numbers, drafts, quick replies and anything else on `users/{uid}` never enter the file — not even with `--pii=keep`. `--since` does not filter profiles (they carry `signupAt`/`lastSeen`, not `createdAt`).
 
 ### Maintenance scripts (`functions/`)
 

@@ -62,7 +62,7 @@ function SignInPrompt({ action, returnTo, productId, sellerSlug, onLeave, note }
       </button>
 
       <p style={{ margin: '14px 0 0', color: '#555', fontSize: '12px', lineHeight: 1.5 }}>
-        It takes a few seconds — phone number, Google, Facebook or Apple.
+        It takes a few seconds — sign in with Google or your phone number.
       </p>
     </div>
   )

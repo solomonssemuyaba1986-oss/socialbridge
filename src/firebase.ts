@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { initializeFirestore } from "firebase/firestore";
 import { getFunctions } from "firebase/functions";
-import { getAuth, GoogleAuthProvider, FacebookAuthProvider, OAuthProvider, PhoneAuthProvider, RecaptchaVerifier, setPersistence, browserLocalPersistence } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, RecaptchaVerifier, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
@@ -30,10 +30,9 @@ setPersistence(auth, browserLocalPersistence).catch((err) => {
   console.warn('Failed to set auth persistence:', err);
 });
 
+// Two ways in, on purpose: Google and the person's phone number. No other provider is instantiated,
+// so a button we have no API for can never be wired back in by accident.
 export const googleProvider = new GoogleAuthProvider();
-export const facebookProvider = new FacebookAuthProvider();
-export const appleProvider = new OAuthProvider('apple.com');
-export const phoneProvider = new PhoneAuthProvider(auth);
 export const storage = getStorage(app);
 export const functions = getFunctions(app);
 

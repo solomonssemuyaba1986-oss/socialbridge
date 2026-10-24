@@ -84,6 +84,8 @@ the page needs it.
 | `buyer_name_skipped` | surface | ✅ (tapped "Later" — asked once, never again) |
 | `demographics_prompt_shown` | surface | ✅ (the one-time age & gender ask — onboarding · setup · profile · the gate) |
 | `demographics_answered` | ageBand, gender, surface, changed | ✅ (categories only — `25-34`, `female`; `undisclosed` = "prefer not to say"; `changed` = they corrected an earlier answer) |
+| `interests_prompt_shown` | surface | ✅ (the optional "what are you into?" ask — buyer onboarding) |
+| `interests_saved` | count, categories, skipped, changed, surface | ✅ (`categories` = known shelf names joined by `\|`, max 7; `skipped` = chose none; `changed` = corrected an earlier answer) |
 | `store_created` | sellerId, slug, country, hasLogo, logoSource | ✅ |
 | `phone_verification_sent` | country, method | ✅ |
 | `phone_verified` | country, method | ✅ |

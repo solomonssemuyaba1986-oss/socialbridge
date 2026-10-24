@@ -25,7 +25,7 @@ const crypto = require('crypto')
 const PROJECT_ID = process.env.GCLOUD_PROJECT || 'socialbridge-93ee1'
 const SCRUB_SALT = process.env.EXPORT_SALT || 'rachett-export'
 const PAGE = 500
-const DEFAULT_TARGETS = ['events', 'orders', 'products', 'messages', 'conversations']
+const DEFAULT_TARGETS = ['events', 'orders', 'products', 'messages', 'conversations', 'profiles']
 
 // ─── flags ─────────────────────────────────────────────────────────────────
 const args = process.argv.slice(2)
@@ -71,7 +71,30 @@ const PII_FIELDS = {
   conversations: ['sellerName', 'buyerName'],
   sellers: ['whatsapp', 'email', 'recoveryEmail'],
   feedback: ['name', 'contact', 'userEmail'],
+  // Buyer profiles are projected before they leave Firestore (see PROFILE_FIELDS), so there is
+  // nothing personal left to drop or hash here.
+  profiles: [],
 }
+
+/**
+ * The only fields a buyer profile may contribute to training. Deliberately an allowlist, not a
+ * filter: `users/{uid}` also holds drafts, quick replies, a payment number and the buyer's own name,
+ * and none of that belongs in a corpus. Interests are category names, not free text.
+ */
+const PROFILE_FIELDS = [
+  'role',
+  'interests',
+  'interestsAt',
+  'interestsAskedAt',
+  'interestsSkipped',
+  'interestsSource',
+  'ageBand',
+  'gender',
+  'demographicsAt',
+  'demographicsSource',
+  'signupAt',
+  'lastSeen',
+]
 
 const TARGETS = {
   events: { label: 'behavioural event lake', ref: () => db.collection('events') },
@@ -81,6 +104,7 @@ const TARGETS = {
   conversations: { label: 'conversation headers', ref: () => db.collection('conversations') },
   sellers: { label: 'store profiles', ref: () => db.collection('sellers') },
   feedback: { label: 'user feedback', ref: () => db.collection('feedback') },
+  profiles: { label: 'buyer profiles (allowlisted recommendation fields)', ref: () => db.collection('users') },
 }
 
 // ─── helpers ───────────────────────────────────────────────────────────────
@@ -108,11 +132,24 @@ function hashValue(value) {
 }
 
 function toRow(docSnap) {
+  const target = pathTarget(docSnap.ref.path)
+
+  // A profile is projected, never copied: drafting, quick replies, payment numbers and names stay
+  // behind even with --pii=keep. The allowlist is the privacy control, not the flag.
+  if (target === 'profiles') {
+    const data = docSnap.data() || {}
+    const profile = {}
+    for (const field of PROFILE_FIELDS) {
+      if (field in data) profile[field] = data[field]
+    }
+    return { _id: docSnap.id, _path: docSnap.ref.path, ...normalise(profile) }
+  }
+
   const raw = { ...(docSnap.data() || {}) }
 
   for (const field of NEVER_EXPORT) delete raw[field]
 
-  const piiFields = PII_FIELDS[pathTarget(docSnap.ref.path)] || []
+  const piiFields = PII_FIELDS[target] || []
   for (const field of piiFields) {
     if (!(field in raw)) continue
     if (PII === 'keep') continue
@@ -131,6 +168,7 @@ function pathTarget(docPath) {
   if (parts[0] === 'feedback') return 'feedback'
   if (parts[0] === 'conversations' && parts.length === 2) return 'conversations'
   if (parts[0] === 'conversations') return 'messages'
+  if (parts[0] === 'users' && parts.length === 2) return 'profiles'
   if (parts.includes('orders')) return 'orders'
   if (parts.includes('products')) return 'products'
   if (parts.includes('messages')) return 'messages'
@@ -173,7 +211,9 @@ async function exportTarget(name) {
     const lines = []
     for (const docSnap of snap.docs) {
       cursor = docSnap
-      if (SINCE_MS) {
+      // Profiles carry signupAt/lastSeen rather than createdAt, and a profile with no interests is
+      // still useful as a negative example. --since applies to dated streams, not to this snapshot.
+      if (SINCE_MS && name !== 'profiles') {
         const ms = createdMs(docSnap.data() || {})
         if (ms === null || ms < SINCE_MS) {
           skipped++

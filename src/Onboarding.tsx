@@ -1,10 +1,13 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { setRole, clearRole, MARKET_HOME } from './role'
+import { getRole, setRole, clearRole, MARKET_HOME } from './role'
 import { useBuyerName } from './useBuyerName'
 import { useDemographics } from './useDemographics'
+import { useInterests } from './useInterests'
+import { MAX_INTERESTS } from './interests'
 import NameStrip from './NameStrip'
 import AgeGenderAsk from './AgeGenderAsk'
+import InterestPicker from './InterestPicker'
 
 function Onboarding() {
   const navigate = useNavigate()
@@ -12,22 +15,27 @@ function Onboarding() {
   const myName = useBuyerName()
   /** And what we show them — the age group and gender every recommendation is built on. */
   const myDemographics = useDemographics()
+  /** The optional shelves they choose, asked once, so the market can be aimed at them. */
+  const myInterests = useInterests()
   /**
-   * 'choose' is the three cards; 'name' is the first question that follows a buyer's choice, and
-   * 'about' is the second. Both are required, and neither is ever asked twice.
+   * 'choose' is the three cards; for a buyer 'interests' comes first, then 'name', then 'about'.
+   * Interests are optional, the other two are required, and none of them is ever asked twice.
    */
-  const [step, setStep] = useState<'choose' | 'name' | 'about'>('choose')
+  const [step, setStep] = useState<'choose' | 'interests' | 'name' | 'about'>('choose')
 
   /**
    * The door into the market from here.
    *
-   * Two questions stand between choosing and browsing, and only the ones this person has not
-   * already answered: what sellers should call them, then the two things that make a
-   * recommendation possible. The moment both are on record the door opens straight away — asking a
-   * settled question again is worse than not asking a new one, so an account that answered months
-   * ago walks straight through.
+   * Only the questions this person has not already answered: a buyer's interests (optional), what
+   * sellers should call them, then the two things that make a recommendation possible. The moment
+   * they are on record the door opens straight away — asking a settled question again is worse than
+   * not asking a new one, so an account that answered months ago walks straight through.
    */
   const nextUnanswered = () => {
+    if (getRole() === 'buyer' && !myInterests.loading && myInterests.needsAsk) {
+      setStep('interests')
+      return
+    }
     if (!myName.loading && myName.needsAsk) {
       setStep('name')
       return
@@ -40,9 +48,47 @@ function Onboarding() {
   }
 
   /**
-   * Choosing a way in. The name ask belongs *here*, at the moment of choosing, because this is where
-   * a visitor becomes a person on rachett — and whatever they answer is what sellers, the Inbox and
-   * every order form will call them from then on.
+   * Each answer moves the queue on by asking only about the steps that come *after* it. That is
+   * deliberate: the hook's state still holds the pre-save value in the callback that saved it, so a
+   * function that re-checked the question just answered would open it again.
+   */
+  const afterInterests = () => {
+    if (!myName.loading && myName.needsAsk) {
+      setStep('name')
+      return
+    }
+    if (!myDemographics.loading && myDemographics.needsAsk) {
+      setStep('about')
+      return
+    }
+    navigate(MARKET_HOME)
+  }
+
+  const afterName = () => {
+    // Normally the interests are already behind them; this covers a slow first load honestly.
+    if (getRole() === 'buyer' && !myInterests.loading && myInterests.needsAsk) {
+      setStep('interests')
+      return
+    }
+    if (!myDemographics.loading && myDemographics.needsAsk) {
+      setStep('about')
+      return
+    }
+    navigate(MARKET_HOME)
+  }
+
+  const afterAbout = () => {
+    if (getRole() === 'buyer' && !myInterests.loading && myInterests.needsAsk) {
+      setStep('interests')
+      return
+    }
+    navigate(MARKET_HOME)
+  }
+
+  /**
+   * Choosing a way in. A buyer is asked what they love first (optional), then the name and the age
+   * ask — the name belongs here because this is where a visitor becomes a person on rachett, and
+   * whatever they answer is what sellers, the Inbox and every order form will call them from then on.
    *
    * A seller's own name is their business name, and their age and gender are asked on the store
    * setup screen, so that card leads straight there.
@@ -51,6 +97,36 @@ function Onboarding() {
     if (role === 'buyer') setRole('buyer')
     else clearRole()
     nextUnanswered()
+  }
+
+  if (step === 'interests') {
+    return (
+      <div className="rt-page" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+        <p style={{ color: '#aaa', marginBottom: '8px', fontSize: '14px' }}>Welcome to rachett</p>
+        <h1 style={{ color: '#fff', fontSize: 28, fontWeight: 800, marginBottom: '8px', textAlign: 'center' }}>
+          Tell us what you love
+        </h1>
+        <p style={{ color: '#888', marginBottom: '24px', fontSize: 15, textAlign: 'center', maxWidth: '500px' }}>
+          Pick up to {MAX_INTERESTS} interests and we will make the market feel like yours. Optional — Skip is right there if you would rather look around first.
+        </p>
+        <div style={{ width: '100%', maxWidth: '560px' }}>
+          <InterestPicker
+            interests={myInterests}
+            surface="onboarding"
+            mark
+            title="Some of your best interests"
+            blurb="Choose the shelves you would actually shop. We keep them on your own account and use them to pick what you see."
+            ctaLabel="Show me my market"
+            onDone={afterInterests}
+          />
+        </div>
+        {!myInterests.loading && !myInterests.uid && (
+          <p style={{ color: '#666', fontSize: 12, marginTop: 12, maxWidth: '460px', textAlign: 'center', lineHeight: 1.6 }}>
+            You are browsing without an account, so these stay on this phone — and they follow you if you sign in later.
+          </p>
+        )}
+      </div>
+    )
   }
 
   if (step === 'name') {
@@ -67,11 +143,7 @@ function Onboarding() {
             buyerName={myName}
             surface="onboarding"
             forceOpen
-            onDone={() => {
-              // The name is behind them (answered, or tapped Later) — one question still stands.
-              if (!myDemographics.loading && myDemographics.needsAsk) setStep('about')
-              else navigate(MARKET_HOME)
-            }}
+            onDone={afterName}
           />
         </div>
         {!myName.loading && !myName.uid && (
@@ -84,9 +156,10 @@ function Onboarding() {
   }
 
   /**
-   * Question two, and the reason this screen exists at all: recommendations need *some* idea of who
-   * is asking. It cannot be walked past — there is no Later on this screen — but "Prefer not to say"
-   * is one of the answers to each question, so nobody is talked into a fact that is not theirs.
+   * The required half of the profile, and the reason this screen exists at all: recommendations
+   * need *some* idea of who is asking. It cannot be walked past — there is no Later on this screen —
+   * but "Prefer not to say" is one of the answers to each question, so nobody is talked into a fact
+   * that is not theirs.
    */
   if (step === 'about') {
     return (
@@ -104,7 +177,7 @@ function Onboarding() {
             surface="onboarding"
             mark
             ctaLabel="Start shopping"
-            onDone={() => navigate(MARKET_HOME)}
+            onDone={afterAbout}
           />
         </div>
         {!myDemographics.loading && !myDemographics.uid && (

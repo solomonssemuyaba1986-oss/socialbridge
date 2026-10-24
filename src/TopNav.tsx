@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { auth, googleProvider, facebookProvider, appleProvider } from './firebase'
-import {signInWithPopup } from 'firebase/auth'
+import { auth, googleProvider } from './firebase'
+import { signInWithPopup, type AuthProvider } from 'firebase/auth'
 import { notify } from './notifications'
 import { useSellerLive } from './sellerLive'
 import { resolveLanding, setRole, MARKET_HOME } from './role'
@@ -31,7 +31,7 @@ function TopNav({ variant = 'default' }: { variant?: 'default' | 'bag' }) {
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [loginLoading, setLoginLoading] = useState('')
 
-  const handleSocialSignIn = async (provider: any, name: string) => {
+  const handleSocialSignIn = async (provider: AuthProvider, name: string) => {
     setLoginLoading(name)
     try {
       await signInWithPopup(auth, provider)
@@ -170,29 +170,19 @@ function TopNav({ variant = 'default' }: { variant?: 'default' | 'bag' }) {
               {loginLoading === 'Google' ? 'Signing in...' : 'Continue with Google'}
             </button>
 
-            {/* Apple */}
-            <button onClick={() => handleSocialSignIn(appleProvider, 'Apple')} disabled={!!loginLoading}
+            {/* Phone — the same code flow as /signin, with the way back kept. */}
+            <button onClick={() => { setShowLoginModal(false); navigate('/signin', { state: { returnTo: location.pathname } }) }}
               style={{
                 width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
-                background: '#000', color: '#fff', border: '1px solid #333', padding: '14px 24px', borderRadius: 10,
-                fontWeight: 700, cursor: loginLoading ? 'not-allowed' : 'pointer', fontSize: 15,
-                marginBottom: 10, opacity: loginLoading && loginLoading !== 'Apple' ? 0.5 : 1,
+                background: '#1a1a1a', color: '#fff', border: '1px solid #333', padding: '14px 24px',
+                borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: 15, marginBottom: 6,
               }}>
-              <span style={{ fontSize: 18 }}></span>
-              {loginLoading === 'Apple' ? 'Signing in...' : 'Continue with Apple'}
+              <span style={{ fontSize: 18 }}>📱</span>
+              Continue with phone number
             </button>
-
-            {/* Facebook */}
-            <button onClick={() => handleSocialSignIn(facebookProvider, 'Facebook')} disabled={!!loginLoading}
-              style={{
-                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
-                background: '#4267B2', color: '#fff', border: 'none', padding: '14px 24px', borderRadius: 10,
-                fontWeight: 700, cursor: loginLoading ? 'not-allowed' : 'pointer', fontSize: 15,
-                marginBottom: 10, opacity: loginLoading && loginLoading !== 'Facebook' ? 0.5 : 1,
-              }}>
-              <span style={{ fontSize: 18 }}>f</span>
-              {loginLoading === 'Facebook' ? 'Signing in...' : 'Continue with Facebook'}
-            </button>
+            <p style={{ margin: '4px 0 0', color: '#666', fontSize: 12, lineHeight: 1.5 }}>
+              One number, one account.
+            </p>
 
             <p style={{ margin: '16px 0 0', color: '#555', fontSize: 13 }}>
               Don't have an account?{' '}
