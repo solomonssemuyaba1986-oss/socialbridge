@@ -17,12 +17,14 @@ import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import sendOtp from '../api/otp/send.js'
 import verifyOtp from '../api/otp/verify.js'
+import matchContacts from '../api/contacts/match.js'
 
 const PORT = Number(process.env.PORT) || 3001
 
 const ROUTES = {
   '/api/otp/send': sendOtp,
   '/api/otp/verify': verifyOtp,
+  '/api/contacts/match': matchContacts,
 }
 
 /** A `.env` file, parsed without a dependency (and never overwriting the shell). */

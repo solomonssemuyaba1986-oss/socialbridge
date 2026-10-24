@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { initializeFirestore } from "firebase/firestore";
 import { getFunctions } from "firebase/functions";
-import { getAuth, GoogleAuthProvider, RecaptchaVerifier, setPersistence, browserLocalPersistence } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
@@ -35,13 +35,3 @@ setPersistence(auth, browserLocalPersistence).catch((err) => {
 export const googleProvider = new GoogleAuthProvider();
 export const storage = getStorage(app);
 export const functions = getFunctions(app);
-
-// Helper to create a new reCAPTCHA verifier instance (call once per sign-in attempt)
-export function createRecaptchaVerifier(containerId: string) {
-  return new RecaptchaVerifier(auth, containerId, {
-    size: 'invisible',
-    callback: () => {
-      // reCAPTCHA solved — allow signInWithPhoneNumber
-    },
-  });
-}

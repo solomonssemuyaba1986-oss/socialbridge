@@ -314,6 +314,10 @@ service cloud.firestore {
     match /meta/{docId}        { allow read, write: if false; }
     match /phones/{phoneKey}   { allow read, write: if false; }
 
+    // Per-account contact-lookup counters. Closed like the OTP collections: the numbers being
+    // matched are never stored here, only how often this account has looked.
+    match /contactLookups/{userId} { allow read, write: if false; }
+
     match /users/{userId} {
       allow read, write: if request.auth.uid == userId;
 

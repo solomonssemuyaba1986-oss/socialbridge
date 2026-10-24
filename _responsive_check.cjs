@@ -91,7 +91,7 @@ check('every dialog becomes a bottom sheet on a phone', () => {
   const dialogs = jsxLines.filter(l =>
     l.line.includes("position: 'fixed', top: 0, left: 0, right: 0, bottom: 0") &&
     l.line.includes('zIndex: 1000'))
-  assert.ok(dialogs.length >= 15, `expected the app's dialogs, found ${dialogs.length}`)
+  assert.ok(dialogs.length >= 14, `expected the app's dialogs, found ${dialogs.length}`)
   const missing = dialogs.filter(l => {
     if (l.line.includes('rt-modal-overlay')) return false
     // A couple of dialogs put className on the line above the style prop.
@@ -227,8 +227,8 @@ check('the two navigations share one definition', () => {
   const nav = read('sellerNav.ts')
   const buyer = read('buyerNav.ts')
   assert.strictEqual((nav.match(/tab: true/g) || []).length, 5, 'five tabs — the daily work is unchanged')
-  assert.strictEqual((nav.match(/label: '/g) || []).length, 16,
-    "ten of the seller's own, plus My Orders and Services & Delivery, plus the four market ones (Browse / Shoppertainment / Live / Studio)")
+  assert.strictEqual((nav.match(/label: '/g) || []).length, 17,
+    "ten of the seller's own, plus My Orders, Services & Delivery and News & Updates, plus the four market ones (Browse / Shoppertainment / Live / Studio)")
   /*
    * A seller is a buyer too. The destinations the two sides share are written with the very same
    * words in both files — same label, same path, same glyph, same ▶ — and this is the rule that

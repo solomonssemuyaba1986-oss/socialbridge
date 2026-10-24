@@ -104,6 +104,10 @@ function TopNav({ variant = 'default' }: { variant?: 'default' | 'bag' }) {
 
           {user && (
             <>
+              <button onClick={() => navigate('/news')} title="Rachett News & Updates"
+                style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', color: '#fff', border: '1px solid #333', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
+                📰 News
+              </button>
               <button onClick={() => navigate('/inbox')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', color: '#fff', border: '1px solid #333', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
                 💬 Inbox
                 {inboxUnread > 0 && (

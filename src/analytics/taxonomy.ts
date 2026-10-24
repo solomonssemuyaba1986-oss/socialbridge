@@ -52,6 +52,18 @@ export const EVENT_PROPS = {
   store_created: ['sellerId', 'slug', 'country', 'hasLogo', 'logoSource'],
   phone_verification_sent: ['country', 'method'],
   phone_verified: ['country', 'method'],
+  // ── Account strength, reminders and contact discovery ────────────────────────────────────────
+  // Facts about an account, never about a person: which methods exist, whether the market is
+  // phone-first, and whether a reminder was due. No number, name or email ever enters these.
+  account_strength_viewed: ['methods', 'hasPhone', 'hasEmail', 'african', 'nudgeDue'],
+  account_strength_prompt_shown: ['missing', 'surface', 'african', 'due'],
+  account_email_added: ['method'],
+  contacts_prompt_shown: ['surface'],
+  // `checked` = distinct valid numbers in the request; `matched` = friends found. Neither is a
+  // number, and `consent` records that the person opened the picker and shared.
+  contacts_lookup_finished: ['surface', 'checked', 'matched', 'consent'],
+  contacts_lookup_failed: ['surface', 'reason'],
+  contacts_invite_shared: ['surface', 'channel'],
 
   // ── Discovery ────────────────────────────────────────────────────────────
   browse_viewed: ['category', 'storeCount'],

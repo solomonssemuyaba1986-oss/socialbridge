@@ -38,6 +38,8 @@ import BuyerTabs from './BuyerTabs.tsx'
 import FeedbackNudge from './FeedbackNudge.tsx'
 import DemographicsGate from './DemographicsGate.tsx'
 import InterestsAdoption from './InterestsAdoption.tsx'
+import ContactPrompt from './ContactPrompt.tsx'
+import NewsPage from './NewsPage.tsx'
 import NotFound from './NotFound.tsx'
 import CookieConsent from './CookieConsent.tsx'
 import { getRole, MARKET_HOME } from './role.ts'
@@ -133,6 +135,10 @@ function App() {
       <DemographicsGate />
       {/* Optional, so no gate: this only adopts a guest's interests after they sign in. */}
       <InterestsAdoption />
+      {/* 📇 Once a phone is proved: the one-time, consent-first "find your friends" ask. It waits
+          for a settled screen and for the required age/gender card, and never reads a contact
+          until the person opens the picker themselves. */}
+      <ContactPrompt />
       {location.pathname !== '/terms' && <TopNav variant={location.pathname === '/bag' ? 'bag' : 'default'} />}
       {/* The buyer's phone navigation — mounted once, for every screen. It hides itself for a seller,
           on the screens that own the whole phone, and (in `responsive.css`) on desktop, where the
@@ -192,6 +198,10 @@ function App() {
       {/* How the seller gets paid. It writes to their own document, so it needs no rules deploy. */}
       <Route path="/payment-setup" element={sellerOnly ? <PaymentSetup /> : <Navigate to="/" />} />
       <Route path="/feedback" element={<FeedbackPage />} />
+      {/* 📰 News & Updates — permanent on every account, buyers and sellers alike. It holds the
+          account-strength card, the phone reminder and the consent-first friend finder. Open to
+          guests: the page explains the account they could make, then offers it. */}
+      <Route path="/news" element={<NewsPage />} />
       <Route path="/recover" element={<RecoverPage />} />
       <Route path="/help" element={<HelpPage />} />
       {/* ↩️ Returns & rachett care — the whole policy in plain words, plus this buyer's own running

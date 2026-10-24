@@ -8,7 +8,7 @@ search demand, product performance, seller responsiveness and acquisition.
 
 | File | What it owns |
 |---|---|
-| `src/analytics/taxonomy.ts` | **The source of truth** — 65 event names and the exact properties each may carry |
+| `src/analytics/taxonomy.ts` | **The source of truth** — 116 event names and the exact properties each may carry |
 | `src/analytics/core.ts` | Batch shape, batching rules, route normalisation (pure — no Firebase) |
 | `src/analytics/identity.ts` | Session id, device (anonymous) id, first touch, opt-out (pure — injectable storage) |
 | `src/analytics/client.ts` | Queue → batch → one Firestore write; flush triggers; offline buffer |
@@ -63,7 +63,7 @@ bounded offline buffer (200, oldest dropped) and never break the UI.
 - **Opt-out** — `localStorage.rachett_analytics_off = '1'` silences every writer
   (see `setAnalyticsOptOut`). Nothing is queued or sent in that state.
 
-## The events (104)
+## The events (116)
 
 ✅ = wired in the app today · ⏳ = reserved name, add the call when the feature or
 the page needs it.
@@ -87,8 +87,15 @@ the page needs it.
 | `interests_prompt_shown` | surface | ✅ (the optional "what are you into?" ask — buyer onboarding) |
 | `interests_saved` | count, categories, skipped, changed, surface | ✅ (`categories` = known shelf names joined by `\|`, max 7; `skipped` = chose none; `changed` = corrected an earlier answer) |
 | `store_created` | sellerId, slug, country, hasLogo, logoSource | ✅ |
-| `phone_verification_sent` | country, method | ✅ |
-| `phone_verified` | country, method | ✅ |
+| `phone_verification_sent` | country, method | ✅ (`method` = `phone-signup` · `social-link` · `phone-signin` · `account-strength`) |
+| `phone_verified` | country, method | ✅ (same methods; the only proof is a code our server texted and checked) |
+| `account_strength_viewed` | methods, hasPhone, hasEmail, african, nudgeDue | ✅ (`methods` = `phone\|email`; facts only — no number, name or email) |
+| `account_strength_prompt_shown` | missing, surface, african, due | ✅ (the nine-day phone reminder, shown on `/news`; `missing` is `phone`) |
+| `account_email_added` | method | ✅ (a phone-only account linked Google; `method` = `google-link`) |
+| `contacts_prompt_shown` | surface | ✅ (the one-time consent-first ask, after a phone is proved) |
+| `contacts_lookup_finished` | surface, checked, matched, consent | ✅ (`checked` = distinct valid numbers sent, `matched` = friends found — never a number) |
+| `contacts_lookup_failed` | surface, reason | ✅ (safe error sentence/slug only) |
+| `contacts_invite_shared` | surface, channel | ✅ (`channel` = `native` · `clipboard`) |
 | `browse_viewed` | category, storeCount | ✅ |
 | `feed_page_loaded` | page, count | ✅ |
 | `category_browsed` | category | ✅ |
@@ -201,10 +208,17 @@ Also available as `npm run analytics:report` from the repo root. Sections:
 - **FUNNEL** — unique visitors at each stage (store seen → product seen → opened →
   bagged → checkout → ordered → confirmed), with % of first and % of previous.
 - **ACQUISITION** — first-touch channel → visitors → orders → conversion.
-- **PHONE VERIFICATION** — the seller signup gate: codes requested → numbers verified, split by
-  method (`phone-signup` settles the account and the number with one code; `social-link` owes an
-  extra step) and by country. This is where people who never finished setup show up, so it is
-  the first place to look when signups dip.
+- **PHONE VERIFICATION** — codes requested → numbers verified, split by method
+  (`phone-signup` settles the account and the number with one code; `social-link` owes an extra
+  step; `phone-signin` and `account-strength` are the sign-in and the second-key path) and by
+  country. This is where people who never finished setup show up, so it is the first place to
+  look when signups dip.
+- **ACCOUNT STRENGTH** — how many accounts have one key versus two (`account_strength_viewed`),
+  and whether the nine-day reminder is being shown and acted on (`account_strength_prompt_shown`
+  → `phone_verified` with `method=account-strength`). `account_email_added` is the phone-only
+  side of the same funnel. Contact discovery is separate on purpose: `contacts_prompt_shown` →
+  `contacts_lookup_finished` (`checked` → `matched`) with `contacts_lookup_failed` beside it — no
+  phone number, name or address-book content ever rides along.
 - **SEARCH** — searches per surface, the top queries, and **queries that found
   nothing** (that list is your product roadmap).
 - **PRODUCTS** — seen → opened → bagged → ordered → confirmed per product, plus the ♥

@@ -149,9 +149,12 @@ check('the redundant Active badge is gone from the app', () => {
 
 check('the store page shows the Reliable chip instead of the Active one', () => {
   const store = read('src/StorePage.tsx')
-  assert.ok(/sellerStats\.reliableSellerBadge/.test(store), 'the store page must draw the Reliable chip')
-  assert.ok(/Reliable Seller/.test(store), 'the chip must read "Reliable Seller"')
-  assert.ok(!/Active Seller/.test(store), 'the Active chip must be gone')
+  assert.ok(/sellerStats\.reliableSellerBadge/.test(store), 'the store page must pass the Reliable status')
+  // The chip itself lives in the one shared badge component, so the shop, product sheet and chat
+  // can never wear different words.
+  const badges = read('src/SellerTrustBadges.tsx')
+  assert.ok(/Reliable Seller/.test(badges), 'the chip must read "Reliable Seller"')
+  assert.ok(!/Active Seller/.test(badges), 'the Active chip must be gone')
 })
 
 check('the hook reads the server numbers and judges them with the shared rule', () => {

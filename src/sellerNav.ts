@@ -53,6 +53,9 @@ export const SELLER_NAV: SellerNavItem[] = [
   { label: 'Nearby', path: '/nearby', icon: '📍' },
   { label: 'Analytics', path: '/analytics', icon: '📈', tab: true },
   { label: 'Marketing', path: '/marketing', icon: '📣' },
+  // 📰 The account's permanent news page. A seller is an account holder too, so it sits with
+  // their own destinations rather than being hidden behind the buyer profile only.
+  { label: 'News & Updates', path: '/news', icon: '📰' },
   // The seller's own purchases, next to the shop's order book so the two are never confused.
   MY_ORDERS,
   // 🧰 Services & Delivery — the promise that a shop can sell its time and its legs, not only what

@@ -1,8 +1,11 @@
 import { useState } from 'react'
-import { signInWithPopup, signInWithPhoneNumber } from 'firebase/auth'
-import type { AuthProvider, ConfirmationResult } from 'firebase/auth'
-import { auth, googleProvider, createRecaptchaVerifier } from './firebase'
-import { COUNTRY_CODES } from './countryCodes'
+import { signInWithPopup, signInWithCustomToken } from 'firebase/auth'
+import type { AuthProvider } from 'firebase/auth'
+import { auth, googleProvider } from './firebase'
+import { COUNTRY_CODES, type CountryCode } from './countryCodes'
+import { formatFull, validatePhone } from './phone'
+import { sendOtp, verifyOtp } from './otpClient'
+import { trackEvent } from './analytics'
 import { rememberUser } from './userMemory'
 import ContinueAs from './ContinueAs'
 
@@ -24,7 +27,6 @@ function AuthModal({ open, title, subtitle, onSuccess, onClose }: Props) {
   const [countrySearch, setCountrySearch] = useState('')
   const [phoneOtpSent, setPhoneOtpSent] = useState(false)
   const [phoneOtp, setPhoneOtp] = useState('')
-  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null)
   const [phoneOtpLoading, setPhoneOtpLoading] = useState(false)
   const [phoneOtpError, setPhoneOtpError] = useState('')
 
@@ -48,49 +50,67 @@ function AuthModal({ open, title, subtitle, onSuccess, onClose }: Props) {
     }
   }
 
+  const resetPhoneCode = () => {
+    setPhoneOtpSent(false)
+    setPhoneOtp('')
+    setPhoneOtpError('')
+  }
+
+  const changeCountry = (country: CountryCode) => {
+    setSelectedCountry(country)
+    setShowCountryDropdown(false)
+    setCountrySearch('')
+    resetPhoneCode()
+  }
+
   const handleSendPhoneOtp = async () => {
-    if (!phoneNumber || phoneNumber.length < 5) {
-      setPhoneOtpError('Enter a valid phone number for your country')
+    const check = validatePhone(selectedCountry.dialCode, phoneNumber, selectedCountry.name)
+    if (!check.ok) {
+      setPhoneOtpError(check.message || 'Enter a valid phone number for your country.')
       return
     }
     setPhoneOtpLoading(true)
     setPhoneOtpError('')
-    const fullNumber = `${selectedCountry.dialCode}${phoneNumber}`
     try {
-      const recaptchaVerifier = createRecaptchaVerifier('authmodal-recaptcha')
-      const result = await signInWithPhoneNumber(auth, fullNumber, recaptchaVerifier)
-      setConfirmationResult(result)
+      const sent = await sendOtp(formatFull(selectedCountry.dialCode, check.digits))
+      if (!sent.ok) {
+        setPhoneOtpError(sent.error)
+        return
+      }
       setPhoneOtpSent(true)
-    } catch (err: any) {
-      console.error('Phone OTP send error:', err)
-      setPhoneOtpError(err?.code === 'auth/invalid-phone-number'
-        ? 'Invalid phone number format.'
-        : 'Failed to send code. Check your number and try again.')
+      setPhoneOtp('')
+      trackEvent('phone_verification_sent', { country: selectedCountry.name, method: 'phone-signin' })
     } finally {
       setPhoneOtpLoading(false)
     }
   }
 
   const handleVerifyPhoneOtp = async () => {
-    if (!phoneOtp || phoneOtp.length < 6) {
+    if (!/^\d{6}$/.test(phoneOtp)) {
       setPhoneOtpError('Enter the 6-digit code')
       return
     }
-    if (!confirmationResult) {
-      setPhoneOtpError('Session expired. Request a new code.')
+    const check = validatePhone(selectedCountry.dialCode, phoneNumber, selectedCountry.name)
+    if (!check.ok) {
+      setPhoneOtpError(check.message || 'Check your phone number and request a new code.')
+      resetPhoneCode()
       return
     }
     setPhoneOtpLoading(true)
     setPhoneOtpError('')
     try {
-      await confirmationResult.confirm(phoneOtp)
+      const verified = await verifyOtp(formatFull(selectedCountry.dialCode, check.digits), phoneOtp)
+      if (!verified.ok) {
+        setPhoneOtpError(verified.error)
+        return
+      }
+      await signInWithCustomToken(auth, verified.token)
       rememberUser(auth.currentUser)
+      trackEvent('phone_verified', { country: selectedCountry.name, method: 'phone-signin' })
       onSuccess()
-    } catch (err: any) {
-      console.error('Phone OTP verify error:', err)
-      setPhoneOtpError(err?.code === 'auth/invalid-verification-code'
-        ? 'Wrong code. Try again.'
-        : 'Verification failed. Try again.')
+    } catch (err) {
+      console.warn('Phone verification failed:', err)
+      setPhoneOtpError('Verification failed. Please try again.')
     } finally {
       setPhoneOtpLoading(false)
     }
@@ -144,7 +164,7 @@ function AuthModal({ open, title, subtitle, onSuccess, onClose }: Props) {
                       style={{ width: '100%', padding: '10px 12px', border: 'none', borderBottom: '1px solid #333', fontSize: 13, boxSizing: 'border-box', outline: 'none', background: '#111', color: '#fff' }} />
                     <div style={{ maxHeight: 180, overflowY: 'auto' }}>
                       {COUNTRY_CODES.filter(c => !countrySearch || c.name.toLowerCase().includes(countrySearch.toLowerCase()) || c.dialCode.includes(countrySearch)).map(c => (
-                        <div key={c.dialCode} onClick={() => { setSelectedCountry(c); setShowCountryDropdown(false); setCountrySearch('') }}
+                        <div key={c.dialCode} onClick={() => changeCountry(c)}
                           style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', cursor: 'pointer', fontSize: 13, color: selectedCountry.dialCode === c.dialCode ? green : '#aaa', background: selectedCountry.dialCode === c.dialCode ? '#0a1a0a' : 'transparent' }}>
                           <span style={{ fontSize: 16 }}>{c.flag}</span>
                           <span style={{ flex: 1 }}>{c.name}</span>
@@ -155,12 +175,9 @@ function AuthModal({ open, title, subtitle, onSuccess, onClose }: Props) {
                   </div>
                 )}
               </div>
-              <input value={phoneNumber} onChange={e => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 15))} placeholder="Phone number" maxLength={15}
+              <input value={phoneNumber} onChange={e => { setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 15)); resetPhoneCode() }} placeholder="Phone number" maxLength={15}
                 style={{ width: '100%', padding: '12px', borderRadius: 8, border: '1px solid #333', boxSizing: 'border-box', fontSize: 15, background: '#111', color: '#fff' }} />
             </div>
-
-            {/* reCAPTCHA container */}
-            <div id="authmodal-recaptcha" />
 
             <button onClick={handleSendPhoneOtp} disabled={phoneOtpLoading || !phoneNumber || phoneNumber.length < 5}
               style={{ width: '100%', padding: '12px', background: (phoneOtpLoading || !phoneNumber || phoneNumber.length < 5) ? '#333' : green, color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, cursor: (phoneOtpLoading || !phoneNumber || phoneNumber.length < 5) ? 'not-allowed' : 'pointer', fontSize: 15 }}>
@@ -174,11 +191,12 @@ function AuthModal({ open, title, subtitle, onSuccess, onClose }: Props) {
             </p>
             <input value={phoneOtp} onChange={e => setPhoneOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000"
               style={{ width: '100%', padding: '12px', borderRadius: 8, border: '1px solid #333', marginBottom: 10, fontSize: 20, textAlign: 'center', letterSpacing: 8, boxSizing: 'border-box', background: '#111', color: '#fff' }} />
+            {phoneOtpError && <p role="alert" style={{ color: '#ff6b6b', fontSize: 12, margin: '0 0 8px' }}>{phoneOtpError}</p>}
             <button onClick={handleVerifyPhoneOtp} disabled={phoneOtpLoading || phoneOtp.length < 6}
               style={{ width: '100%', padding: '12px', background: (phoneOtpLoading || phoneOtp.length < 6) ? '#333' : green, color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, cursor: (phoneOtpLoading || phoneOtp.length < 6) ? 'not-allowed' : 'pointer', fontSize: 15 }}>
               {phoneOtpLoading ? 'Verifying...' : 'Verify & Sign In'}
             </button>
-            <button onClick={() => { setPhoneOtpSent(false); setPhoneOtp(''); setConfirmationResult(null); setPhoneOtpError('') }}
+            <button onClick={resetPhoneCode}
               style={{ width: '100%', padding: '10px', background: 'transparent', color: '#888', border: '1px solid #333', borderRadius: 8, cursor: 'pointer', fontSize: 13, marginTop: 8 }}>
               Back
             </button>

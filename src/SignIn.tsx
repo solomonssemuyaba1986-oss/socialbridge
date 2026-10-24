@@ -1,12 +1,15 @@
 import { useState, useRef, useEffect } from 'react'
-import { signInWithPopup, signInWithRedirect, signInWithPhoneNumber } from 'firebase/auth'
-import type { AuthProvider, ConfirmationResult } from 'firebase/auth'
-import { auth, db, googleProvider, createRecaptchaVerifier } from './firebase'
+import { signInWithPopup, signInWithRedirect, signInWithCustomToken } from 'firebase/auth'
+import type { AuthProvider } from 'firebase/auth'
+import { auth, db, googleProvider } from './firebase'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { collection, getDocs, query, limit } from 'firebase/firestore'
 import { notify } from './notifications'
 import { rememberUser } from './userMemory'
 import { COUNTRY_CODES, type CountryCode } from './countryCodes'
+import { formatFull, validatePhone } from './phone'
+import { sendOtp, verifyOtp } from './otpClient'
+import { trackEvent } from './analytics'
 import RecoveryModal from './RecoveryModal'
 import ContinueAs from './ContinueAs'
 import { resolveLanding, setRole, MARKET_HOME } from './role'
@@ -66,7 +69,6 @@ function SignIn() {
   const [phoneOtp, setPhoneOtp] = useState('')
   const [phoneOtpLoading, setPhoneOtpLoading] = useState(false)
   const [phoneOtpError, setPhoneOtpError] = useState('')
-  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null)
   const [showCountryDropdown, setShowCountryDropdown] = useState(false)
   const [countrySearch, setCountrySearch] = useState('')
   const [termsAgreed, setTermsAgreed] = useState(false)
@@ -77,7 +79,7 @@ function SignIn() {
   const [showRecoveryModal, setShowRecoveryModal] = useState(false)
 
   // Real seller logos for the "Trusted by" ticker
-  const [trustedStores, setTrustedStores] = useState<any[]>([])
+  const [trustedStores, setTrustedStores] = useState<Array<{ id: string; logoUrl?: string; slug?: string; businessName?: string }>>([])
 
   useEffect(() => {
     let cancelled = false
@@ -85,8 +87,8 @@ function SignIn() {
       .then(snap => {
         if (cancelled) return
         const stores = snap.docs
-          .map(d => ({ id: d.id, ...d.data() }))
-          .filter((s: any) => s.logoUrl && s.slug)
+          .map(d => ({ id: d.id, ...(d.data() as { logoUrl?: string; slug?: string; businessName?: string }) }))
+          .filter(s => s.logoUrl && s.slug)
           .slice(0, 12)
         setTrustedStores(stores)
       })
@@ -171,73 +173,77 @@ function SignIn() {
   }
 
   // -- Phone Auth handlers --
+  // The number is proved by *our* server (`/api/otp/send` → `/api/otp/verify`), exactly like the
+  // seller wizard. The server is the only thing that can attach a number to an account and mint
+  // the sign-in token, so `auth.currentUser.phoneNumber` cannot be a browser invention.
+  const resetPhoneCode = () => {
+    setPhoneOtpSent(false)
+    setPhoneOtp('')
+    setPhoneOtpError('')
+  }
+
   const handlePhoneChange = (val: string) => {
     const digits = val.replace(/\D/g, '').slice(0, 15)
     setPhoneNumber(digits)
-    setPhoneOtpError('')
-    if (digits !== phoneNumber) {
-      setPhoneOtpSent(false)
-      setPhoneOtp('')
-      setConfirmationResult(null)
-    }
+    if (digits !== phoneNumber) resetPhoneCode()
+  }
+
+  const handleCountryChange = (country: CountryCode) => {
+    setSelectedCountry(country)
+    setShowCountryDropdown(false)
+    setCountrySearch('')
+    resetPhoneCode()
   }
 
   const handleSendPhoneOtp = async () => {
     if (!ensureTerms()) return
-    if (!phoneNumber || phoneNumber.length < 5) {
-      setPhoneOtpError('Enter a valid phone number for your country')
+    const check = validatePhone(selectedCountry.dialCode, phoneNumber, selectedCountry.name)
+    if (!check.ok) {
+      setPhoneOtpError(check.message || 'Enter a valid phone number for your country.')
       return
     }
     setPhoneOtpLoading(true)
     setPhoneOtpError('')
-    const fullNumber = `${selectedCountry.dialCode}${phoneNumber}`
     try {
-      const recaptchaVerifier = createRecaptchaVerifier('phone-recaptcha-container')
-      const result = await signInWithPhoneNumber(auth, fullNumber, recaptchaVerifier)
-      setConfirmationResult(result)
-      setPhoneOtpSent(true)
-      console.log(`[Phone Auth] OTP sent to ${fullNumber}`)
-    } catch (err: any) {
-      console.error('Phone OTP send error:', err)
-      if (err?.code === 'auth/too-many-requests') {
-        setPhoneOtpError('Too many attempts. Wait a moment and try again.')
-      } else if (err?.code === 'auth/invalid-phone-number') {
-        setPhoneOtpError('Invalid phone number format.')
-      } else {
-        setPhoneOtpError('Failed to send code. Check your number and try again.')
+      const sent = await sendOtp(formatFull(selectedCountry.dialCode, check.digits))
+      if (!sent.ok) {
+        setPhoneOtpError(sent.error)
+        return
       }
+      setPhoneOtpSent(true)
+      setPhoneOtp('')
+      trackEvent('phone_verification_sent', { country: selectedCountry.name, method: 'phone-signin' })
     } finally {
       setPhoneOtpLoading(false)
     }
   }
 
   const handleVerifyPhoneOtp = async () => {
-    if (!phoneOtp || phoneOtp.length < 6) {
+    if (!/^\d{6}$/.test(phoneOtp)) {
       setPhoneOtpError('Enter the 6-digit code')
       return
     }
-    if (!confirmationResult) {
-      setPhoneOtpError('Session expired. Request a new code.')
-      setPhoneOtpSent(false)
+    const check = validatePhone(selectedCountry.dialCode, phoneNumber, selectedCountry.name)
+    if (!check.ok) {
+      setPhoneOtpError(check.message || 'Check your phone number and request a new code.')
+      resetPhoneCode()
       return
     }
     setPhoneOtpLoading(true)
     setPhoneOtpError('')
     try {
-      await confirmationResult.confirm(phoneOtp)
-      rememberUser(auth.currentUser)
-      void routeAfterSignIn()
-    } catch (err: any) {
-      console.error('Phone OTP verify error:', err)
-      if (err?.code === 'auth/invalid-verification-code') {
-        setPhoneOtpError('Wrong code. Check and try again.')
-      } else if (err?.code === 'auth/code-expired') {
-        setPhoneOtpError('Code expired. Request a new one.')
-        setPhoneOtpSent(false)
-        setConfirmationResult(null)
-      } else {
-        setPhoneOtpError('Verification failed. Try again.')
+      const verified = await verifyOtp(formatFull(selectedCountry.dialCode, check.digits), phoneOtp)
+      if (!verified.ok) {
+        setPhoneOtpError(verified.error)
+        return
       }
+      await signInWithCustomToken(auth, verified.token)
+      rememberUser(auth.currentUser)
+      trackEvent('phone_verified', { country: selectedCountry.name, method: 'phone-signin' })
+      void routeAfterSignIn()
+    } catch (err) {
+      console.warn('Phone verification failed:', err)
+      setPhoneOtpError('Verification failed. Please try again.')
     } finally {
       setPhoneOtpLoading(false)
     }
@@ -396,7 +402,7 @@ function SignIn() {
                           {COUNTRY_CODES.filter(c =>
                             !countrySearch || c.name.toLowerCase().includes(countrySearch.toLowerCase()) || c.dialCode.includes(countrySearch)
                           ).map(c => (
-                            <div key={c.dialCode} onClick={() => { setSelectedCountry(c); setShowCountryDropdown(false); setCountrySearch(''); }}
+                            <div key={c.dialCode} onClick={() => handleCountryChange(c)}
                               style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', cursor: 'pointer', fontSize: '13px', color: selectedCountry.dialCode === c.dialCode ? green : '#aaa', background: selectedCountry.dialCode === c.dialCode ? '#0a1a0a' : 'transparent' }}>
                               <span style={{ fontSize: '16px' }}>{c.flag}</span>
                               <span style={{ flex: 1 }}>{c.name}</span>
@@ -463,7 +469,7 @@ function SignIn() {
                       }}>
                       {phoneOtpLoading ? 'Verifying...' : 'Verify & Sign In'}
                     </button>
-                    <button onClick={() => { setPhoneOtpSent(false); setPhoneOtp(''); setConfirmationResult(null); setPhoneOtpError('') }}
+                    <button onClick={resetPhoneCode}
                       style={{
                         padding: '12px 16px', background: 'transparent', color: '#888', border: '1px solid #333',
                         borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
@@ -473,8 +479,6 @@ function SignIn() {
                   </div>
                 </>
               )}
-              {/* reCAPTCHA container (invisible) */}
-              <div id="phone-recaptcha-container" />
             </div>
 
             {/* Guest Button — the market is open without an account */}

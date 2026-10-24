@@ -38,7 +38,12 @@ check('Google and phone are both still reachable', () => {
   const signIn = src('SignIn.tsx')
   assert.ok(/Continue with Google/.test(signIn))
   assert.ok(/Sign in with phone number/.test(signIn))
-  assert.ok(/signInWithPhoneNumber/.test(signIn))
+  // The phone path asks *our* server for the code and verifies it there, so the same proof feeds
+  // the 🟢 badge and the sign-in. It must not fall back to Firebase's browser SMS.
+  assert.ok(/await sendOtp\(/.test(signIn), 'the sign-in phone path must ask our server for the code')
+  assert.ok(/await verifyOtp\(/.test(signIn), 'the sign-in phone path must have our server check the code')
+  assert.ok(/await signInWithCustomToken\(auth,\s*verified\.token\)/.test(signIn), 'the server-minted token must become the session')
+  assert.ok(!/signInWithPhoneNumber|RecaptchaVerifier|recaptcha-container/.test(signIn), 'no browser-side SMS widget belongs in the phone path')
   // A shop can hand over to the same phone flow and come back to the shop.
   assert.ok(/Continue with phone number/.test(src('TopNav.tsx')), 'the login modal must offer phone directly')
   const store = src('StorePage.tsx')

@@ -37,6 +37,7 @@ import { useViewHistory } from './useViewHistory'
 import ConfirmDialog from './ConfirmDialog'
 import NameStrip from './NameStrip'
 import DataSaverCard from './DataSaverCard'
+import AccountNewsCard from './AccountNewsCard'
 
 const green = '#adff2f'
 
@@ -125,6 +126,10 @@ function ProfilePage() {
         <p style={{ margin: '0 0 18px', color: '#888', fontSize: 13 }}>
           What rachett knows about you, where it keeps it, and how to change it.
         </p>
+
+        {/* The permanent door to account news, the nine-day phone reminder and friend discovery.
+            It belongs near the top of the buyer's own page, not buried in a menu. */}
+        <AccountNewsCard />
 
         {/* Who we think you are */}
         <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 14 }}>
