@@ -17,6 +17,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import sendOtp from '../api/otp/send.js'
 import verifyOtp from '../api/otp/verify.js'
+import payoutMethods from '../api/payout/methods.js'
 import matchContacts from '../api/contacts/match.js'
 
 const PORT = Number(process.env.PORT) || 3001
@@ -24,6 +25,7 @@ const PORT = Number(process.env.PORT) || 3001
 const ROUTES = {
   '/api/otp/send': sendOtp,
   '/api/otp/verify': verifyOtp,
+  '/api/payout/methods': payoutMethods,
   '/api/contacts/match': matchContacts,
 }
 
@@ -97,6 +99,7 @@ server.listen(PORT, () => {
 
   console.log(`rachett OTP api on http://localhost:${PORT}`)
   console.log('  sms:     Yoola for +256 +254 +255 +250 +265 +260; eSMS Africa for every other country')
+  console.log('  payouts: /api/payout/methods verifies a seller number, then saves it server-side')
   console.log(`  ready:   ${ready.join(', ') || 'nothing yet'}`)
   console.log(`  missing: ${missing.join(', ') || 'nothing — you are fully switched on'}`)
   if (missing.length) {

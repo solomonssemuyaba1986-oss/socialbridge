@@ -20,12 +20,19 @@ service cloud.firestore {
       // `recomputeSellerRating` (Cloud Functions) only, because a shop that could write them could
       // award itself ★ 5.0 without a single customer — the exact forgery the badge above was fixed
       // for. The keys are refused outright, on create and on update.
+      //
+      // `paymentMethods` is the same bargain for payouts: it says which rails are on, and a rail
+      // may only be on when `/api/payout/methods` has proved its number with an SMS code. The
+      // browser cannot write this field at all, and it never carries the number itself — that
+      // lives in `payoutAccounts/{uid}` below, closed to everyone but its owner and the server.
       allow create: if request.auth.uid == sellerId
         && !request.resource.data.keys()
-             .hasAny(['phoneVerified', 'ratingAvg', 'ratingCount', 'ratingUpdatedAt']);
+             .hasAny(['phoneVerified', 'ratingAvg', 'ratingCount', 'ratingUpdatedAt',
+                      'paymentMethods', 'paymentMethodsUpdatedAt']);
       allow update: if request.auth.uid == sellerId
         && !request.resource.data.diff(resource.data).affectedKeys()
-             .hasAny(['phoneVerified', 'ratingAvg', 'ratingCount', 'ratingUpdatedAt']);
+             .hasAny(['phoneVerified', 'ratingAvg', 'ratingCount', 'ratingUpdatedAt',
+                      'paymentMethods', 'paymentMethodsUpdatedAt']);
       allow delete: if request.auth.uid == sellerId;
 
       match /products/{productId} {
@@ -297,6 +304,18 @@ service cloud.firestore {
       // phone number — only the fact of the proof, a timestamp, and which flow made it. The number
       // itself lives nowhere the browser can read it.
       allow read: if true;
+      allow write: if false;
+    }
+
+    // ── 💸 A seller's verified payout numbers ──────────────────────────────────
+    //
+    // The number a payout goes to is more sensitive than the shop's public contact number, so it
+    // does not live on `sellers/{uid}`. Only `/api/payout/methods` writes here, and only after a
+    // code texted to that number came back correct. The seller may read their own record so the
+    // Payouts page can show what it saved; nobody else — not another seller, not a buyer, not a
+    // visitor — can. `firebase-admin` bypasses rules, which is the separation being drawn.
+    match /payoutAccounts/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
       allow write: if false;
     }
 

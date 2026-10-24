@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { auth, db } from './firebase'
-import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore'
+import { doc, getDoc } from 'firebase/firestore'
 import { COUNTRY_CODES, type CountryCode } from './countryCodes'
-import { validatePhone } from './phone'
+import { formatFull, normaliseNational, validatePhone } from './phone'
+import PayoutNumberField from './PayoutNumberField'
+import { savePayoutMethods, type PayoutMethod } from './payoutClient'
 
 const green = '#adff2f'
 
@@ -11,30 +13,32 @@ const green = '#adff2f'
 type MethodId = 'mtn' | 'airtel' | 'card'
 
 interface MethodShape {
-  enabled: boolean
-  number: string
+  enabled?: boolean
+  /** Legacy, browser-written copy. The new UI never displays this as proof. */
+  number?: string
+  verified?: boolean
+  verifiedAt?: number
 }
 
-/**
- * What gets written to the seller's own document.
- *
- * A `paymentMethods` **field** on `sellers/{uid}`, not a `sellers/{uid}/paymentMethods/{id}`
- * subcollection — and that is deliberate: the existing rules already let a seller write their own
- * document (`allow write: if request.auth.uid == sellerId`), so this works **with no rules change
- * and no deploy**. A subcollection would need its own match block and a `deploy:rules` first.
- *
- * The shape is exactly the one asked for, with nothing added inside it:
- *
- *   { mtn: { enabled: true, number: "07…" }, airtel: { enabled: false, number: "" },
- *     card: { enabled: false } }
- */
-function methodsToStore(mtnOn: boolean, mtnNumber: string, airtelOn: boolean, airtelNumber: string) {
-  return {
-    mtn: { enabled: mtnOn, number: mtnOn ? mtnNumber.trim() : '' },
-    airtel: { enabled: airtelOn, number: airtelOn ? airtelNumber.trim() : '' },
-    // Card is not a choice yet: always off until cards are live for this store.
-    card: { enabled: false },
-  }
+interface VerifiedAccount {
+  number: string
+  verifiedAt?: number
+}
+
+interface VerifiedAccounts {
+  mtn?: VerifiedAccount
+  airtel?: VerifiedAccount
+}
+
+const METHODS: PayoutMethod[] = ['mtn', 'airtel']
+const METHOD_NAMES: Record<PayoutMethod, string> = {
+  mtn: 'MTN MoMo',
+  airtel: 'Airtel Money',
+}
+
+/** The number as the local field shows it: national digits, ready for `validatePhone` again. */
+function nationalInput(number: string, dial: string): string {
+  return normaliseNational(number, dial) || number.replace(/^\+/, '')
 }
 
 /** A thumb-sized switch. Nothing like it existed, so it lives here instead of in six files. */
@@ -90,78 +94,145 @@ export default function PaymentSetup() {
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
 
-  /** The form is filled from the store exactly once — a later snapshot must not overwrite typing. */
-  const filledRef = useRef(false)
+  /** The numbers the server has proved. No local flag can put a number in here. */
+  const [verified, setVerified] = useState<VerifiedAccounts>({})
 
   useEffect(() => {
     if (!uid) { navigate('/'); return }
-    const unsub = onSnapshot(doc(db, 'sellers', uid), (snap) => {
-      if (!snap.exists()) { setLoading(false); return }
-      const data = snap.data() as {
-        paymentMethods?: Partial<Record<MethodId, MethodShape>>
-        nationality?: string
-      }
+    let alive = true
 
-      // The seller's country decides which number is expected, read the same way EditStore reads
-      // it: by name, falling back to the Uganda default rather than leaving the field ambiguous.
-      const byName = COUNTRY_CODES.find(c => c.name === (data.nationality || '').trim())
-      if (byName) setCountry(byName)
+    const load = async () => {
+      try {
+        // The public seller document holds the switches. The private account document holds the
+        // verified numbers — so a number cannot be read by every visitor to the shop.
+        const [sellerSnap, accountSnap] = await Promise.all([
+          getDoc(doc(db, 'sellers', uid)),
+          getDoc(doc(db, 'payoutAccounts', uid)).catch((err) => {
+            console.warn('Could not read verified payout numbers:', err)
+            return null
+          }),
+        ])
+        if (!alive) return
+        if (!sellerSnap.exists()) { setLoading(false); return }
 
-      if (!filledRef.current) {
+        const data = sellerSnap.data() as {
+          paymentMethods?: Partial<Record<MethodId, MethodShape>>
+          nationality?: string
+        }
+
+        // The seller's country decides which number is expected, read the same way EditStore reads
+        // it: by name, falling back to Uganda rather than leaving the field ambiguous.
+        const byName = COUNTRY_CODES.find(c => c.name === (data.nationality || '').trim())
+        const chosen = byName
+          || COUNTRY_CODES.find(c => c.dialCode === '+256')
+          || COUNTRY_CODES[0]
+        setCountry(chosen)
+
         const methods = data.paymentMethods || {}
-        const mtn = methods.mtn || { enabled: false, number: '' }
-        const airtel = methods.airtel || { enabled: false, number: '' }
-        setMtnOn(Boolean(mtn.enabled))
-        setMtnNumber(mtn.number || '')
-        setAirtelOn(Boolean(airtel.enabled))
-        setAirtelNumber(airtel.number || '')
-        filledRef.current = true
+        const account = (accountSnap?.data() || {}) as VerifiedAccounts
+        const clean: VerifiedAccounts = {}
+        for (const method of METHODS) {
+          const entry = account[method]
+          const at = Number(entry?.verifiedAt)
+          if (entry && typeof entry.number === 'string' && entry.number && Number.isFinite(at) && at > 0) {
+            clean[method] = { number: entry.number, verifiedAt: at }
+          }
+        }
+        setVerified(clean)
+
+        setMtnOn(methods.mtn?.enabled === true)
+        setMtnNumber(nationalInput(clean.mtn?.number || methods.mtn?.number || '', chosen.dialCode))
+        setAirtelOn(methods.airtel?.enabled === true)
+        setAirtelNumber(nationalInput(clean.airtel?.number || methods.airtel?.number || '', chosen.dialCode))
+        setLoading(false)
+      } catch (err) {
+        console.error('Could not read payout settings:', err)
+        if (alive) {
+          setError('We could not load your payout settings. Try again in a moment.')
+          setLoading(false)
+        }
       }
-      setLoading(false)
-    }, (err) => {
-      console.error('Could not read payment methods:', err)
-      setError('We could not load your payment settings. Try again in a moment.')
-      setLoading(false)
-    })
-    return unsub
+    }
+
+    void load()
+    return () => { alive = false }
   }, [uid, navigate])
 
   const dial = country.dialCode.replace(/[^+\d]/g, '')
-  const mtnCheck = validatePhone(dial, mtnNumber, country.name)
-  const airtelCheck = validatePhone(dial, airtelNumber, country.name)
+
+  /** The full number this rail currently shows, if it passes the country rule. */
+  const fullFor = (method: PayoutMethod): string => {
+    const raw = method === 'mtn' ? mtnNumber : airtelNumber
+    const check = validatePhone(dial, raw, country.name)
+    return check.ok ? formatFull(dial, check.digits) : ''
+  }
+
+  /** True only when the box holds the exact number the server proved for this rail. */
+  const isVerifiedNow = (method: PayoutMethod): boolean => {
+    const full = fullFor(method)
+    return Boolean(full && verified[method]?.number === full)
+  }
+
+  const choose = (method: PayoutMethod, next: boolean) => {
+    if (method === 'mtn') setMtnOn(next)
+    else setAirtelOn(next)
+    setSaved(false)
+    setError('')
+  }
+
+  const handleVerified = (method: PayoutMethod, result: { phone: string; verifiedAt: number }) => {
+    setVerified(previous => ({
+      ...previous,
+      [method]: { number: result.phone, verifiedAt: result.verifiedAt },
+    }))
+    const local = nationalInput(result.phone, dial)
+    if (method === 'mtn') {
+      setMtnNumber(local)
+      setMtnOn(true)
+    } else {
+      setAirtelNumber(local)
+      setAirtelOn(true)
+    }
+    setSaved(false)
+    setError('')
+  }
 
   const handleSave = async () => {
     setError('')
     setSaved(false)
 
-    // The rule that was asked for, word for word.
     if (!mtnOn && !airtelOn) {
       setError('Enable at least one payment method to go live.')
       return
     }
-    // And the one that protects the seller from themselves: an enabled rail with no number on it is
-    // a payment that can never arrive.
-    if (mtnOn && !mtnCheck.ok) {
-      setError(`That MTN number does not look right. ${mtnCheck.message || ''}`.trim())
-      return
-    }
-    if (airtelOn && !airtelCheck.ok) {
-      setError(`That Airtel number does not look right. ${airtelCheck.message || ''}`.trim())
+    // An enabled rail with no code behind it is a payout that can never be trusted. The server
+    // checks this too; saying it here means the seller is not sent on a round trip to learn it.
+    const missing = METHODS.filter(method => (
+      (method === 'mtn' ? mtnOn : airtelOn) && !isVerifiedNow(method)
+    ))
+    if (missing.length) {
+      const names = missing.map(method => METHOD_NAMES[method])
+      setError(`Verify your ${names.join(' and ')} number with the code before saving.`)
       return
     }
     if (!uid) { navigate('/'); return }
 
+    const user = auth.currentUser
+    if (!user) { setError('Sign in again to save your payout settings.'); return }
+
     setSaving(true)
     try {
-      // `setDoc` with merge rather than `updateDoc`: a field can never fail because the document was
-      // not shaped the way we assumed.
-      await setDoc(doc(db, 'sellers', uid), {
-        paymentMethods: methodsToStore(mtnOn, mtnNumber, airtelOn, airtelNumber),
-        paymentMethodsUpdatedAt: serverTimestamp(),
-      }, { merge: true })
+      const result = await savePayoutMethods(
+        { mtn: mtnOn, airtel: airtelOn },
+        { idToken: await user.getIdToken() },
+      )
+      if (!result.ok) {
+        setError(result.error)
+        return
+      }
       setSaved(true)
     } catch (err) {
-      console.error('Saving payment methods failed:', err)
+      console.error('Saving payout settings failed:', err)
       setError('We could not save that. Check your connection and try again.')
     } finally {
       setSaving(false)
@@ -179,7 +250,8 @@ export default function PaymentSetup() {
 
         <h1 style={{ margin: '0 0 6px', fontSize: 24, fontWeight: 800 }}>💸 How you get paid</h1>
         <p style={{ margin: '0 0 6px', color: '#888', fontSize: 14, lineHeight: 1.6 }}>
-          Turn on the ways your buyers can pay you.
+          Turn on the ways your buyers can pay you. Every payout number is proved with a texted
+          code before rachett keeps it.
         </p>
         <p style={{ margin: '0 0 20px', color: '#666', fontSize: 12, lineHeight: 1.5 }}>
           Numbers are for {country.flag} {country.name} ({country.dialCode}) — change your country in
@@ -196,31 +268,24 @@ export default function PaymentSetup() {
                 <span aria-hidden="true" style={{ fontSize: 22 }}>📱</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>MTN MoMo</p>
-                  <p style={{ margin: '2px 0 0', color: '#888', fontSize: 12 }}>Buyers approve on their own phone</p>
-                </div>
-                <Toggle on={mtnOn} label="Accept MTN MoMo" onChange={setMtnOn} />
-              </div>
-              {mtnOn && (
-                <div style={{ marginTop: 14 }}>
-                  <label htmlFor="mtn-number" style={{ display: 'block', fontSize: 12, color: '#aaa', fontWeight: 700, marginBottom: 6 }}>
-                    MTN number that receives payments
-                  </label>
-                  <input
-                    id="mtn-number"
-                    type="tel"
-                    inputMode="tel"
-                    autoComplete="tel"
-                    placeholder="07XX XXX XXX"
-                    value={mtnNumber}
-                    onChange={e => setMtnNumber(e.target.value)}
-                    style={inputStyle}
-                  />
-                  <p style={{ margin: '6px 0 0', color: mtnNumber && !mtnCheck.ok ? '#ff6b6b' : '#666', fontSize: 12, lineHeight: 1.5 }}>
-                    {mtnNumber && !mtnCheck.ok
-                      ? mtnCheck.message
-                      : `We add ${country.dialCode} for you — type it without the leading 0.`}
+                  <p style={{ margin: '2px 0 0', color: '#888', fontSize: 12 }}>
+                    Buyers approve on their own phone
                   </p>
                 </div>
+                <Toggle on={mtnOn} label="Accept MTN MoMo" onChange={next => choose('mtn', next)} />
+              </div>
+              {mtnOn && (
+                <PayoutNumberField
+                  idPrefix="payout-mtn"
+                  method="mtn"
+                  label="MTN number that receives payments"
+                  country={country}
+                  value={mtnNumber}
+                  onChange={value => { setMtnNumber(value); setSaved(false); setError('') }}
+                  verified={verified.mtn}
+                  onVerified={result => handleVerified('mtn', result)}
+                  disabled={saving}
+                />
               )}
             </div>
 
@@ -230,31 +295,24 @@ export default function PaymentSetup() {
                 <span aria-hidden="true" style={{ fontSize: 22 }}>📶</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>Airtel Money</p>
-                  <p style={{ margin: '2px 0 0', color: '#888', fontSize: 12 }}>Buyers approve on their own phone</p>
-                </div>
-                <Toggle on={airtelOn} label="Accept Airtel Money" onChange={setAirtelOn} />
-              </div>
-              {airtelOn && (
-                <div style={{ marginTop: 14 }}>
-                  <label htmlFor="airtel-number" style={{ display: 'block', fontSize: 12, color: '#aaa', fontWeight: 700, marginBottom: 6 }}>
-                    Airtel number that receives payments
-                  </label>
-                  <input
-                    id="airtel-number"
-                    type="tel"
-                    inputMode="tel"
-                    autoComplete="tel"
-                    placeholder="07XX XXX XXX"
-                    value={airtelNumber}
-                    onChange={e => setAirtelNumber(e.target.value)}
-                    style={inputStyle}
-                  />
-                  <p style={{ margin: '6px 0 0', color: airtelNumber && !airtelCheck.ok ? '#ff6b6b' : '#666', fontSize: 12, lineHeight: 1.5 }}>
-                    {airtelNumber && !airtelCheck.ok
-                      ? airtelCheck.message
-                      : `We add ${country.dialCode} for you — type it without the leading 0.`}
+                  <p style={{ margin: '2px 0 0', color: '#888', fontSize: 12 }}>
+                    Buyers approve on their own phone
                   </p>
                 </div>
+                <Toggle on={airtelOn} label="Accept Airtel Money" onChange={next => choose('airtel', next)} />
+              </div>
+              {airtelOn && (
+                <PayoutNumberField
+                  idPrefix="payout-airtel"
+                  method="airtel"
+                  label="Airtel number that receives payments"
+                  country={country}
+                  value={airtelNumber}
+                  onChange={value => { setAirtelNumber(value); setSaved(false); setError('') }}
+                  verified={verified.airtel}
+                  onVerified={result => handleVerified('airtel', result)}
+                  disabled={saving}
+                />
               )}
             </div>
 
@@ -287,18 +345,20 @@ export default function PaymentSetup() {
             )}
             {saved && !error && (
               <p role="status" style={{ margin: '16px 0 0', padding: '12px 14px', borderRadius: 12, background: '#122a0d', border: `1px solid ${green}`, color: '#d6ffb0', fontSize: 13, lineHeight: 1.5 }}>
-                Saved. Buyers will see this as soon as mobile money is switched on for your account.
+                Saved. Your verified payout numbers are on your account, and buyers can pay you
+                with the methods you switched on.
               </p>
             )}
 
             <button onClick={handleSave} disabled={saving}
               style={{ width: '100%', marginTop: 18, padding: '16px', borderRadius: 14, border: 'none', background: saving ? '#3a4d2a' : green, color: '#000', fontWeight: 800, fontSize: 16, cursor: saving ? 'not-allowed' : 'pointer' }}>
-              {saving ? 'Saving…' : 'Save payment methods'}
+              {saving ? 'Saving…' : 'Save payout settings'}
             </button>
 
             <p style={{ margin: '14px 0 0', color: '#555', fontSize: 12, lineHeight: 1.5 }}>
               Mobile money runs on pawaPay and cards on Pesapal. You will never be asked for card
-              details here, and no payment key ever reaches this page.
+              details here, and no payment key ever reaches this page. A verified payout number
+              stays on your account — it is never shown on your public shop page.
             </p>
           </>
         )}
@@ -313,16 +373,4 @@ const cardStyle: CSSProperties = {
   borderRadius: 16,
   padding: 16,
   marginBottom: 12,
-}
-
-const inputStyle: CSSProperties = {
-  width: '100%',
-  boxSizing: 'border-box',
-  padding: '14px',
-  borderRadius: 12,
-  border: '1px solid #333',
-  background: '#111',
-  color: '#fff',
-  fontSize: 16,
-  outline: 'none',
 }
