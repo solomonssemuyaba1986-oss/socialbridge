@@ -36,3 +36,4 @@ training-data
 *.sln
 *.sw?
 .secrets/
+.env.local
