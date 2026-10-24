@@ -1,12 +1,12 @@
 /**
- * Dev-only harness for the "New seller" badge — the 30-day window and the three pages that show it.
+ * Dev-only harness for the "New seller" badge — the three-day window and the three pages that show it.
  *
  *   npx tsc --ignoreConfig src/sellerAge.ts src/productCardUtils.ts --outDir _dsbuild --module commonjs --target es2020 --skipLibCheck
  *   Move-Item -Force _dsbuild/sellerAge.js _dsbuild/sellerAge.cjs
  *   node _sellerage_check.cjs
  *
  * The badge is a claim about a real shop, so the rule is pinned at both edges (a shop opened
- * 29 d 23 h ago is new; exactly 30 d is not) and for every way a date can be missing or wrong.
+ * 2 d 23 h ago is new; exactly 3 d is not) and for every way a date can be missing or wrong.
  * The wiring checks are just as important: a badge that appears on your own listing, or that
  * only one of Browse's two grids draws, is a bug no build log would mention.
  */
@@ -47,13 +47,13 @@ const DAY = 24 * HOUR
 
 // -- the rule -------------------------------------------------------------------------------
 
-check('a shop is "new" for one month exactly', () => {
-  assert.strictEqual(NEW_SELLER_DAYS, 30)
+check('a shop is "new" for three days exactly', () => {
+  assert.strictEqual(NEW_SELLER_DAYS, 3)
   assert.strictEqual(isNewSeller(NOW, NOW), true)
-  assert.strictEqual(isNewSeller(NOW - 29 * DAY - 23 * HOUR, NOW), true)
-  assert.strictEqual(isNewSeller(NOW - 30 * DAY + 1, NOW), true)
-  assert.strictEqual(isNewSeller(NOW - 30 * DAY, NOW), false)
-  assert.strictEqual(isNewSeller(NOW - 30 * DAY - 1, NOW), false)
+  assert.strictEqual(isNewSeller(NOW - 2 * DAY - 23 * HOUR, NOW), true)
+  assert.strictEqual(isNewSeller(NOW - 3 * DAY + 1, NOW), true)
+  assert.strictEqual(isNewSeller(NOW - 3 * DAY, NOW), false)
+  assert.strictEqual(isNewSeller(NOW - 3 * DAY - 1, NOW), false)
   assert.strictEqual(isNewSeller(NOW - 365 * DAY, NOW), false)
 })
 
@@ -119,10 +119,28 @@ check('the badge rests on the shared date reader', () => {
   assert.ok(src.includes('return age >= 0 && age < NEW_SELLER_DAYS * 24 * 60 * 60 * 1000'))
 })
 
+check('the product count is read before orders, so a buyer can still earn the badge a view', () => {
+  const src = read('src/useSellerStats.ts')
+  const productsAt = src.indexOf("collection(db, 'sellers', sid, 'products')")
+  const ordersAt = src.indexOf("collection(db, 'sellers', sid, 'orders')")
+  assert.ok(productsAt > 0 && ordersAt > 0)
+  assert.ok(productsAt < ordersAt, 'the public product read must not sit behind the private order read')
+  assert.ok(src.includes("could not read the public products"), 'the two reads need separate failures')
+})
+
+check('trust badges are visible to buyers, in the thread, and to the seller themselves', () => {
+  for (const file of ['src/ProductSheet.tsx', 'src/ConversationPanel.tsx', 'src/Dashboard.tsx', 'src/StorePage.tsx']) {
+    assert.ok(read(file).includes('SellerTrustBadges'), `${file} does not render the seller badges`)
+  }
+  const component = read('src/SellerTrustBadges.tsx')
+  assert.ok(component.includes('Real Seller') && component.includes('Reliable Seller'))
+  assert.ok(component.includes('showEmpty'), 'the seller must be able to see the absence and work toward it')
+})
+
 check('DATA_COLLECTION says where the badge comes from', () => {
   const doc = read('DATA_COLLECTION.md')
   assert.match(doc, /"New seller"\*\* badge/)
-  assert.ok(doc.includes('under 30 days old, and never on your own products'))
+  assert.ok(doc.includes('under 3 days old, and never on your own products'))
 })
 
 console.log(`\n  ${checks} new-seller checks passed\n`)

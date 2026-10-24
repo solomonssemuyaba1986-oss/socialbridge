@@ -14,6 +14,7 @@ import { BROWSE, MY_ORDERS } from './sellerNav'
 import { variantLabel } from './productSheetUtils'
 import { getStoreAgeLabel, useSellerStats } from './useSellerStats'
 import ReliableBadgeCard from './ReliableBadgeCard'
+import SellerTrustBadges from './SellerTrustBadges'
 import { resolveSellerLocation, type GeoSource, type Place } from './place'
 import ViewHistory from './ViewHistory'
 import { useViewHistory } from './useViewHistory'
@@ -269,7 +270,7 @@ const paidPending = paidCount(pendingOrders)
       {/* The seller's own door to making something — the ＋ that floats where a buyer's bag floats. */}
       <FloatingStudio />
 
-      <div className="rt-main rt-has-tabs" style={{ width: '100%', marginLeft: 260, padding: '32px 28px', minHeight: '100vh' }}>
+      <div className="rt-main rt-has-tabs" style={{ width: '100%', marginLeft: 'var(--seller-nav-width, 260px)', transition: 'margin-left 0.22s ease', padding: '32px 28px', minHeight: '100vh' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <button
@@ -314,6 +315,31 @@ const paidPending = paidCount(pendingOrders)
           </div>
         </div>
         <div className="rt-container" style={{ maxWidth: '100%', margin: '0', padding: 0 }}>
+
+        {/* 🟢💎 The badges buyers see — shown to the seller too, so there is something to aim at. */}
+        <div style={{ background: '#141414', border: '1px solid #222', borderRadius: 14, padding: '16px 18px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+            <div>
+              <p style={{ margin: '0 0 8px', fontSize: 15, fontWeight: 800 }}>Your badges</p>
+              <SellerTrustBadges
+                realSeller={reliableStats.realSellerBadge}
+                realSellerStatus={reliableStats.realSellerBadgeStatus}
+                reliableSeller={reliableStats.reliableSellerBadge}
+                reliableSellerStatus={reliableStats.reliableSellerBadgeStatus}
+                showEmpty
+              />
+            </div>
+            {!reliableStats.realSellerBadge && (
+              <button onClick={() => navigate('/edit-store')}
+                style={{ padding: '8px 12px', background: green, color: '#000', border: 'none', borderRadius: 9, fontWeight: 800, cursor: 'pointer', fontSize: 12 }}>
+                Complete your shop →
+              </button>
+            )}
+          </div>
+          <p style={{ margin: '10px 0 0', color: '#888', fontSize: 12.5, lineHeight: 1.55 }}>
+            Buyers see these on your shop and in your chats. 🟢 Real Seller needs a verified phone and a complete profile; 💎 Reliable Seller is measured by rachett from finished orders and fast first replies.
+          </p>
+        </div>
 
         {/* 💎 Reliable Seller progress — the seller's own view of the badge buyers see. */}
         <ReliableBadgeCard

@@ -16,6 +16,8 @@ import RatePrompt from './RatePrompt'
 import ReviewForm from './ReviewForm'
 import { type Score } from './reviewUtils'
 import PawapayCheckout, { type Stage } from './PawapayCheckout'
+import { useSellerStats } from './useSellerStats'
+import SellerTrustBadges from './SellerTrustBadges'
 
 const green = '#adff2f'
 
@@ -44,6 +46,8 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
    * listener is off for them — and an old shop with no `lastSeen` simply shows nothing.
    */
   const sellerPresence = useSellerPresence(sellerId, !meIsSeller)
+  /** The shop's badges, so a buyer can see the seller's record without leaving the thread. */
+  const { stats: sellerStats } = useSellerStats(sellerId)
   const { text, setText, clearDraft } = useDraft(
     conversationId ? `convo_${conversationId}` : 'none',
     {
@@ -70,11 +74,25 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
   const [orderMessage, setOrderMessage] = useState('')
   const [orderSuccess, setOrderSuccess] = useState(false)
   const [orderRef, setOrderRef] = useState('')
+  /** The Firestore document id — what pawaPay needs; `orderRef` is the human RT-XXXXXX. */
+  const [orderDocIdForPay, setOrderDocIdForPay] = useState('')
   /**
    * The quantity the order was actually placed for. The form's own box is cleared once the order is
    * in, so without this the payment step would price a 3-item order as a 1-item one.
    */
   const [placedQuantity, setPlacedQuantity] = useState('1')
+  /**
+   * A product bubble can be about something other than the thread's current listing (a stock
+   * request, or what the seller quoted earlier). When Buy is tapped on that bubble, this carries
+   * *that* product into the same in-chat checkout.
+   */
+  const [orderBubble, setOrderBubble] = useState<{
+    productId?: string
+    productName?: string
+    productPrice?: string
+    productImage?: string
+    quantity?: string
+  } | null>(null)
   /** Where the payment step has got to, or null if the buyer has not opened it. */
   const [payStage, setPayStage] = useState<Stage | null>(null)
   const [feedbackMessage, setFeedbackMessage] = useState('')
@@ -114,20 +132,28 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
       showFeedback(notify.orderDeliveryRequired, 'error')
       return
     }
-    if (!productName || !productPrice) {
+    const item = orderBubble ?? {
+      productId,
+      productName,
+      productPrice,
+      productImage,
+      quantity,
+    }
+    if (!item.productName || !item.productPrice) {
       showFeedback(notify.orderSellerNotFound, 'error')
       return
     }
+    const orderQuantity = item.quantity || quantity || '1'
 
     try {
       const { orderRef: orderDocRef, orderId } = await createBuyerOrder(sellerId, {
         buyerName: shownBuyerName.trim(),
         buyerUid: buyerId,
-        productName,
-        productPrice,
-        productId,
-        productImage: productImage || '',
-        quantity,
+        productName: item.productName,
+        productPrice: item.productPrice,
+        productId: item.productId,
+        productImage: item.productImage || '',
+        quantity: orderQuantity,
         deliveryArea,
         status: 'pending',
         read: false,
@@ -135,12 +161,13 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
         createdAt: new Date(),
       })
 
-      if (productId) {
-        await incrementProductOrderCount(sellerId, productId, orderCount || 0)
+      if (item.productId) {
+        await incrementProductOrderCount(sellerId, item.productId, orderCount || 0)
       }
 
       setOrderRef(orderId || '')
-      setPlacedQuantity(quantity)
+      setOrderDocIdForPay(orderDocRef.id)
+      setPlacedQuantity(orderQuantity)
       setOrderSuccess(true)
       showFeedback(notify.orderSent, 'success')
 
@@ -154,10 +181,10 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
         // The document id rides along, so the receipt bubble can later prove the purchase and
         // offer the rating with one tap.
         orderDocId: orderDocRef.id,
-        productId,
-        productName: productName || '',
-        productPrice: productPrice || '',
-        quantity,
+        productId: item.productId,
+        productName: item.productName || '',
+        productPrice: item.productPrice || '',
+        quantity: orderQuantity,
       })
 
       // The order is in. The sheet now stays open on the "pay" step instead of closing itself —
@@ -175,6 +202,8 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
     setShowOrderModal(false)
     setOrderSuccess(false)
     setOrderRef('')
+    setOrderDocIdForPay('')
+    setOrderBubble(null)
     setPlacedQuantity('1')
     setPayStage(null)
     setBuyerNameOrder(''); setQuantity('1'); setDeliveryArea(''); setOrderMessage('')
@@ -340,6 +369,14 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
     return newest as { orderDocId: string; orderId?: string; productId: string; productName?: string }
   }, [messages, meIsSeller])
 
+  /** What the in-chat checkout is currently selling: a bubble's product, or the thread's own. */
+  const activeOrderProduct = orderBubble ?? {
+    productId,
+    productName,
+    productPrice,
+    productImage,
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       <div style={{ borderBottom: '1px solid #222', paddingBottom: 12 }}>
@@ -349,6 +386,14 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
         <div style={{ fontSize: 13, color: '#888', marginTop: 4 }}>
           Chat with {meIsSeller ? (buyerName || 'the buyer') : (sellerName || 'the seller')}
         </div>
+        <SellerTrustBadges
+          size="sm"
+          realSeller={sellerStats.realSellerBadge}
+          realSellerStatus={sellerStats.realSellerBadgeStatus}
+          reliableSeller={sellerStats.reliableSellerBadge}
+          reliableSellerStatus={sellerStats.reliableSellerBadgeStatus}
+          style={{ marginTop: 8 }}
+        />
         {/* 🟢 Active-seller badge — the one thing a buyer wants to know before waiting on an
             answer. Shown only when the shop has ever said hello, so "unknown" never reads as
             "offline". */}
@@ -565,6 +610,23 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
                       {m.productPrice && <div style={{ color: green, fontWeight: 800, fontSize: 13, marginTop: 2 }}>UGX {m.productPrice}</div>}
                     </div>
                   </div>
+                  {!meIsSeller && m.productName && m.productPrice && (
+                    <button
+                      onClick={() => {
+                        setOrderBubble({
+                          productId: m.productId,
+                          productName: m.productName,
+                          productPrice: m.productPrice,
+                          productImage: m.productImage || m.imageUrl,
+                          quantity: String(m.quantity || '1'),
+                        })
+                        setShowOrderModal(true)
+                      }}
+                      style={{ alignSelf: 'flex-start', padding: '7px 14px', background: green, color: '#000', border: 'none', borderRadius: 999, fontWeight: 800, fontSize: 12, cursor: 'pointer' }}
+                    >
+                      ⚡ Buy now
+                    </button>
+                  )}
                   {m.text && m.text !== '🛍️ Product' && m.text !== '📷 Photo' && (
                     <div style={{ maxWidth: '85%', background: '#111', color: '#eee', padding: '10px 14px', borderRadius: '4px 12px 12px 12px', borderTop: '1px solid #222', borderRight: '1px solid #222', borderBottom: '1px solid #222', borderLeft: `4px solid ${borderColor}`, fontSize: 14, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.text}</div>
                   )}
@@ -646,12 +708,22 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
           <QuickRepliesPanel isSeller={isSellerViewing} onPick={handleQuickReply} />
         )}
 
-        {/* Buy Now Button — only for the buyer (not the seller viewing their own conversation) */}
+        {/* Buy & Pay — only for the buyer, and without ever leaving this chat. */}
         {auth.currentUser && auth.currentUser.uid === buyerId && buyerId !== sellerId && productName && productPrice && (
-          <button onClick={() => setShowOrderModal(true)}
-            style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '12px', fontWeight: '700', cursor: 'pointer', fontSize: '15px' }}>
-            Place Order — UGX {productPrice}
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <button
+              onClick={() => {
+                setOrderBubble(null)
+                setShowOrderModal(true)
+              }}
+              style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '12px', fontWeight: 800, cursor: 'pointer', fontSize: '15px' }}
+            >
+              ⚡ Buy &amp; pay now — UGX {productPrice}
+            </button>
+            <p style={{ margin: 0, color: '#777', fontSize: 11, textAlign: 'center' }}>
+              The order, the payment and the receipt all stay in this conversation.
+            </p>
+          </div>
         )}
 
         {/* The rating, asked where the buyer already is. The receipt above asked first, so this one
@@ -724,14 +796,14 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
                 </p>
                 {/* Pay, right here. The order already exists, so the amount comes from the server's
                     own reading of it — this is the same step Browse shows after its order form. */}
-                {orderRef && (
+                {orderDocIdForPay && (
                   <PawapayCheckout
                     sellerId={sellerId}
                     sellerName={sellerName || 'Seller'}
-                    productName={productName || ''}
-                    productPrice={productPrice || ''}
+                    productName={activeOrderProduct.productName || ''}
+                    productPrice={activeOrderProduct.productPrice || ''}
                     quantity={placedQuantity}
-                    orderDocId={orderRef}
+                    orderDocId={orderDocIdForPay}
                     onStageChange={setPayStage}
                   />
                 )}
@@ -743,10 +815,13 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
             ) : (
               <>
                 <h3 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: '800', color: '#fff', textAlign: 'left' }}>
-                  Order {productName}
+                  Buy &amp; pay for {activeOrderProduct.productName}
                 </h3>
-                <p style={{ margin: '0 0 24px', color: green, fontSize: '14px', fontWeight: '700', textAlign: 'left' }}>
-                  UGX {productPrice} each
+                <p style={{ margin: '0 0 6px', color: green, fontSize: '14px', fontWeight: '700', textAlign: 'left' }}>
+                  UGX {activeOrderProduct.productPrice} each
+                </p>
+                <p style={{ margin: '0 0 20px', color: '#777', fontSize: 12, textAlign: 'left' }}>
+                  The order and the payment both happen in this chat.
                 </p>
                 <input placeholder="Your name" value={shownBuyerName} onChange={e => setBuyerNameOrder(e.target.value)}
                   style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '6px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff' }} />
@@ -760,8 +835,8 @@ export default function ConversationPanel({ sellerId, buyerId, sellerName, buyer
                 <textarea placeholder="Write a message to the seller (optional)" value={orderMessage} onChange={e => setOrderMessage(e.target.value)}
                   style={{ width: '100%', minHeight: '100px', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '24px', boxSizing: 'border-box', fontSize: '14px', background: '#111', color: '#fff', resize: 'vertical' }} />
                 <button onClick={handleBuyNow}
-                  style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
-                  Place Order
+                  style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: 800, cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
+                  Continue to payment
                 </button>
                 <button onClick={closeOrderSheet}
                   style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>

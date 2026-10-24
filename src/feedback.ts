@@ -27,8 +27,14 @@ export const FEEDBACK_CATEGORIES: { value: FeedbackCategory; label: string }[] =
   { value: 'Other', label: 'Something else' },
 ]
 
+/**
+ * Who they are. `user` is a real answer too: plenty of people are neither selling nor buying yet
+ * when something gets in their way, and forcing them into one of two boxes loses that feedback.
+ */
+export type FeedbackRole = 'seller' | 'buyer' | 'user'
+
 export interface FeedbackInput {
-  role: 'seller' | 'buyer'
+  role: FeedbackRole
   category: FeedbackCategory
   message: string
   name?: string

@@ -45,8 +45,8 @@ const ENTEBBE = { lat: 0.0512, lng: 32.4637 }  // ~35 km south
 
 const p = (over = {}) => ({ id: over.id || 'p', sellerId: over.sellerId || 's', price: '10000', ...over })
 
-check('every offered sort is one of the seven, in the order the select shows them', () => {
-  assert.deepStrictEqual(SORT_KEYS, ['relevance', 'price-asc', 'price-desc', 'popular', 'trending', 'newest', 'nearby'])
+check('every offered sort is one of the nine, in the order the select shows them', () => {
+  assert.deepStrictEqual(SORT_KEYS, ['relevance', 'most-loved', 'for-me', 'price-asc', 'price-desc', 'popular', 'trending', 'newest', 'nearby'])
   SORT_KEYS.forEach(key => assert.ok(SORT_LABELS[key] && SORT_LABELS[key].startsWith('Sort:'), key + ' has no words'))
   assert.strictEqual(new Set(SORT_KEYS).size, SORT_KEYS.length)
 })
@@ -56,6 +56,30 @@ check('"Most Popular" keeps the price-words label the page already showed', () =
   assert.strictEqual(SORT_LABELS['price-desc'], 'Sort: Price (High → Low)')
   assert.strictEqual(SORT_LABELS.popular, 'Sort: Most Popular')
   assert.strictEqual(SORT_LABELS.relevance, 'Sort: Relevance')
+  assert.strictEqual(SORT_LABELS['most-loved'], 'Sort: Most Loved')
+  assert.strictEqual(SORT_LABELS['for-me'], 'Sort: For Me')
+})
+
+check('"Most loved" orders by the public ♥ tally, and never mutates the list', () => {
+  const list = [
+    p({ id: 'quiet', likeCount: 0 }),
+    p({ id: 'loved', likeCount: 12 }),
+    p({ id: 'liked', likeCount: 3 }),
+  ]
+  assert.deepStrictEqual(sortProducts(list, 'most-loved').map(x => x.id), ['loved', 'liked', 'quiet'])
+  assert.deepStrictEqual(list.map(x => x.id), ['quiet', 'loved', 'liked'])
+})
+
+check('"For me" uses the page\'s personal signal first, then what is moving', () => {
+  const list = [
+    p({ id: 'ordinary', orderCount: 2 }),
+    p({ id: 'mine', orderCount: 0 }),
+    p({ id: 'moving', orderCount: 9 }),
+  ]
+  const boost = new Map([['mine', 10]])
+  assert.deepStrictEqual(sortProducts(list, 'for-me', { boost }).map(x => x.id), ['mine', 'moving', 'ordinary'])
+  // With no personal signal, the shelf is still useful rather than arbitrary.
+  assert.deepStrictEqual(sortProducts(list, 'for-me').map(x => x.id), ['moving', 'ordinary', 'mine'])
 })
 
 check('a price reads the same way everywhere — commas and currency words are not numbers', () => {
@@ -177,7 +201,7 @@ check('nearby with no area changes nothing rather than inventing distances', () 
 check('the location ask appears only for the sort that needs it', () => {
   assert.strictEqual(nearbyNeedsArea('nearby', false), true)
   assert.strictEqual(nearbyNeedsArea('nearby', true), false)
-  ;['relevance', 'price-asc', 'price-desc', 'popular', 'trending', 'newest'].forEach(key => {
+  ;['relevance', 'most-loved', 'for-me', 'price-asc', 'price-desc', 'popular', 'trending', 'newest'].forEach(key => {
     assert.strictEqual(nearbyNeedsArea(key, false), false, key + ' must never ask for location')
   })
   assert.ok(NEARBY_NO_AREA_HINT.includes('this phone'), 'the ask must say where the area is kept')
@@ -186,6 +210,8 @@ check('the location ask appears only for the sort that needs it', () => {
 check('a sort that needs explaining explains itself, and the quiet ones stay quiet', () => {
   assert.ok(sortWords('trending').includes('moving'))
   assert.ok(sortWords('popular').includes('moved'))
+  assert.ok(sortWords('most-loved').includes('♥'))
+  assert.ok(sortWords('for-me').includes('Your shelf'))
   assert.ok(sortWords('nearby').includes('Closest'))
   assert.strictEqual(sortWords('newest'), '')
   assert.strictEqual(sortWords('relevance'), '')

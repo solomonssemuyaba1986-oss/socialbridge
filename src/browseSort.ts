@@ -22,6 +22,8 @@ export interface SortableProduct {
   price?: string
   orderCount?: number
   salesCount?: number
+  /** ♥ The universal tally — what "Most loved" promises to order by. */
+  likeCount?: number
   /** Firestore Timestamp, ms number, or ISO string — whichever the document happens to hold. */
   createdAt?: unknown
   /** NearbyPage hands this in already converted; the module prefers it when present. */
@@ -36,6 +38,8 @@ export interface Point {
 
 export type SortKey =
   | 'relevance'
+  | 'most-loved'
+  | 'for-me'
   | 'price-asc'
   | 'price-desc'
   | 'popular'
@@ -43,11 +47,30 @@ export type SortKey =
   | 'newest'
   | 'nearby'
 
-/** The order the select shows them in: default first, then price, then movement, then place. */
-export const SORT_KEYS: SortKey[] = ['relevance', 'price-asc', 'price-desc', 'popular', 'trending', 'newest', 'nearby']
+/**
+ * The order the select shows them in: relevance first, then the two personal shelves, then price,
+ * movement, freshness and place.
+ *
+ * `for-me` is deliberately a real key from day one even though its signal is still the page's own
+ * personal boost: the option exists, it never breaks, and when a richer recommendation lands it
+ * slots in here rather than changing the menu a buyer already knows.
+ */
+export const SORT_KEYS: SortKey[] = [
+  'relevance',
+  'most-loved',
+  'for-me',
+  'price-asc',
+  'price-desc',
+  'popular',
+  'trending',
+  'newest',
+  'nearby',
+]
 
 export const SORT_LABELS: Record<SortKey, string> = {
   relevance: 'Sort: Relevance',
+  'most-loved': 'Sort: Most Loved',
+  'for-me': 'Sort: For Me',
   'price-asc': 'Sort: Price (Low → High)',
   'price-desc': 'Sort: Price (High → Low)',
   popular: 'Sort: Most Popular',
@@ -92,6 +115,12 @@ export function listedMs(p: SortableProduct): number {
 /** What's actually moving: an order counts double, a completed sale counts once. */
 export function popularScore(p: SortableProduct): number {
   return (Number(p.orderCount) || 0) * 2 + (Number(p.salesCount) || 0)
+}
+
+/** ♥ The public like tally, read the same way everywhere and never allowed below zero. */
+export function likeScore(p: SortableProduct): number {
+  const likes = Number(p.likeCount)
+  return Number.isFinite(likes) && likes > 0 ? Math.floor(likes) : 0
 }
 
 /**
@@ -221,6 +250,27 @@ export function sortProducts<T extends SortableProduct>(
   if (key === 'price-asc') return copy.sort((a, b) => priceNumber(a.price) - priceNumber(b.price))
   if (key === 'price-desc') return copy.sort((a, b) => priceNumber(b.price) - priceNumber(a.price))
   if (key === 'newest') return copy.sort((a, b) => listedMs(b) - listedMs(a))
+  if (key === 'most-loved') {
+    return copy.sort((a, b) => {
+      const loves = likeScore(b) - likeScore(a)
+      if (loves !== 0) return loves
+      const sold = popularScore(b) - popularScore(a)
+      if (sold !== 0) return sold
+      return listedMs(b) - listedMs(a)
+    })
+  }
+  if (key === 'for-me') {
+    // The page hands us whatever it honestly knows about this person (`boost`): a listing they
+    // loved, opened, or bought before. With no signal it is still a useful shelf — the things
+    // moving now — rather than an arbitrary shuffle.
+    return copy.sort((a, b) => {
+      const personal = boostOf(b) - boostOf(a)
+      if (personal !== 0) return personal
+      const sold = popularScore(b) - popularScore(a)
+      if (sold !== 0) return sold
+      return likeScore(b) - likeScore(a)
+    })
+  }
   if (key === 'popular') return copy.sort((a, b) => popularScore(b) - popularScore(a))
   if (key === 'trending') {
     return copy.sort((a, b) => {
@@ -256,6 +306,8 @@ export function nearbyNeedsArea(key: SortKey, hasBuyerArea: boolean): boolean {
 export function sortWords(key: SortKey): string {
   if (key === 'trending') return "Sorted by what's moving now — recent orders count for more."
   if (key === 'popular') return 'Sorted by everything each listing has moved so far.'
+  if (key === 'most-loved') return 'Sorted by the ♥ tally every buyer can see.'
+  if (key === 'for-me') return 'Your shelf first — what you loved, opened or bought, then what is moving.'
   if (key === 'nearby') return 'Closest shop first. Anything we cannot place comes last.'
   return ''
 }

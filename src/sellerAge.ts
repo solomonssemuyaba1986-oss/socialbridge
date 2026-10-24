@@ -2,9 +2,9 @@
  * How old a shop is — the one fact a product card is allowed to use when it says "New seller".
  *
  * A card cannot ask "is this shop trustworthy?" and answer it, but it can say the true and useful
- * thing: this shop opened within the last month. The seller's `createdAt` is written once at store
- * setup (`SetupStore.tsx`) and is public, so the badge costs no extra read — pages that already
- * join the seller document (Browse, Nearby) pass the date straight through.
+ * thing: this shop opened within the last three days. The seller's `createdAt` is written once at
+ * store setup (`SetupStore.tsx`) and is public, so the badge costs no extra read — pages that
+ * already join the seller document (Browse, Nearby) pass the date straight through.
  *
  * Missing evidence never becomes a badge: a shop whose `createdAt` predates that field, or whose
  * date cannot be read, is simply not new. `functions/backfill-store-dates.js` fills those in from
@@ -12,8 +12,11 @@
  */
 import { toMillis } from './productCardUtils'
 
-/** The window a shop is called new. Long enough to be discovered, short enough to mean something. */
-export const NEW_SELLER_DAYS = 30
+/**
+ * The window a shop is called new: three days. It is a launch signal, not a permanent label —
+ * long enough for the first visitors to notice, short enough that "new" still means something.
+ */
+export const NEW_SELLER_DAYS = 3
 
 export const NEW_SELLER_LABEL = 'New seller'
 

@@ -42,6 +42,7 @@ const catalog = [
   { id: 'e', name: 'Foldable Charger', description: 'solar panel compatible', category: 'Solar', orderCount: 0 },
   { id: 'f', name: 'Solar Panel', category: 'Solar', outOfStock: true, orderCount: 50 },
   { id: 'g', name: 'Solar Panel', category: 'Solar', orderCount: 0 },
+  { id: 'h', name: 'Second Hand Denim Jacket', category: 'Second Hand / Used', orderCount: 2 },
 ]
 const ids = rows => rows.map(p => p.id)
 
@@ -53,6 +54,10 @@ check('one typo does not lose the sale', () => {
 check('a different word for the same thing still finds it', () => {
   assert.deepStrictEqual(ids(rankProducts(catalog, 'fridge')), ['b'])
   assert.ok(tokenVariants('fridge').includes('refrigerator'))
+  // The new shelves have their own words too: preloved ⇄ second hand, youth ⇄ teen.
+  assert.deepStrictEqual(ids(rankProducts(catalog, 'preloved jacket')), ['h'])
+  assert.ok(tokenVariants('preloved').includes('second hand'))
+  assert.ok(tokenVariants('teen').includes('youth'))
 })
 
 check('every word in the query has to match — "red shoes" never returns a red kettle', () => {

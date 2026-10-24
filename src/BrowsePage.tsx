@@ -10,7 +10,7 @@ import { useBag, getBagCounts, type BagCountData } from './useBag'
 import { createBuyerOrder, incrementProductOrderCount, createOrderConversation } from './createBuyerOrder'
 import QuickRepliesPanel from './QuickRepliesPanel'
 import PawapayCheckout, { type Stage } from './PawapayCheckout'
-import { getMainCategories } from './categories'
+import { getMainCategories, canonicalCategory } from './categories'
 import LoadingBanner from './LoadingBanner'
 import { isNewSeller, NEW_SELLER_LABEL } from './sellerAge'
 import { avatarColor, initialOf } from './avatar'
@@ -149,6 +149,8 @@ function BrowsePage() {
   const [userId, setUserId] = useState<string | null>(null)
   const [mySlug, setMySlug] = useState<string | null>(null)
   const [ownerFilter, setOwnerFilter] = useState<'all' | 'mine' | 'not-mine'>('all')
+  /** Friendship buying: only listings with real community evidence (repeat orders / ratings). */
+  const [communityOnly, setCommunityOnly] = useState(false)
   const { addToBag, removeFromBag, isInBag, updateBagVariant, setQuantity: setBagQuantity, count: bagCount } = useBag()
   // ♥ Universal likes: the tally rides on each product, my own vote comes from one listener.
   const { isLiked, likeCountFor, toggleLike } = useProductLikes()
@@ -411,6 +413,22 @@ function BrowsePage() {
   const formatBagCount = formatCount
 
   /**
+   * What the page honestly knows about this person, for the **For Me** sort: what they opened on
+   * Browse (this device's history) and what they loved. No model, no invented taste — the signal a
+   * buyer can point at and understand. When it is empty, `for-me` falls back to what is moving.
+   */
+  const forMeBoost = useMemo(() => {
+    const boost = new Map<string, number>()
+    history.entries.forEach((entry, index) => {
+      boost.set(entry.productId, 10 - Math.min(index, 10) * 0.4)
+    })
+    for (const product of products) {
+      if (isLiked(product.id)) boost.set(product.id, (boost.get(product.id) || 0) + 4)
+    }
+    return boost
+  }, [history.entries, products, isLiked])
+
+  /**
    * The viewer's own listing — by shop slug, or by uid when an old product has no slug. The
    * "New seller" badge must never land on your own shop, whichever half of the identity exists.
    */
@@ -419,12 +437,11 @@ function BrowsePage() {
 
   const handleCardClick = (p: Product) => {
     if (clickTimerRef.current !== null) {
-      // Second tap within window → double-tap, open survey
+      // Second tap within the window → ♥, the gesture people already use on social feeds. The
+      // details sheet remains the deliberate way to see the whole product.
       clearTimeout(clickTimerRef.current)
       clickTimerRef.current = null
-      setSurveyImageIndex(0)
-      setSurveyProduct(p)
-      trackEvent('product_surveyed', { productId: p.id, sellerId: p.sellerId, sellerSlug: p.sellerSlug, surface: 'browse' })
+      if (!isMyListing(p)) handleToggleLike(p)
       return
     }
     // First tap → wait for possible second tap
@@ -657,6 +674,53 @@ function BrowsePage() {
     } catch (err) {
       console.error('Message error:', err)
       alert('Failed to send message. Try again.')
+    }
+  }
+
+  /**
+   * "Notify me if back": the buyer is not just waving at a greyed-out card. It writes a real
+   * message into the one thread they share with this shop, carrying the product so the seller sees
+   * exactly what was wanted — and when it returns, the same thread is where the buyer can tap Buy.
+   */
+  const handleNotifyBack = async (p: Product) => {
+    const uid = auth.currentUser?.uid
+    if (!uid || auth.currentUser?.isAnonymous) {
+      requireSignIn(navigate, {
+        action: 'message',
+        returnTo: '/browse',
+        productId: p.id,
+        sellerSlug: p.sellerSlug,
+      })
+      return
+    }
+    if (p.sellerId === uid) return
+    try {
+      await sendConversationMessage(
+        p.sellerId,
+        uid,
+        uid,
+        `🔔 Please notify me when “${p.name}” is back in stock.`,
+        p.businessName || 'Seller',
+        myName.name || auth.currentUser?.displayName || 'Buyer',
+        {
+          productId: p.id,
+          productName: p.name,
+          productPrice: p.price,
+          productImage: p.imageUrl,
+        },
+      )
+      trackEvent('message_sent', {
+        productId: p.id,
+        sellerId: p.sellerId,
+        hasPhoto: false,
+        length: 0,
+        surface: 'browse-stock-request',
+        channel: detectSource(),
+      })
+      alert(`🔔 Done — we have told ${p.businessName || 'the seller'} you want “${p.name}”. Their reply will be in your Inbox.`)
+    } catch (err) {
+      console.error('Notify-if-back error:', err)
+      alert('Could not send that request. Please try again.')
     }
   }
 
@@ -907,9 +971,10 @@ function BrowsePage() {
   useEffect(() => {
     let result = products
 
-    // Apply category filter
+    // Apply category filter. `canonicalCategory` lets a product saved as "Fashion" before the
+    // rename still sit under "Fashion & Clothing" instead of vanishing from the shelf.
     if (activeCategory !== 'All') {
-      result = result.filter(p => p.category === activeCategory)
+      result = result.filter(p => canonicalCategory(p.category || '') === activeCategory)
     }
 
     // Apply owner filter (mine / not mine)
@@ -922,6 +987,16 @@ function BrowsePage() {
     // Apply out-of-stock filter
     if (hideOutOfStock) {
       result = result.filter(p => !p.outOfStock)
+    }
+
+    // Community (friendship buying): a listing with evidence that people came back — repeat orders,
+    // repeat sales or several ratings. It is deliberately evidence, not a badge the seller can type.
+    if (communityOnly) {
+      result = result.filter(p =>
+        (Number(p.orderCount) || 0) >= 2 ||
+        (Number(p.salesCount) || 0) >= 2 ||
+        (Number(p.ratingCount) || 0) >= 2,
+      )
     }
 
     // Apply price range filter (empty box = no limit on that side)
@@ -940,10 +1015,10 @@ function BrowsePage() {
 
     // Apply sorting — the shared module keeps relevance as the tie-break (a sort in JavaScript
     // is stable), and it hands back a copy, so `products` is never reordered underneath us.
-    result = sortProducts(result, sortBy, { buyer: buyerArea, sellerGeo })
+    result = sortProducts(result, sortBy, { buyer: buyerArea, sellerGeo, boost: forMeBoost })
 
     setFiltered(result)
-  }, [activeCategory, search, products, sortBy, minPrice, maxPrice, hideOutOfStock, ownerFilter, mySlug, buyerArea, sellerGeo])
+  }, [activeCategory, search, products, sortBy, minPrice, maxPrice, hideOutOfStock, ownerFilter, mySlug, buyerArea, sellerGeo, communityOnly, forMeBoost])
 
   return (
     <div className="rt-page rt-has-tabs" style={{ minHeight: '100vh', background: '#0f0f0f', fontFamily: 'sans-serif', color: '#fff' }}>
@@ -1151,6 +1226,22 @@ function BrowsePage() {
           />
           Hide out of stock
         </label>
+
+        <label
+          title="Listings with real community evidence: repeat orders, repeat sales or several buyer ratings."
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: communityOnly ? green : '#888' }}
+        >
+          <input
+            type="checkbox"
+            checked={communityOnly}
+            onChange={e => {
+              setCommunityOnly(e.target.checked)
+              trackEvent('sort_changed', { sortBy: e.target.checked ? 'community' : sortBy, surface: 'browse' })
+            }}
+            style={{ cursor: 'pointer' }}
+          />
+          Community (friendship buying)
+        </label>
       </div>
 
       {/* Categories */}
@@ -1215,9 +1306,9 @@ function BrowsePage() {
               </div>
             )}
 
-            {(search.trim() || minPrice || maxPrice) && (
+            {(search.trim() || minPrice || maxPrice || communityOnly) && (
               <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 20 }}>
-                <button onClick={() => { setSearch(''); setMinPrice(''); setMaxPrice(''); setActiveCategory('All') }}
+                <button onClick={() => { setSearch(''); setMinPrice(''); setMaxPrice(''); setActiveCategory('All'); setCommunityOnly(false) }}
                   style={{ padding: '10px 18px', background: green, color: '#000', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer', fontSize: 13 }}>
                   🔍 Clear the search & see everything
                 </button>
@@ -1245,7 +1336,7 @@ function BrowsePage() {
                       <div style={{ position: 'absolute', top: '6px', left: '6px', background: green, color: '#000', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: '800', zIndex: 2 }}>Yours</div>
                     )}
                     {!isMyListing(p) && isNewSeller(p.sellerCreatedAt) && (
-                      <div title="This shop opened less than a month ago" style={{ position: 'absolute', top: '6px', left: '6px', background: '#fff', color: '#000', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: 900, letterSpacing: '0.3px', zIndex: 2, lineHeight: 1.5, textTransform: 'uppercase' }}>{NEW_SELLER_LABEL}</div>
+                      <div title="This shop opened in the last three days" style={{ position: 'absolute', top: '6px', left: '6px', background: '#fff', color: '#000', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: 900, letterSpacing: '0.3px', zIndex: 2, lineHeight: 1.5, textTransform: 'uppercase' }}>{NEW_SELLER_LABEL}</div>
                     )}
                     {renderCardImages(p, 190)}
                       <div style={{ padding: '12px' }}>
@@ -1267,8 +1358,18 @@ function BrowsePage() {
                         </div>
                       </div>
                       {p.outOfStock && (
-                        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '700', fontSize: '12px', textAlign: 'center', padding: '8px' }}>
-                          Out of Stock
+                        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.76)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '700', fontSize: '12px', textAlign: 'center', padding: '8px' }}>
+                          <div>
+                            <div style={{ marginBottom: 8 }}>Out of Stock</div>
+                            {p.sellerId !== (userId || '') && (
+                              <button
+                                onClick={e => { e.stopPropagation(); void handleNotifyBack(p) }}
+                                style={{ padding: '7px 11px', background: green, color: '#000', border: 'none', borderRadius: 999, fontWeight: 800, cursor: 'pointer', fontSize: 11 }}
+                              >
+                                🔔 Notify me if back
+                              </button>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1290,7 +1391,7 @@ function BrowsePage() {
                   <div onClick={() => handleCardClick(p)} style={{ cursor: 'pointer', position: 'relative' }}>
                     {p.sellerSlug === mySlug && mySlug && (<div style={{ position: 'absolute', top: '6px', left: '6px', background: green, color: '#000', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: '800', zIndex: 2 }}>Yours</div>)}
                     {!isMyListing(p) && isNewSeller(p.sellerCreatedAt) && (
-                      <div title="This shop opened less than a month ago" style={{ position: 'absolute', top: '6px', left: '6px', background: '#fff', color: '#000', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: 900, letterSpacing: '0.3px', zIndex: 2, lineHeight: 1.5, textTransform: 'uppercase' }}>{NEW_SELLER_LABEL}</div>
+                      <div title="This shop opened in the last three days" style={{ position: 'absolute', top: '6px', left: '6px', background: '#fff', color: '#000', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: 900, letterSpacing: '0.3px', zIndex: 2, lineHeight: 1.5, textTransform: 'uppercase' }}>{NEW_SELLER_LABEL}</div>
                     )}
                     <button onClick={(e) => { e.stopPropagation(); handleToggleBag(p) }}
                       style={{ position: 'absolute', top: '6px', right: '6px', background: isInBag(p.id) ? '#1a3a1a' : 'rgba(0,0,0,0.65)', color: '#fff', border: isInBag(p.id) ? `1px solid ${green}` : '1px solid rgba(255,255,255,0.25)', borderRadius: '8px', padding: '2px 7px', cursor: 'pointer', fontSize: '11px', fontWeight: '700', zIndex: 2, display: 'flex', alignItems: 'center', gap: '3px', backdropFilter: 'blur(4px)', lineHeight: 1.4, whiteSpace: 'nowrap' }}>
@@ -1343,8 +1444,18 @@ function BrowsePage() {
                     )
                   )}
                   {p.outOfStock && (
-                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '700', fontSize: '13px', textAlign: 'center', padding: '8px' }}>
-                      Out of Stock
+                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.76)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '700', fontSize: '13px', textAlign: 'center', padding: '8px' }}>
+                      <div>
+                        <div style={{ marginBottom: 8 }}>Out of Stock</div>
+                        {p.sellerId !== (userId || '') && (
+                          <button
+                            onClick={e => { e.stopPropagation(); void handleNotifyBack(p) }}
+                            style={{ padding: '8px 12px', background: green, color: '#000', border: 'none', borderRadius: 999, fontWeight: 800, cursor: 'pointer', fontSize: 11.5 }}
+                          >
+                            🔔 Notify me if back
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1512,6 +1623,7 @@ function BrowsePage() {
           onBuy={(variant, qty) => { setOrderVariant(variant); setQuantity(String(qty)); setOrderProduct(detailsProduct); setDetailsProduct(null) }}
           onMessage={(variant) => { setMessageVariant(variant); setMessageProduct(detailsProduct); setDetailsProduct(null) }}
           onToggleBag={(variant, qty) => handleSheetBag(detailsProduct, variant, qty)}
+          onNotifyBack={() => { const p = detailsProduct; setDetailsProduct(null); void handleNotifyBack(p) }}
           onOpenStore={() => { const slug = detailsProduct.sellerSlug; setDetailsProduct(null); navigate(`/store/${slug}`) }}
         />
       )}

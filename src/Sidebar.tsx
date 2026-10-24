@@ -8,6 +8,15 @@ import { getStoreAgeLabel } from './useSellerStats'
 import { SELLER_NAV, badgeFor } from './sellerNav'
 
 const green = '#adff2f'
+const COLLAPSE_KEY = 'rachett_seller_sidebar_hidden'
+
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(COLLAPSE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
 
 type Props = {
   /** Dashboard's new-order spotlight flash (raises the sidebar + pulses the badge). */
@@ -27,6 +36,22 @@ function Sidebar({ spotlight }: Props) {
   const { pendingOrdersCount, unreadMessages, unreadSellerConvo, unreadBuyerConvo } = useSellerLive()
   const inboxUnread = unreadMessages + unreadSellerConvo + unreadBuyerConvo
   const [sellerInfo, setSellerInfo] = useState<{ businessName: string; slug: string; logoUrl: string; storeAge: string } | null>(null)
+  /** Big-screen choice, remembered on this device: the seller's panel is theirs to arrange. */
+  const [collapsed, setCollapsed] = useState(readCollapsed)
+
+  /**
+   * Tell the page shell how much room the navigation is using. Four seller pages use the same
+   * custom property for their left margin, so hiding the sidebar gives the work the whole screen
+   * instead of leaving a 260px hole. The value is a CSS length, not a second layout engine.
+   */
+  useEffect(() => {
+    document.documentElement.style.setProperty('--seller-nav-width', collapsed ? '0px' : '260px')
+    try {
+      localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0')
+    } catch {
+      // A blocked store only means the choice does not survive a reload.
+    }
+  }, [collapsed])
 
   // Live store identity — the seller's own name, logo and store age, always current
   // (an edit in EditStore shows up right away). This is their panel, not ours.
@@ -51,7 +76,7 @@ function Sidebar({ spotlight }: Props) {
   return (
     <>
       <style>{`@keyframes rachettPulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(173,255,47,0.6); } 50% { transform: scale(1.15); box-shadow: 0 0 0 8px rgba(173,255,47,0.2); } }`}</style>
-      <div className="rt-sidebar" style={{ position: 'fixed', left: 0, top: 0, bottom: 0, width: 260, background: '#070707', borderRight: '1px solid #111', padding: '28px 16px', display: 'flex', flexDirection: 'column', gap: '28px', zIndex: spotlight ? 40 : 20, overflowY: 'auto', overscrollBehavior: 'contain' }}>
+      <div className="rt-sidebar" style={{ position: 'fixed', left: 0, top: 0, bottom: 0, width: 260, background: '#070707', borderRight: '1px solid #111', padding: '28px 16px', display: 'flex', flexDirection: 'column', gap: '28px', zIndex: spotlight ? 40 : 20, overflowY: 'auto', overscrollBehavior: 'contain', transform: collapsed ? 'translateX(-100%)' : 'translateX(0)', transition: 'transform 0.22s ease', visibility: collapsed ? 'hidden' : 'visible' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
           {sellerInfo?.logoUrl ? (
             <img src={sellerInfo.logoUrl} alt={sellerInfo.businessName}
@@ -61,7 +86,7 @@ function Sidebar({ spotlight }: Props) {
               {(sellerInfo?.businessName || 'Y').charAt(0).toUpperCase()}
             </div>
           )}
-          <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontWeight: 800, color: '#fff', fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {sellerInfo?.businessName || 'Your store'}
             </div>
@@ -69,6 +94,15 @@ function Sidebar({ spotlight }: Props) {
               {sellerInfo?.storeAge || 'Seller panel'}
             </div>
           </div>
+          <button
+            onClick={() => setCollapsed(true)}
+            className="rt-sidebar-toggle"
+            aria-label="Hide the seller navigation"
+            title="Hide navigation"
+            style={{ flexShrink: 0, width: 30, height: 30, borderRadius: 9, background: '#111', color: '#aaa', border: '1px solid #222', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}
+          >
+            ‹
+          </button>
         </div>
         <div style={{ display: 'grid', gap: '6px' }}>
           {SELLER_NAV.map(item => {
@@ -98,6 +132,19 @@ function Sidebar({ spotlight }: Props) {
           )}
         </div>
       </div>
+
+      {/* The way back. It stays on the big screen only, where the sidebar exists at all. */}
+      {collapsed && (
+        <button
+          onClick={() => setCollapsed(false)}
+          className="rt-sidebar-toggle"
+          aria-label="Show the seller navigation"
+          title="Show navigation"
+          style={{ position: 'fixed', left: 12, top: 12, zIndex: 60, width: 42, height: 42, borderRadius: 12, background: '#111', color: green, border: '1px solid #333', cursor: 'pointer', fontSize: 19, lineHeight: 1, boxShadow: '0 6px 20px rgba(0,0,0,0.35)' }}
+        >
+          ☰
+        </button>
+      )}
     </>
   )
 }

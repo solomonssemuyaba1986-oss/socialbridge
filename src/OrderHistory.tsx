@@ -266,7 +266,7 @@ function OrderHistory() {
       {/* The phone's navigation — same five places, same badges, hidden on desktop by CSS. */}
       <SellerTabs />
 
-      <div className="rt-main rt-has-tabs" style={{ width: '100%', marginLeft: 260, padding: '24px 28px', minHeight: '100vh' }}>
+      <div className="rt-main rt-has-tabs" style={{ width: '100%', marginLeft: 'var(--seller-nav-width, 260px)', transition: 'margin-left 0.22s ease', padding: '24px 28px', minHeight: '100vh' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <div>
             <h1 style={{ margin: 0, fontSize: '20px', fontWeight: '800' }}>Orders</h1>

@@ -16,8 +16,9 @@ import ProductSheet from './ProductSheet'
 import { variantLabel, type Variant } from './productSheetUtils'
 import { useBuyerName } from './useBuyerName'
 import { nameLabel } from './buyerName'
-import { useSellerStats, getSalesLabel, getBadgeStatusLabel } from './useSellerStats.ts'
+import { useSellerStats, getSalesLabel } from './useSellerStats.ts'
 import SellerRating from './SellerRating'
+import SellerTrustBadges from './SellerTrustBadges'
 import { hasSellerRating } from './sellerRatingUtils'
 import { summaryFromAggregate, summaryLabel } from './reviewUtils'
 import { isNewSeller, NEW_SELLER_LABEL } from './sellerAge'
@@ -97,7 +98,7 @@ const green = '#adff2f'
 const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'dzudmmuxg'
 const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'p2z65zrv'
 
-function ProductCard({ p, isOwner, sellerId, newSeller, onOrder, onMessage, onDetails, onRefresh, onPreview, inBag, bagged, sold, liked, likeCount, onToggleLike, onToggleBag }: any) {
+function ProductCard({ p, isOwner, sellerId, newSeller, onOrder, onMessage, onDetails, onRefresh, onPreview, onNotifyBack, inBag, bagged, sold, liked, likeCount, onToggleLike, onToggleBag }: any) {
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(p.name)
   const [editPrice, setEditPrice] = useState(p.price)
@@ -198,9 +199,9 @@ function ProductCard({ p, isOwner, sellerId, newSeller, onOrder, onMessage, onDe
         </div>
       )}
 
-      {/* The shop is less than a month old — said plainly, on the card, not buried in the header. */}
+      {/* The shop opened in the last three days — said plainly, on the card, not buried in the header. */}
       {newSeller && !isOwner && (
-        <div title="This shop opened less than a month ago"
+        <div title="This shop opened in the last three days"
           style={{ position: 'absolute', top: isOutOfStock ? '40px' : '8px', left: '8px', background: '#fff', color: '#000', padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 900, zIndex: 2, lineHeight: 1.4, textTransform: 'uppercase' }}>
           {NEW_SELLER_LABEL}
         </div>
@@ -329,11 +330,10 @@ function ProductCard({ p, isOwner, sellerId, newSeller, onOrder, onMessage, onDe
                   <div style={{ width: '100%', padding: '10px', background: '#222', color: '#666', borderRadius: '8px', fontSize: '13px', textAlign: 'center', marginBottom: '6px' }}>
                     Out of Stock
                   </div>
-                  <a href={`https://wa.me/${p.sellerWhatsapp}?text=Hi! Is ${p.name} back in stock soon?`}
-                    target="_blank"
-                    style={{ display: 'block', width: '100%', padding: '10px', background: 'transparent', color: green, border: `1px solid ${green}`, borderRadius: '8px', fontSize: '12px', textAlign: 'center', textDecoration: 'none', boxSizing: 'border-box', fontWeight: '600' }}>
-                    Ask Seller
-                  </a>
+                  <button onClick={onNotifyBack}
+                    style={{ display: 'block', width: '100%', padding: '10px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontSize: '12px', textAlign: 'center', fontWeight: 800, cursor: 'pointer' }}>
+                    🔔 Notify me if back
+                  </button>
                 </div>
               ) : (
                 <div>
@@ -786,6 +786,37 @@ const handleOrder = async () => {
   }
 }
 
+/**
+ * An out-of-stock request is a real message, not a dead button: it lands in the buyer's thread with
+ * this shop, carrying the product so the seller knows exactly which one to come back with.
+ */
+const handleNotifyBack = async (p: Product) => {
+  if (!auth.currentUser || auth.currentUser.isAnonymous) {
+    setShowSignupSheet(true)
+    showFeedback(notify.messageSignInRequired, 'info')
+    return
+  }
+  if (auth.currentUser.uid === sellerId) return
+  try {
+    await sendMessage(
+      auth.currentUser.uid,
+      `🔔 Please notify me when “${p.name}” is back in stock.`,
+      seller?.businessName || 'Seller',
+      myName.name || auth.currentUser.displayName || 'Buyer',
+      {
+        productId: p.id,
+        productName: p.name,
+        productPrice: p.price,
+        productImage: p.imageUrl,
+      },
+    )
+    showFeedback(`🔔 We told ${seller?.businessName || 'the seller'} you want “${p.name}”. Their reply will be in your Inbox.`, 'success')
+  } catch (err) {
+    console.error('Notify-if-back error:', err)
+    showFeedback('Could not send that request. Please try again.', 'error')
+  }
+}
+
 const handleSendMessage = async () => {
   if (!messageText.trim() && !guestImageUrl) {
     showFeedback(notify.messageWriteRequired, 'error')
@@ -947,9 +978,15 @@ const handleSignupForAction = async (provider: any) => {
             </a>
           )}
           {seller.whatsapp && seller.showWhatsapp !== false && (
-            <a href={`https://wa.me/${seller.whatsapp}`} target="_blank" rel="noreferrer" style={{ color: '#fff', fontSize: '13px', textDecoration: 'none', background: '#111', padding: '8px 12px', borderRadius: '999px', border: '1px solid #333' }}>
-              💬 WhatsApp
-            </a>
+            <>
+              <a href={`https://wa.me/${seller.whatsapp}`} target="_blank" rel="noreferrer" style={{ color: '#fff', fontSize: '13px', textDecoration: 'none', background: '#111', padding: '8px 12px', borderRadius: '999px', border: '1px solid #333' }}>
+                💬 WhatsApp
+              </a>
+              {/* A buyer who wants to speak now should not have to add the number first. */}
+              <a href={`tel:${seller.whatsapp.replace(/[^\d+]/g, '')}`} style={{ color: green, fontSize: '13px', textDecoration: 'none', background: '#111', padding: '8px 12px', borderRadius: '999px', border: `1px solid ${green}`, fontWeight: 700 }}>
+                📞 Call seller
+              </a>
+            </>
           )}
           {seller.instagram && (
             <a href={`https://instagram.com/${seller.instagram}`} target="_blank" rel="noreferrer" style={{ color: '#fff', fontSize: '13px', textDecoration: 'none', background: '#111', padding: '8px 12px', borderRadius: '999px', border: '1px solid #333' }}>
@@ -972,35 +1009,17 @@ const handleSignupForAction = async (provider: any) => {
 
       {/* Trust Bar */}
       <div style={{ maxWidth: '640px', margin: '0 auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        {/* Badges Row */}
-        {(sellerStats.realSellerBadge || sellerStats.reliableSellerBadge) && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
-            {/* 🟢 Real Seller Badge */}
-            {sellerStats.realSellerBadge && (
-              <span title={sellerStats.realSellerBadgeStatus === 'grace' ? 'This seller\'s verification is being renewed' : 'Identity verified by rachett'}
-                style={{ 
-                  background: sellerStats.realSellerBadgeStatus === 'grace' ? '#666' : '#adff2f', 
-                  color: sellerStats.realSellerBadgeStatus === 'grace' ? '#fff' : '#000', 
-                  fontSize: '11px', fontWeight: '800', padding: '4px 12px', borderRadius: '999px', 
-                  display: 'inline-flex', alignItems: 'center', gap: '4px', opacity: sellerStats.realSellerBadgeStatus === 'grace' ? 0.7 : 1,
-                }}>
-                🟢 {getBadgeStatusLabel(sellerStats.realSellerBadgeStatus, 'Real Seller')}
-              </span>
-            )}
-            {/* 💎 Reliable Seller Badge — rachett-measured (order completion + fast replies), never
-                self-declared. It rides on top of 🟢, so a shop with both shows both. */}
-            {sellerStats.reliableSellerBadge && (
-              <span title="Rachett measured this seller: they finish their orders and reply to buyers within two hours"
-                style={{ 
-                  background: '#7a5cff', 
-                  color: '#fff', fontSize: '11px', fontWeight: '800', padding: '4px 12px', borderRadius: '999px', 
-                  display: 'inline-flex', alignItems: 'center', gap: '4px',
-                }}>
-                💎 {getBadgeStatusLabel(sellerStats.reliableSellerBadgeStatus, 'Reliable Seller')}
-              </span>
-            )}
-          </div>
-        )}
+        {/* Badges Row — one component shared with the product sheet, the chat and the seller's
+            own Dashboard, so the same shop can never wear different badges on different screens. */}
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <SellerTrustBadges
+            realSeller={sellerStats.realSellerBadge}
+            realSellerStatus={sellerStats.realSellerBadgeStatus}
+            reliableSeller={sellerStats.reliableSellerBadge}
+            reliableSellerStatus={sellerStats.reliableSellerBadgeStatus}
+            showEmpty={isOwner}
+          />
+        </div>
 
         {/* What buyers said about this shop. The star average is real now: `recomputeSellerRating`
             recomputes it from every comment the shop has received, whenever a buyer comments
@@ -1152,6 +1171,7 @@ const handleSignupForAction = async (provider: any) => {
                 onMessage={() => { setMessageVariant({}); setMessageProduct(p) }}
                 onDetails={() => setDetailsProduct(p)}
                 onRefresh={() => fetchProducts(sellerId)}
+                onNotifyBack={() => void handleNotifyBack(p)}
                 onPreview={(imgs: string[], start: number) => setPreview({ images: imgs, startIndex: start })}
               />
             ))}
@@ -1401,6 +1421,7 @@ const handleSignupForAction = async (provider: any) => {
           onBuy={(variant, qty) => { setOrderVariant(variant); setQuantity(String(qty)); setOrderProduct(detailsProduct); setDetailsProduct(null) }}
           onMessage={(variant) => { setMessageVariant(variant); setMessageProduct(detailsProduct); setDetailsProduct(null) }}
           onToggleBag={(variant, qty) => handleSheetBag(detailsProduct, variant, qty)}
+          onNotifyBack={() => { const p = detailsProduct; setDetailsProduct(null); void handleNotifyBack(p) }}
         />
       )}
 

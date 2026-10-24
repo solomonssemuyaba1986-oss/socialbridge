@@ -38,6 +38,7 @@ import BuyerTabs from './BuyerTabs.tsx'
 import FeedbackNudge from './FeedbackNudge.tsx'
 import DemographicsGate from './DemographicsGate.tsx'
 import NotFound from './NotFound.tsx'
+import CookieConsent from './CookieConsent.tsx'
 import { getRole, MARKET_HOME } from './role.ts'
 import { LIVE, STUDIO, SERVICES } from './sellerNav'
 import { SellerLiveProvider } from './sellerLive.tsx'
@@ -122,6 +123,8 @@ function App() {
     <DataSaverProvider>
       <SellerLiveProvider>
       <NetworkGuard />
+      {/* First visit only: the cookie/on-device-storage notice, remembered on this device. */}
+      <CookieConsent />
       {/* "What didn't you like?" — asks once, after the app has actually been used. */}
       <FeedbackNudge />
       {/* Age & gender — one time, and it cannot be walked past: it is what recommendations are
@@ -142,7 +145,7 @@ function App() {
         getRole() === 'seller' ? <Navigate to="/onboarding" /> :
         <Navigate to={MARKET_HOME} />
       } />
-      {/* The buyer's home — mirror of the seller's Dashboard. Open to guests too. */}
+      {/* The buyer's home — **Unknown**, the discovery shelf. Open to guests too. */}
       <Route path="/home" element={<BuyerHome />} />
       {/* The buyer's own orders — every shop, one list. The seller's screen stays at /orders.
           A real account only: an anonymous guest has no orders to show. */}

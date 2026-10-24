@@ -16,9 +16,10 @@ import { useAllDrafts } from './useDraft'
 import ProductCardSkeleton from './ProductCardSkeleton'
 import { avatarColor, initialOf } from './avatar'
 import ProductActions from './ProductActions'
+import { sendConversationMessage } from './useConversation'
 import ProductPreview from './ProductPreview'
 import FloatingBag from './FloatingBag'
-import { getMainCategories } from './categories'
+import { getMainCategories, canonicalCategory } from './categories'
 import { green, productImages, seededShuffle, toMillis, type CardProduct } from './productCardUtils'
 import SellerRating from './SellerRating'
 import { trackEvent } from './analytics'
@@ -340,7 +341,9 @@ function NearbyPage() {
   const loadingPool = sellersLoaded && pool.key !== poolKey
 
   const matching = useMemo(
-    () => (activeCategory === 'All' ? products : products.filter(p => p.category === activeCategory)),
+    () => (activeCategory === 'All'
+      ? products
+      : products.filter(p => canonicalCategory(p.category || '') === activeCategory)),
     [products, activeCategory],
   )
 
@@ -707,6 +710,39 @@ function NearbyPage() {
     navigate(`/store/${p.sellerSlug}`)
   }
 
+  /**
+   * "Notify me if back": put the request in the buyer's real thread with this shop, with the
+   * product attached, so the seller can answer in the same place when it returns.
+   */
+  const handleNotifyBack = async (p: DiscoveryProduct) => {
+    const uid = auth.currentUser?.uid
+    if (!uid || auth.currentUser?.isAnonymous) {
+      requireSignIn(navigate, { action: 'message', returnTo: '/nearby', productId: p.id, sellerSlug: p.sellerSlug })
+      return
+    }
+    if (p.sellerId === uid) return
+    try {
+      await sendConversationMessage(
+        p.sellerId,
+        uid,
+        uid,
+        `🔔 Please notify me when “${p.name}” is back in stock.`,
+        p.businessName || 'Seller',
+        auth.currentUser?.displayName || 'Buyer',
+        {
+          productId: p.id,
+          productName: p.name,
+          productPrice: p.price,
+          productImage: p.imageUrl,
+        },
+      )
+      alert(`🔔 Done — ${p.businessName || 'the seller'} has been told you want “${p.name}”. Their reply will be in your Inbox.`)
+    } catch (err) {
+      console.error('Notify-if-back error:', err)
+      alert('Could not send that request. Please try again.')
+    }
+  }
+
   const cardFor = (p: DiscoveryProduct) => {
     const seller = sellerById.get(p.sellerId)
     const label =
@@ -735,6 +771,7 @@ function NearbyPage() {
         onDetails={() => setDetailsProduct(p)}
         onMessage={() => { setMessageVariant({}); setMessageProduct(p) }}
         onOrder={() => { setOrderVariant({}); setOrderProduct(p) }}
+        onNotifyBack={() => void handleNotifyBack(p)}
       />
     )
   }
@@ -1176,6 +1213,7 @@ function NearbyPage() {
           onBuy={(variant, qty) => { setOrderVariant(variant); setSheetQty(String(qty)); setOrderProduct(detailsProduct); setDetailsProduct(null) }}
           onMessage={(variant) => { setMessageVariant(variant); setMessageProduct(detailsProduct); setDetailsProduct(null) }}
           onToggleBag={(variant, qty) => handleSheetBag(detailsProduct, variant, qty)}
+          onNotifyBack={() => { const p = detailsProduct; setDetailsProduct(null); void handleNotifyBack(p) }}
           onOpenStore={() => { const p = detailsProduct; setDetailsProduct(null); openProduct(p) }}
         />
       )}

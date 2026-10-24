@@ -6,7 +6,7 @@ const green = '#adff2f'
 
 function FeedbackPage() {
   const navigate = useNavigate()
-  const [role, setRole] = useState<'seller' | 'buyer'>('buyer')
+  const [role, setRole] = useState<'seller' | 'buyer' | 'user'>('buyer')
   const [category, setCategory] = useState<FeedbackCategory>('Change Request')
   const [message, setMessage] = useState('')
   const [name, setName] = useState('')
@@ -63,11 +63,15 @@ function FeedbackPage() {
         <label style={{ display: 'block', color: '#aaa', fontSize: '13px', fontWeight: '600', marginBottom: '8px' }}>
           You are a
         </label>
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
-          {(['seller', 'buyer'] as const).map(r => (
-            <button key={r} onClick={() => setRole(r)}
-              style={{ flex: 1, padding: '12px', background: role === r ? '#1a2a1a' : '#1a1a1a', color: role === r ? green : '#ddd', border: role === r ? `1px solid ${green}` : '1px solid #333', borderRadius: '10px', cursor: 'pointer', fontWeight: '700', fontSize: '14px' }}>
-              {r === 'seller' ? '🛍️ Seller' : '🛒 Buyer'}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
+          {([
+            { value: 'seller', icon: '🛍️', label: 'Seller' },
+            { value: 'buyer', icon: '🛒', label: 'Buyer' },
+            { value: 'user', icon: '👤', label: 'User' },
+          ] as const).map(r => (
+            <button key={r.value} onClick={() => setRole(r.value)}
+              style={{ flex: '1 1 120px', padding: '12px', background: role === r.value ? '#1a2a1a' : '#1a1a1a', color: role === r.value ? green : '#ddd', border: role === r.value ? `1px solid ${green}` : '1px solid #333', borderRadius: '10px', cursor: 'pointer', fontWeight: '700', fontSize: '14px' }}>
+              {r.icon} {r.label}
             </button>
           ))}
         </div>

@@ -39,7 +39,8 @@ export interface BuyerNavItem {
 
 /** Every destination a buyer has, in the order the tab bar shows them. */
 export const BUYER_NAV: BuyerNavItem[] = [
-  { label: 'Home', path: '/home', icon: '🏠' },
+  // The home shelf is called Unknown — discovery, not a "Discover" tab.
+  { label: 'Unknown', path: '/home', icon: '🏠', short: 'Unknown' },
   { label: 'Browse', path: '/browse', icon: '▦' },
   { label: 'Shoppertainment', path: '/shoppertainment', icon: '🛍️', play: true, short: 'Shops' },
   { label: 'Inbox', path: '/inbox', icon: '🔔', needsAccount: true },

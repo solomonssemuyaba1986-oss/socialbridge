@@ -18,6 +18,8 @@ import {
 import { swatchFor } from './colourSwatch'
 import LikePill from './LikePill'
 import SellerRating from './SellerRating'
+import SellerTrustBadges from './SellerTrustBadges'
+import { useSellerStats } from './useSellerStats'
 import ProductPreview from './ProductPreview'
 import ProductReviews from './ProductReviews'
 import type { Eligibility, Review } from './reviewUtils'
@@ -54,6 +56,8 @@ type Props = {
   onBuy: (variant: Variant, quantity: number) => void
   onMessage: (variant: Variant) => void
   onToggleBag: (variant: Variant, quantity: number) => void
+  /** Out of stock: send a notify-me request into the buyer's chat with this shop. */
+  onNotifyBack?: () => void
   /** The way back to the whole shop when a buyer wants more than one product. */
   onOpenStore?: () => void
   /**
@@ -94,6 +98,7 @@ function ProductSheet({
   onBuy,
   onMessage,
   onToggleBag,
+  onNotifyBack,
   onOpenStore,
   reviewEligibility,
   onWriteReview,
@@ -104,6 +109,8 @@ function ProductSheet({
   const [qty, setQty] = useState(1)
   const [imgIndex, setImgIndex] = useState(0)
   const [galleryOpen, setGalleryOpen] = useState(false)
+  /** The shop's real badges — shown here so a buyer can trust what they are about to buy. */
+  const { stats: shopStats } = useSellerStats(productProp?.sellerId ?? null)
   /** The seller's current copy of this product — null until the first snapshot lands. */
   const [liveDoc, setLiveDoc] = useState<CardProduct | null>(null)
   /**
@@ -298,6 +305,14 @@ function ProductSheet({
               </button>
             )}
           </div>
+          <SellerTrustBadges
+            size="sm"
+            realSeller={shopStats.realSellerBadge}
+            realSellerStatus={shopStats.realSellerBadgeStatus}
+            reliableSeller={shopStats.reliableSellerBadge}
+            reliableSellerStatus={shopStats.reliableSellerBadgeStatus}
+            style={{ marginBottom: 10 }}
+          />
 
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
             <p style={{ margin: 0, fontWeight: 800, color: green, fontSize: 20 }}>UGX {product.price}</p>
@@ -450,11 +465,27 @@ function ProductSheet({
           )}
           {!isMine && (
             <button
-              onClick={() => leaveWith('buy', () => onBuy({ color, size }, count))}
-              disabled={actionDisabled}
-              style={{ width: '100%', padding: 14, background: actionDisabled ? '#242424' : green, color: actionDisabled ? '#777' : '#000', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15, cursor: actionDisabled ? 'not-allowed' : 'pointer' }}
+              onClick={() => {
+                if (outOfStock && onNotifyBack) {
+                  lastAction.current = 'buy'
+                  onNotifyBack()
+                  close()
+                  return
+                }
+                leaveWith('buy', () => onBuy({ color, size }, count))
+              }}
+              disabled={outOfStock ? !onNotifyBack : actionDisabled}
+              style={{
+                width: '100%', padding: 14,
+                background: outOfStock ? (onNotifyBack ? green : '#242424') : actionDisabled ? '#242424' : green,
+                color: outOfStock ? (onNotifyBack ? '#000' : '#777') : actionDisabled ? '#777' : '#000',
+                border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 15,
+                cursor: outOfStock ? (onNotifyBack ? 'pointer' : 'not-allowed') : actionDisabled ? 'not-allowed' : 'pointer',
+              }}
             >
-              {outOfStock ? 'Out of Stock' : ready ? `⚡ Buy now${label ? ` · ${label}` : ''}` : prompt}
+              {outOfStock
+                ? (onNotifyBack ? '🔔 Notify me when it is back' : 'Out of Stock')
+                : ready ? `⚡ Buy now${label ? ` · ${label}` : ''}` : prompt}
             </button>
           )}
         </div>

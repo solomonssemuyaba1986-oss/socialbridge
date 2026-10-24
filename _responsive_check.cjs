@@ -72,14 +72,19 @@ const at = (l) => `${l.file}:${l.n}`
 let checks = 0
 const check = (name, fn) => { fn(); checks++; console.log('  ok  ' + name) }
 
-check('no page is still offset by the desktop sidebar', () => {
-  const shells = find('marginLeft: 260')
+check('no page is still offset by a hard-coded desktop sidebar', () => {
+  const shells = find("marginLeft: 'var(--seller-nav-width, 260px)'")
   assert.strictEqual(shells.length, 4, 'the four seller shells (Dashboard / Orders / Analytics / Marketing)')
   const undressed = shells.filter(l => !l.line.includes('rt-main'))
   assert.deepStrictEqual(undressed.map(at), [],
-    'marginLeft: 260 without rt-main — on a 390px phone that leaves the panel 130px to work in')
+    'the sidebar offset without rt-main — on a 390px phone that leaves the panel 130px to work in')
   assert.ok(shells.every(l => l.file.endsWith('.tsx')), 'and each one is a page, not a stray style')
   assert.ok(fs.existsSync(path.join(SRC, 'SellerTabs.tsx')), 'the phone navigation must exist')
+  // The seller can hide the sidebar; the page must follow the same custom property, not a stale 260.
+  assert.ok(jsxLines.some(l => l.file === 'Sidebar.tsx' && l.line.includes('--seller-nav-width')),
+    'the sidebar must publish the width it is using')
+  assert.ok(/\.rt-sidebar-toggle\s*\{[\s\S]*?display: none !important/.test(css),
+    'the sidebar toggle must not appear on a phone that has no sidebar')
 })
 
 check('every dialog becomes a bottom sheet on a phone', () => {

@@ -55,6 +55,9 @@ body {
   --rt-safe-left: env(safe-area-inset-left, 0px);
   /* The phone tab bar's own height, so the bar and the space left for it can never disagree. */
   --rt-tabs: 62px;
+  /* How much room the seller's desktop navigation takes. `Sidebar.tsx` changes this when the
+     seller hides it; the default keeps the first paint honest before that script runs. */
+  --seller-nav-width: 260px;
 }
 
 /* Rotating the phone must not silently re-scale the text. */

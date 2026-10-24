@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { doc, onSnapshot, collection, query, getDocs } from 'firebase/firestore'
-import { db } from './firebase'
+import { auth, db } from './firebase'
 import { TRUST_COLLECTION, isPhoneProven } from './trust'
 import { meetsReliableCriteria } from './reliableBadge'
 
@@ -249,22 +249,16 @@ export function useSellerStats(sellerId: string | null) {
   }, [sellerId])
 
   const computeStatsFromOrdersAndProducts = async (sid: string) => {
+    /**
+     * Products first, and in their own try/catch.
+     *
+     * A buyer can read a shop's products (they are public) but **cannot** read its orders — the
+     * rules reserve that list for the seller and the buyer who placed each order. The badge's
+     * "at least one product" test therefore used to fail for every buyer, because the order read
+     * threw before the product count was ever set. Splitting the two reads is what makes the 🟢
+     * badge visible to buyers as well as to the seller.
+     */
     try {
-      const ordersSnap = await getDocs(query(collection(db, 'sellers', sid, 'orders')))
-      const fulfilledOrdersArr = ordersSnap.docs.filter(d => d.data().status === 'fulfilled')
-      const totalSales = fulfilledOrdersArr.reduce((sum, d) => {
-        const qty = Number(d.data().quantity) || 1
-        return sum + qty
-      }, 0)
-      const fulfilledOrders = fulfilledOrdersArr.length
-
-      const buyerNames = new Set(fulfilledOrdersArr.map(d => d.data().buyerName?.toLowerCase()).filter(Boolean))
-      const repeatBuyers = fulfilledOrders > buyerNames.size ? fulfilledOrders - buyerNames.size : 0
-
-      const cancelledOrders = ordersSnap.docs.filter(d => d.data().status === 'cancelled').length
-      const totalProcessed = fulfilledOrders + cancelledOrders
-      const deliverySuccess = totalProcessed > 0 ? Math.round((fulfilledOrders / totalProcessed) * 100) : 0
-
       const productsSnap = await getDocs(query(collection(db, 'sellers', sid, 'products')))
       const productCount = productsSnap.size
       const productWithImageCount = productsSnap.docs.filter(d => {
@@ -281,18 +275,53 @@ export function useSellerStats(sellerId: string | null) {
 
       setStats(prev => ({
         ...prev,
+        productCount,
+        productWithImageCount,
+        productQualityCount,
+      }))
+    } catch (err) {
+      console.warn('Seller stats: could not read the public products', err)
+    }
+
+    /**
+     * Orders are private to the seller and the buyer who placed each one. A buyer looking at a shop
+     * cannot list them, so do not even ask: the public badge and rating above are already enough,
+     * and this keeps a denied read out of the console.
+     */
+    if (auth.currentUser?.uid !== sid) {
+      setLoading(false)
+      return
+    }
+
+    try {
+      const ordersSnap = await getDocs(query(collection(db, 'sellers', sid, 'orders')))
+      const fulfilledOrdersArr = ordersSnap.docs.filter(d => d.data().status === 'fulfilled')
+      const totalSales = fulfilledOrdersArr.reduce((sum, d) => {
+        const qty = Number(d.data().quantity) || 1
+        return sum + qty
+      }, 0)
+      const fulfilledOrders = fulfilledOrdersArr.length
+
+      const buyerNames = new Set(fulfilledOrdersArr.map(d => d.data().buyerName?.toLowerCase()).filter(Boolean))
+      const repeatBuyers = fulfilledOrders > buyerNames.size ? fulfilledOrders - buyerNames.size : 0
+
+      const cancelledOrders = ordersSnap.docs.filter(d => d.data().status === 'cancelled').length
+      const totalProcessed = fulfilledOrders + cancelledOrders
+      const deliverySuccess = totalProcessed > 0 ? Math.round((fulfilledOrders / totalProcessed) * 100) : 0
+
+      setStats(prev => ({
+        ...prev,
         totalSales,
         repeatBuyers,
         deliverySuccess,
         fulfilledOrders,
         totalOrdersProcessed: totalProcessed,
-        productCount,
-        productWithImageCount,
-        productQualityCount,
       }))
-      setLoading(false)
     } catch (err) {
-      console.error('Error computing stats from orders:', err)
+      // Expected for a buyer looking at a shop: the order list is not theirs to read. The public
+      // badges and rating above are unaffected.
+      console.warn('Seller stats: orders are not readable from this session', err)
+    } finally {
       setLoading(false)
     }
   }

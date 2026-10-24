@@ -11,7 +11,7 @@ type Props = {
   /** Pinned to the top-left of the photo — "1.3 km" or "~3 km" when approximate. */
   distanceLabel?: string
   /**
-   * The shop opened within the last month (`sellerAge.ts`). A white badge on the photo — the
+   * The shop opened within the last three days (`sellerAge.ts`). A white badge on the photo — the
    * quiet, factual counterpart to the seller's own "New on rachett" line, and a reason to look at
    * a shop nobody has rated yet rather than scroll past it.
    */
@@ -30,12 +30,15 @@ type Props = {
   /** Which page this card is on — stamped on impressions and taps. */
   surface?: string
   onOpen: () => void
-  onPreview: () => void
+  /** Kept for callers that already pass it; the card's double-tap is the ♥ now. */
+  onPreview?: () => void
   /** Opens the details sheet — colour, size, all the photos, and Buy, without a page load. */
   onDetails: () => void
   onToggleBag: () => void
   onMessage: () => void
   onOrder: () => void
+  /** Out of stock only: leave a request in the chat for the seller to notify them. */
+  onNotifyBack?: () => void
 }
 
 /**
@@ -56,11 +59,11 @@ function ProductCard({
   onToggleLike,
   surface = 'nearby',
   onOpen,
-  onPreview,
   onDetails,
   onToggleBag,
   onMessage,
   onOrder,
+  onNotifyBack,
 }: Props) {
   // Counts one `product_impression` the moment this card is half on screen.
   const cardRef = useRef<HTMLDivElement | null>(null)
@@ -79,12 +82,19 @@ function ProductCard({
    */
   const newSellerTop = 6 + (distanceLabel ? 24 : 0) + (hasDraft ? 24 : 0)
 
-  // Single tap → open the store. Double tap → full-screen photo viewer.
+  /**
+   * Single tap → open the store. Double tap → ♥, the gesture people already use on social apps.
+   *
+   * A buyer's own listing has nothing to love, so a double tap there simply opens it. The short
+   * timer is what lets one tap still mean one thing: a second tap inside 240 ms cancels the store
+   * navigation and becomes a like instead.
+   */
   const handleCardClick = () => {
     if (clickTimer.current !== null) {
       window.clearTimeout(clickTimer.current)
       clickTimer.current = null
-      onPreview()
+      if (!isMine && onToggleLike) onToggleLike()
+      else onOpen()
       return
     }
     clickTimer.current = window.setTimeout(() => {
@@ -119,7 +129,7 @@ function ProductCard({
         )}
         {newSeller && !isMine && (
           <div
-            title="This shop opened less than a month ago"
+            title="This shop opened in the last three days"
             style={{ position: 'absolute', top: newSellerTop, left: '6px', background: '#fff', color: '#000', padding: '2px 7px', borderRadius: '8px', fontSize: '11px', fontWeight: 900, letterSpacing: '0.2px', zIndex: 2, lineHeight: 1.4, whiteSpace: 'nowrap', boxShadow: '0 1px 4px rgba(0,0,0,0.35)', textTransform: 'uppercase' }}
           >
             {NEW_SELLER_LABEL}
@@ -238,8 +248,18 @@ function ProductCard({
       ))}
 
       {p.outOfStock && (
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '700', fontSize: '13px', textAlign: 'center', padding: '8px' }}>
-          Out of Stock
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.76)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: '13px', textAlign: 'center', padding: '10px' }}>
+          <div>
+            <div style={{ marginBottom: 8 }}>Out of Stock</div>
+            {!isMine && onNotifyBack && (
+              <button
+                onClick={e => { e.stopPropagation(); onNotifyBack() }}
+                style={{ padding: '8px 12px', background: green, color: '#000', border: 'none', borderRadius: 999, fontWeight: 800, cursor: 'pointer', fontSize: 11.5 }}
+              >
+                🔔 Notify me if back
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

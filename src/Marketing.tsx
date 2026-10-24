@@ -288,7 +288,7 @@ function Marketing() {
       {/* The phone's navigation — same five places, same badges, hidden on desktop by CSS. */}
       <SellerTabs />
 
-      <div className="rt-main rt-has-tabs" style={{ width: '100%', marginLeft: 260, padding: '24px 28px', minHeight: '100vh' }}>
+      <div className="rt-main rt-has-tabs" style={{ width: '100%', marginLeft: 'var(--seller-nav-width, 260px)', transition: 'margin-left 0.22s ease', padding: '24px 28px', minHeight: '100vh' }}>
 
         {/* ── The hero: one number, one sentence, one button ─────────────────────────────── */}
         <div style={{ background: 'linear-gradient(135deg, #111 0%, #0a1a0a 100%)', borderRadius: 16, padding: '22px 24px', border: '1px solid #1a2a1a', marginBottom: 28 }}>

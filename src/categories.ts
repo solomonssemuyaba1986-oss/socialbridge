@@ -12,7 +12,7 @@ export const CATEGORIES = {
     "Gift Picks",
     "Limited Drops"
   ],
-  "Fashion": [
+  "Fashion & Clothing": [
     "Tops & Shirts",
     "Bottoms & Pants",
     "Dresses",
@@ -24,6 +24,15 @@ export const CATEGORIES = {
     "Watches",
     "Accessories",
     "Activewear"
+  ],
+  // Young buyers shop differently: school, first jobs, streetwear and gaming are one shelf here.
+  "Youths": [
+    "Teen Fashion",
+    "School Essentials",
+    "Sneakers & Streetwear",
+    "Gaming & Tech",
+    "Bags & Backpacks",
+    "Student Deals"
   ],
   "Beauty & Cosmetics": [
     "Skincare",
@@ -139,6 +148,26 @@ export const CATEGORIES = {
     "Car Care Products",
     "Tools & Equipment"
   ],
+  // A shop, a workshop and a farm buy differently from a household. This is that shelf.
+  "Industrial & Commercial": [
+    "Industrial Equipment",
+    "Shop & Retail Equipment",
+    "Office Supplies",
+    "Safety & PPE",
+    "Packaging & Logistics",
+    "Commercial Kitchen",
+    "Agriculture & Farming",
+    "Business Services"
+  ],
+  // Second-hand is not a leftover bin: it is a deliberate, sustainable way to buy.
+  "Second Hand / Used": [
+    "Second-Hand Clothing",
+    "Refurbished Electronics",
+    "Used Furniture",
+    "Pre-Owned Books",
+    "Used Homeware",
+    "Upcycled & Repaired"
+  ],
   "Books & Stationery": [
     "Books",
     "Notebooks & Pads",
@@ -146,7 +175,7 @@ export const CATEGORIES = {
     "Art Supplies",
     "Office Supplies"
   ],
-  "Pet Supplies": [
+  "Pets & Pet Supplies": [
     "Pet Food",
     "Toys & Accessories",
     "Grooming",
@@ -155,9 +184,30 @@ export const CATEGORIES = {
   ]
 };
 
+/**
+ * Names that changed, mapped to the name the app uses now.
+ *
+ * Products keep the category string they were saved with. Without this, renaming a shelf would
+ * silently hide every item already on it — a seller's shop would look empty because we changed a
+ * label. Every read normalises through here; every new write uses the current name.
+ */
+export const CATEGORY_ALIASES: Record<string, string> = {
+  Fashion: 'Fashion & Clothing',
+  'Pet Supplies': 'Pets & Pet Supplies',
+  'Pet Supply': 'Pets & Pet Supplies',
+  'Second Hand': 'Second Hand / Used',
+  Used: 'Second Hand / Used',
+  'Industrial and Commercial': 'Industrial & Commercial',
+  Youth: 'Youths',
+};
+
+/** The current name for a category, including one written before a rename. */
+export const canonicalCategory = (category: string): string =>
+  CATEGORY_ALIASES[category] || category;
+
 // Helper function to get subcategories for a category
 export const getSubcategories = (category: string): string[] => {
-  return CATEGORIES[category as keyof typeof CATEGORIES] || [];
+  return CATEGORIES[canonicalCategory(category) as keyof typeof CATEGORIES] || [];
 };
 
 // Helper function to get all main categories

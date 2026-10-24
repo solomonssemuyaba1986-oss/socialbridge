@@ -1,3 +1,5 @@
+import { matchTier } from './searchRank'
+
 /**
  * Type-ahead suggestions, built **only** from things that exist in rachett:
  * store names (and their previous names), product names from the catalogue we've
@@ -39,16 +41,36 @@ export interface SuggestionSources {
   recentSearches?: string[]
 }
 
-/** How well `label` answers what was typed. 0 = no match at all. */
+/**
+ * How well `label` answers what was typed. 0 = no match at all.
+ *
+ * Exact and word-start matches still win. When there is no substring at all, the same typo-aware
+ * matcher the results page uses gets a turn — so typing `sneekers` suggests the real listing called
+ * "Sneakers" instead of leaving the buyer to correct themselves. Every word has to match, exactly
+ * like the search results: `red shoes` must never suggest a red kettle.
+ */
 export function matchScore(label: string, query: string): number {
   const l = label.toLowerCase().trim()
   const q = query.toLowerCase().trim()
   if (!q || !l) return 0
   if (l.startsWith(q)) return 2
   const idx = l.indexOf(q)
-  if (idx < 0) return 0
-  // A match at a word start ("blue dress" ← "dress") is worth more than mid-word.
-  return /[\s\-_/]/.test(l[idx - 1] || '') ? 1.4 : 1
+  if (idx >= 0) {
+    // A match at a word start ("blue dress" ← "dress") is worth more than mid-word.
+    return /[\s\-_/]/.test(l[idx - 1] || '') ? 1.4 : 1
+  }
+
+  // Spelling is not a membership test. Score each typed word against the label; one unmatched word
+  // means this is not the row they meant.
+  const tokens = q.split(/\s+/).filter(Boolean)
+  if (tokens.length === 0) return 0
+  let total = 0
+  for (const token of tokens) {
+    const tier = matchTier(l, token)
+    if (tier === 0) return 0
+    total += tier
+  }
+  return (total / tokens.length) * 1.1
 }
 
 /** One row per real thing: a shop, a product, a category, a past search. */

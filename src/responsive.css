@@ -28,6 +28,21 @@
     text-size-adjust: 100%;
   }
 
+  /* The seller sidebar is already replaced by the tab bar on a phone. A button to hide it would
+     be a control for something that is not there. */
+  .rt-sidebar-toggle {
+    display: none !important;
+  }
+
+  /* The first-visit cookie notice sits above the buyer's tab bar, never underneath it. */
+  .rt-cookie-banner {
+    bottom: calc(var(--rt-tabs) + 16px + var(--rt-safe-bottom)) !important;
+    left: 12px !important;
+    right: 12px !important;
+    max-height: 46dvh;
+    overflow-y: auto;
+  }
+
   body {
     overflow-x: hidden;
   }

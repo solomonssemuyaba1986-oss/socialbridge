@@ -11,6 +11,7 @@ import QuickRepliesPanel from './QuickRepliesPanel'
 import { uploadImageToCloudinary } from './uploadImage'
 import ProductPreview from './ProductPreview'
 import ProductSheet from './ProductSheet'
+import PawapayCheckout, { type Stage } from './PawapayCheckout'
 import { getConversationId, sendConversationMessage } from './useConversation'
 import { notify } from './notifications'
 import { consumePendingAction, requireSignIn } from './signInGate'
@@ -90,6 +91,10 @@ function BagPage() {
   const { items, removeFromBag, clearBag, setQuantity, count } = useBag()
 
   const [orderTarget, setOrderTarget] = useState<BagTarget | null>(null)
+  /** The payment step for the order just placed from the bag. */
+  const [orderDocId, setOrderDocId] = useState('')
+  const [placedQuantity, setPlacedQuantity] = useState('1')
+  const [payStage, setPayStage] = useState<Stage | null>(null)
   const [messageTarget, setMessageTarget] = useState<BagTarget | null>(null)
   const [orderSuccess, setOrderSuccess] = useState(false)
   const [buyerName, setBuyerName] = useState('')
@@ -309,6 +314,9 @@ function BagPage() {
       return sum + (Number(String(price).replace(/[^0-9]/g, '')) || 0) * i.quantity
     }, 0)
 
+  /** Each seller is paid separately, so "Pay now" starts with the first buyable item in the bag. */
+  const firstPayable = items.find(i => !missingProducts[i.productId])
+
   const toTarget = (item: typeof items[number]): BagTarget => {
     const lv = liveView(item)
     return {
@@ -418,7 +426,7 @@ function BagPage() {
     // The chosen colour/size lives on the bag line, not on the live product.
     const bagItem = items.find(i => i.productId === orderTarget.id)
     try {
-      const { orderId } = await createBuyerOrder(orderTarget.sellerId, {
+      const { orderRef: orderDocRef, orderId } = await createBuyerOrder(orderTarget.sellerId, {
         buyerName: shownName.trim(),
         buyerUid: auth.currentUser.uid,
         productName: orderTarget.name,
@@ -458,15 +466,28 @@ function BagPage() {
         channel: sourcePlatform,
         surface: 'bag',
       })
+      setOrderDocId(orderDocRef.id)
+      setPlacedQuantity(orderQty)
+      setPayStage('choice')
       setOrderSuccess(true)
-      setTimeout(() => {
-        setOrderTarget(null)
-        setOrderSuccess(false)
-      }, 2500)
     } catch (err) {
       console.error('Order failed:', err)
       alert('Failed to place order. Try again.')
     }
+  }
+
+  /** Closing the bag checkout — never while a mobile-money prompt is live. */
+  const closeOrder = () => {
+    if (payStage === 'waiting') return
+    setOrderTarget(null)
+    setOrderSuccess(false)
+    setOrderDocId('')
+    setPlacedQuantity('1')
+    setPayStage(null)
+    setBuyerName('')
+    setOrderQty('1')
+    setDeliveryArea('')
+    setOrderMessage('')
   }
 
   const closeMessageModal = () => {
@@ -711,10 +732,24 @@ function BagPage() {
           })}
         </div>
 
-        {/* Total */}
-        <div style={{ marginTop: '20px', padding: '16px', background: '#1a1a1a', borderRadius: '12px', border: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ color: '#888', fontSize: '14px' }}>Total</span>
-          <span style={{ fontWeight: '800', fontSize: '18px', color: green }}>UGX {total.toLocaleString()}</span>
+        {/* Total — with the one button that turns a saved bag into a purchase. */}
+        <div style={{ marginTop: '20px', padding: '16px', background: '#1a1a1a', borderRadius: '12px', border: `1px solid ${firstPayable ? green : '#222'}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            <span style={{ color: '#888', fontSize: '14px' }}>Total</span>
+            <span style={{ fontWeight: '800', fontSize: '18px', color: green }}>UGX {total.toLocaleString()}</span>
+          </div>
+          <button
+            onClick={() => { if (firstPayable) void openOrder(firstPayable) }}
+            disabled={!firstPayable}
+            style={{ width: '100%', marginTop: 12, padding: '14px', background: firstPayable ? green : '#242424', color: firstPayable ? '#000' : '#666', border: 'none', borderRadius: 10, fontWeight: 900, cursor: firstPayable ? 'pointer' : 'not-allowed', fontSize: 15 }}
+          >
+            ⚡ Pay now — UGX {total.toLocaleString()}
+          </button>
+          <p style={{ margin: '8px 0 0', color: '#777', fontSize: 11, lineHeight: 1.5, textAlign: 'center' }}>
+            {firstPayable
+              ? `We start with “${firstPayable.productName}”. Items from different sellers are paid separately — every receipt lands in your Inbox.`
+              : 'Nothing in this bag can be bought right now.'}
+          </p>
         </div>
 
         {/* Bag support row */}
@@ -730,7 +765,7 @@ function BagPage() {
 
       {/* Order Modal */}
       {orderTarget && (
-        <div className="rt-modal-overlay" onClick={() => { setOrderTarget(null); setOrderSuccess(false) }}
+        <div className="rt-modal-overlay" onClick={closeOrder}
           style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
           <div onClick={e => e.stopPropagation()}
             style={{ background: '#1a1a1a', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px', border: '1px solid #222', textAlign: 'center' }}>
@@ -739,9 +774,26 @@ function BagPage() {
                 <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '28px', color: '#000', fontWeight: '800' }}>
                   ✓
                 </div>
-                <h3 style={{ color: '#fff', fontWeight: '800', fontSize: '18px', margin: '0 0 8px' }}>Order Sent!</h3>
-                <p style={{ color: '#888', fontSize: '14px', margin: 0 }}>The seller will contact you to confirm delivery.</p>
-                <button onClick={() => navigate('/inbox')} style={{ marginTop: '14px', padding: '10px 16px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>Track it in your Inbox →</button>
+                <h3 style={{ color: '#fff', fontWeight: '800', fontSize: '18px', margin: '0 0 8px' }}>Order in — pay now</h3>
+                <p style={{ color: '#888', fontSize: '14px', margin: '0 0 16px' }}>
+                  {orderTarget.name} · {placedQuantity} × UGX {orderTarget.price}
+                </p>
+                {orderDocId && (
+                  <PawapayCheckout
+                    sellerId={orderTarget.sellerId}
+                    sellerName={orderTarget.businessName || 'Seller'}
+                    productName={orderTarget.name}
+                    productPrice={orderTarget.price}
+                    quantity={placedQuantity}
+                    orderDocId={orderDocId}
+                    onStageChange={setPayStage}
+                  />
+                )}
+                <button onClick={closeOrder}
+                  style={{ width: '100%', marginTop: '14px', padding: '12px', background: 'transparent', color: '#888', border: '1px solid #333', borderRadius: '10px', cursor: payStage === 'waiting' ? 'default' : 'pointer', fontSize: '14px', fontWeight: 700 }}>
+                  {payStage === 'waiting' ? 'Close — the payment carries on to my phone' : 'Done'}
+                </button>
+                <button onClick={() => navigate('/inbox')} style={{ marginTop: '10px', padding: '8px 12px', background: 'transparent', color: green, border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 700 }}>Track it in your Inbox →</button>
               </div>
             ) : !auth.currentUser || auth.currentUser.isAnonymous ? (
               <SignInPrompt
@@ -773,7 +825,7 @@ function BagPage() {
                   style={{ width: '100%', padding: '14px', background: green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '15px', marginBottom: '12px' }}>
                   Send Order
                 </button>
-                <button onClick={() => { setOrderTarget(null); setOrderSuccess(false) }}
+                <button onClick={closeOrder}
                   style={{ width: '100%', padding: '12px', background: 'transparent', color: '#555', border: '1px solid #222', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
                   Cancel
                 </button>

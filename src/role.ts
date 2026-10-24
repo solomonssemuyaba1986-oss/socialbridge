@@ -74,10 +74,10 @@ export function homeForRole(role: Role | null, hasShop: boolean): string {
 /**
  * 🛍️ Where the market lives.
  *
- * Today that's Browse — **products first, no menu, no questions**. When the real discovery
- * page is built this is the one line that changes, and everyone lands there.
+ * `/home` is the **Unknown** shelf — discovery first, not a menu and not a search box. Browse is
+ * still one tap away (and in the buyer's bar) for someone who already knows what they want.
  */
-export const MARKET_HOME = '/browse'
+export const MARKET_HOME = '/home'
 
 /**
  * Where should this account land right now? A store wins (that makes someone a
