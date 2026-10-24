@@ -537,7 +537,7 @@ function jsFilesUnder(dir) {
           assert.strictEqual(
             mine.e164,
             dial + national,
-            `${dial} with ${len} digits: the number sent to Yoola must be the number that was typed`,
+            `${dial} with ${len} digits: the number sent to the SMS rail must be the number that was typed`,
           )
         }
       })

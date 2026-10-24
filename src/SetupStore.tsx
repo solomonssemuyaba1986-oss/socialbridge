@@ -158,9 +158,10 @@ function SetupStore() {
   const [showWhatsapp] = useState(false)
 
   // Phone verification — our own server texts the code (`./otpClient` → `/api/otp/send`, sent by
-  // Yoola), and that same server is the only thing that can write the proof. So the browser never
-  // decides this: `provenPhone` is the number the server *said* it proved, and `serverProven` is
-  // the record it wrote. Nothing is remembered locally, so a reload cannot invent a badge.
+  // Yoola for the six East/Southern African markets or eSMS Africa everywhere else), and that same
+  // server is the only thing that can write the proof. So the browser never decides this:
+  // `provenPhone` is the number the server *said* it proved, and `serverProven` is the record it
+  // wrote. Nothing is remembered locally, so a reload cannot invent a badge.
   const [provenPhone, setProvenPhone] = useState('')
   /**
    * The server's own verdict, kept with the account + number it was asked about.
@@ -684,9 +685,9 @@ function SetupStore() {
   /**
    * Text a code — one number, one code, whatever brought them here.
    *
-   * The code is sent by *our* server (`/api/otp/send`, which hands it to Yoola) and checked by our
-   * server, never by a third-party sign-in: that API is also the only thing that can write
-   * `trust/{uid}`, so the badge and this button can never disagree about a number.
+   * The code is sent by *our* server (`/api/otp/send`, which hands it to Yoola or eSMS Africa) and
+   * checked by our server, never by a third-party sign-in: that API is also the only thing that can
+   * write `trust/{uid}`, so the badge and this button can never disagree about a number.
    *
    * Signed out: the code that comes back creates the account AND proves the number in one go —
    * `/api/otp/verify` finds or makes the account for this number and signs us in as it.

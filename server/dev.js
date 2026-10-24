@@ -92,12 +92,14 @@ server.listen(PORT, () => {
   const missing = []
   ;(process.env.OTP_PEPPER ? ready : missing).push('OTP_PEPPER')
   ;(process.env.YOOLA_API_KEY ? ready : missing).push('YOOLA_API_KEY')
+  ;(process.env.ESMS_API_KEY ? ready : missing).push('ESMS_API_KEY')
   ;(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64 || process.env.FIREBASE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_APPLICATION_CREDENTIALS ? ready : missing).push('Firebase service account')
 
   console.log(`rachett OTP api on http://localhost:${PORT}`)
+  console.log('  sms:     Yoola for +256 +254 +255 +250 +265 +260; eSMS Africa for every other country')
   console.log(`  ready:   ${ready.join(', ') || 'nothing yet'}`)
   console.log(`  missing: ${missing.join(', ') || 'nothing — you are fully switched on'}`)
   if (missing.length) {
-    console.log('  Missing values make /api/otp/send answer 503 on purpose — it will not fake a send.')
+    console.log('  A missing key makes /api/otp/send answer 503 for the numbers that need it — it will not fake a send.')
   }
 })

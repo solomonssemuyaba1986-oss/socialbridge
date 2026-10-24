@@ -42,7 +42,7 @@
 | **Cloudinary** | Store logos, product photos, chat photos |
 | **OTP server** (`api/otp/send.js`, `api/otp/verify.js` — Vercel serverless functions) | Phone numbers + OTP codes, held in Firestore (`otpCodes/{phoneKey}`, `phones/{phoneKey}`, `meta/otpSends` — all closed to the browser, and none holding a readable number, because the key is an HMAC of one) — and the code never in the clear: only its HMAC is written, and it expires after 5 minutes or on first use |
 | **Device (localStorage/sessionStorage)** | Drafts, bag, buyer area, remembered user, guest verification |
-| **Third parties** | Cloudinary, Yoola, Resend, Formspree*, Nominatim/OSM, Google |
+| **Third parties** | Cloudinary, Yoola, eSMS Africa, Resend, Formspree*, Nominatim/OSM, Google |
 
 \* Formspree only receives anything if `VITE_FORMSPREE_ID` is set.
 
@@ -61,7 +61,8 @@ Written by `SetupStore.tsx:552` (create), `EditStore.tsx:234-258` (edit), `Dashb
 > **Every live shop has a verified phone number (since 19 Sep 2026).** Setup checks the number
 > against its own country's length (`src/phone.ts` — Uganda 9 digits, Kenya 9, Egypt 10, …,
 > verified in Node by `_phone_check.cjs`) and then **refuses to create the shop** until a
-> code texted by *our* server to that exact number has come back correct (`api/otp/send.js` → Yoola,
+> code texted by *our* server to that exact number has come back correct (`api/otp/send.js` → Yoola
+> for Uganda, Kenya, Tanzania, Rwanda, Malawi and Zambia, eSMS Africa for every other country,
 > checked by `api/otp/verify.js`, which re-runs the same per-country rule in `api/_lib/phone.js`;
 > the proof lands in `trust/{uid}`, written server-side). Signing in with
 > Google gets one extra step (verify your phone number, last); signing in with
@@ -278,7 +279,8 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 | Processor | What it gets | Live? |
 |---|---|---|
 | **Cloudinary** | Shop photos/logos (cropped square ≤512px JPEG), product photos, chat photos (compressed ≤1024px JPEG) + uploader IP | ✅ `uploadImage.ts`, `StoreLogoPicker.tsx` (Setup Store + Edit Store), `BulkUpload.tsx:73-84` |
-| **Yoola** (the sender the phone-verification flow uses now) | Phone numbers + OTP SMS text | ✅ `api/_lib/sms.js:87`, sent by `api/otp/send.js` |
+| **Yoola** (SMS rail for Uganda, Kenya, Tanzania, Rwanda, Malawi and Zambia) | Phone numbers + OTP SMS text | ✅ `api/_lib/sms.js` → `buildYoolaRequest`, sent by `api/otp/send.js` |
+| **eSMS Africa** (SMS rail for every other country, including all 54 African countries) | Phone numbers + OTP SMS text | ✅ `api/_lib/sms.js` → `buildEsmsRequest`, sent by `api/otp/send.js` |
 | **Nominatim / OpenStreetMap** | Seller's typed area text **and** GPS coordinates; buyer area lookup | ✅ `place.ts:30` |
 | **Resend** | Seller's `recoveryEmail` + 6-digit code | ✅ `functions/index.js` |
 | **Google** | OAuth identity (name, email, photo) — the only social sign-in; phone sign-in uses our own OTP server, not a third-party identity provider | ✅ |
@@ -286,7 +288,7 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 | **Flutterwave** | *Nothing* — `paymentService.ts` is **dead code** (no file imports it). **Decision (15 Sep 2026): leave it untouched until payments have been tested.** | ❌ |
 | **FCM / push** | *Nothing* — no messaging SDK anywhere; `notifications.ts` is UI copy only | ❌ |
 
-> **Contact discovery reaches no processor.** The contact picker is the phone's own UI; the selected numbers go straight from the browser to our Vercel function and are checked against our own HMAC ledger. Cloudinary, Yoola, Resend and Google never receive an address book. The only thing written down is that the person agreed and how many friends were found (section 3.1).
+> **Contact discovery reaches no processor.** The contact picker is the phone's own UI; the selected numbers go straight from the browser to our Vercel function and are checked against our own HMAC ledger. Cloudinary, Yoola, eSMS Africa, Resend and Google never receive an address book. The only thing written down is that the person agreed and how many friends were found (section 3.1).
 
 > **Note on setup uploads.** A shop photo is uploaded the moment it is picked — which is
 > *before* the shop exists — so a setup that is abandoned can leave one unreferenced file in

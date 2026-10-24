@@ -16,7 +16,7 @@ import { applyCors, fail, field, ok, readJsonBody } from '../_lib/http.js'
 import { validateIntl } from '../_lib/phone.js'
 import { CODE_TTL_MS, SEND_MESSAGES, generateCode } from '../_lib/otp.js'
 import { otpConfig, releaseGlobal, releaseStamp, reserveAndStamp, reserveGlobal } from '../_lib/otpStore.js'
-import { sendSms, smsConfig } from '../_lib/sms.js'
+import { sendSms, smsConfig, smsForDial } from '../_lib/sms.js'
 
 /** What a person sees when we simply are not switched on. Deliberately uninformative. */
 const NOT_READY = 'Phone verification is not switched on yet. Please try again a little later.'
@@ -35,12 +35,13 @@ export default async function handler(req, res) {
   if (!check.ok) return fail(res, 400, check.message)
 
   const sms = smsConfig()
+  const rail = smsForDial(check.dial, sms)
   const otp = otpConfig()
-  const ready = sms.configured && otp.configured && adminConfigured()
+  const ready = rail.config.configured && otp.configured && adminConfigured()
   if (!ready) {
     console.error(
       '[otp/send] refused: not configured —',
-      'sms:', sms.missing.join(',') || 'ok',
+      `sms (${rail.provider}):`, rail.config.missing.join(',') || 'ok',
       '| otp:', otp.missing.join(',') || 'ok',
       '| firebase:', adminConfigured() ? 'ok' : 'missing service account',
     )
@@ -63,12 +64,12 @@ export default async function handler(req, res) {
     })
   }
 
-  const sent = await sendSms({ e164: check.e164, code, config: sms })
+  const sent = await sendSms({ e164: check.e164, dial: check.dial, code, config: sms })
   if (!sent.ok) {
     // Hand the booking back: a provider outage must not spend the person's allowance.
     await releaseStamp({ e164: check.e164, now: Date.now(), pepper: otp.pepper })
     await releaseGlobal()
-    console.error('[otp/send] provider failure:', sent.failure, '-', sent.message)
+    console.error('[otp/send] provider failure:', sent.provider || rail.provider, sent.failure, '-', sent.message)
     return fail(res, sent.failure === 'not-configured' ? 503 : 502, sent.message)
   }
 

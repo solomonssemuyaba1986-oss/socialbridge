@@ -63,9 +63,9 @@ export const FALLBACK_LENGTHS = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
  *
  * `PHONE_RULES` above is where we have a length to insist on. This is the far longer list of
  * countries we must still be able to *read*: a number from a country with no rule is measured with
- * `FALLBACK_LENGTHS` — the same generous range the browser uses — and Yoola has the final word on
- * whether it can be texted. Refusing a code the picker offers is the one outcome that cannot be
- * right, because the screen has already told the seller their number is fine.
+ * `FALLBACK_LENGTHS` — the same generous range the browser uses — and the SMS rail has the final
+ * word on whether it can be texted. Refusing a code the picker offers is the one outcome that
+ * cannot be right, because the screen has already told the seller their number is fine.
  */
 export const DIAL_CODES = [
   '+1', '+7', '+20', '+27', '+30', '+31', '+32', '+33',
@@ -145,9 +145,9 @@ export function validatePhone(dialCode, raw, countryName) {
  * The server's own door: one full international number in, `{ ok, e164 }` out.
  *
  * Uses the *same* per-country table, so a length the browser would reject can never be sent to
- * Yoola from here. The country code is read from the front and removed, and the national part is
- * measured against that country's rule — which is exactly the check whose absence sent SMS to
- * eight-digit numbers that could never receive them.
+ * the SMS provider from here. The country code is read from the front and removed, and the
+ * national part is measured against that country's rule — which is exactly the check whose
+ * absence sent SMS to eight-digit numbers that could never receive them.
  *
  * Two details decide whether a real seller gets an SMS:
  *
