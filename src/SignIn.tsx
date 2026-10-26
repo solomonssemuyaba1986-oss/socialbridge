@@ -9,6 +9,7 @@ import { rememberUser } from './userMemory'
 import { COUNTRY_CODES, type CountryCode } from './countryCodes'
 import { formatFull, validatePhone } from './phone'
 import { sendOtp, verifyOtp } from './otpClient'
+import { useSmsOtpListener } from './useSmsOtp'
 import { trackEvent } from './analytics'
 import RecoveryModal from './RecoveryModal'
 import ContinueAs from './ContinueAs'
@@ -69,6 +70,12 @@ function SignIn() {
   const [phoneOtp, setPhoneOtp] = useState('')
   const [phoneOtpLoading, setPhoneOtpLoading] = useState(false)
   const [phoneOtpError, setPhoneOtpError] = useState('')
+
+  const smsOtp = useSmsOtpListener(filled => {
+    setPhoneOtp(filled)
+    setPhoneOtpError('')
+  })
+
   const [showCountryDropdown, setShowCountryDropdown] = useState(false)
   const [countrySearch, setCountrySearch] = useState('')
   const [termsAgreed, setTermsAgreed] = useState(false)
@@ -177,6 +184,7 @@ function SignIn() {
   // seller wizard. The server is the only thing that can attach a number to an account and mint
   // the sign-in token, so `auth.currentUser.phoneNumber` cannot be a browser invention.
   const resetPhoneCode = () => {
+    smsOtp.stop()
     setPhoneOtpSent(false)
     setPhoneOtp('')
     setPhoneOtpError('')
@@ -204,21 +212,27 @@ function SignIn() {
     }
     setPhoneOtpLoading(true)
     setPhoneOtpError('')
+    setPhoneOtp('')
+    // Listen from the tap itself: the text may land before the provider's response does.
+    smsOtp.listen()
+    let accepted = false
     try {
       const sent = await sendOtp(formatFull(selectedCountry.dialCode, check.digits))
       if (!sent.ok) {
         setPhoneOtpError(sent.error)
         return
       }
+      accepted = true
       setPhoneOtpSent(true)
-      setPhoneOtp('')
       trackEvent('phone_verification_sent', { country: selectedCountry.name, method: 'phone-signin' })
     } finally {
+      if (!accepted) smsOtp.stop()
       setPhoneOtpLoading(false)
     }
   }
 
   const handleVerifyPhoneOtp = async () => {
+    smsOtp.stop()
     if (!/^\d{6}$/.test(phoneOtp)) {
       setPhoneOtpError('Enter the 6-digit code')
       return
@@ -449,12 +463,19 @@ function SignIn() {
                     value={phoneOtp}
                     onChange={e => setPhoneOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     placeholder="000000"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    aria-label="6-digit code"
                     style={{
                       width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333',
-                      marginBottom: '10px', fontSize: '20px', textAlign: 'center', letterSpacing: '8px',
+                      marginBottom: '6px', fontSize: '20px', textAlign: 'center', letterSpacing: '8px',
                       boxSizing: 'border-box', background: '#111', color: '#fff',
                     }}
                   />
+                  <p aria-live="polite" style={{ color: smsOtp.status === 'filled' ? green : '#777', fontSize: 12, lineHeight: 1.5, margin: '0 0 10px' }}>
+                    {smsOtp.hint}
+                  </p>
 
                   {phoneOtpError && (
                     <p style={{ color: '#ff4444', fontSize: '12px', margin: '4px 0 8px' }}>{phoneOtpError}</p>

@@ -15,9 +15,10 @@
  * Two rules this file exists to keep:
  *
  *  1. The verification code appears in exactly one place in the whole system: the text handed to
- *     the provider. It is never logged, never returned in a response, never re-worded for a debug
- *     build. There is no `debugOtp` here, and `_otp_check.cjs` asserts the word does not occur
- *     anywhere under `api/`.
+ *     the provider. (It appears twice *within* that text — once for the person, once in the
+ *     origin-bound line the phone's WebOTP parser reads — and nowhere else.) It is never logged,
+ *     never returned in a response, never re-worded for a debug build. There is no `debugOtp`
+ *     here, and `_otp_check.cjs` asserts the word does not occur anywhere under `api/`.
  *  2. A failure is reported as a failure. If the key is missing, the request times out, or the
  *     provider answers with an error, the caller hears it — because a code that was never sent
  *     must never look like one that was. (That is the bug being fixed: the old dev server faked
@@ -40,6 +41,27 @@ export const YOOLA_DIALS = ['+256', '+254', '+255', '+250', '+265', '+260']
 const YOOLA_SET = new Set(YOOLA_DIALS)
 
 /**
+ * The site a code is bound to. WebOTP only offers a message to the exact host in its last line,
+ * so this must be the domain a person actually opens (`www.` is a different host).
+ */
+export const DEFAULT_WEB_HOST = 'rachett.com'
+
+/**
+ * The host to put in the origin-bound line. `OTP_WEB_HOST` may be a bare host or a full URL;
+ * only the hostname survives, so a protocol, path or query can never leak into an SMS.
+ */
+export function webOtpHost(value = process.env.OTP_WEB_HOST) {
+  const raw = String(value || '').trim()
+  if (!raw) return DEFAULT_WEB_HOST
+  try {
+    const url = new URL(raw.includes('://') ? raw : `https://${raw}`)
+    return url.hostname ? url.hostname.toLowerCase() : DEFAULT_WEB_HOST
+  } catch {
+    return DEFAULT_WEB_HOST
+  }
+}
+
+/**
  * Which rail carries this number. `dial` is the value `validateIntl` already worked out, so this
  * file never re-parses a phone number or invents a second country table.
  */
@@ -47,9 +69,15 @@ export function providerForDial(dial) {
   return YOOLA_SET.has(String(dial || '').trim()) ? 'yoola' : 'esms'
 }
 
-/** What lands on the phone. Short, one idea, and clear that we will never ask for it back. */
-export function buildSmsText(code) {
-  return `Your rachett code is ${code}. It expires in 5 minutes — do not share it with anyone.`
+/**
+ * What lands on the phone. Short, one idea, and clear that we will never ask for it back.
+ *
+ * The final line is the origin-bound form Chrome's WebOTP parser requires: `@host #code`, with
+ * nothing after it. Browsers that do not know WebOTP simply see a second, copyable copy of the
+ * code; the human sentence above still reads on its own.
+ */
+export function buildSmsText(code, host = webOtpHost()) {
+  return `Your rachett code is ${code}. It expires in 5 minutes — do not share it with anyone.\n@${webOtpHost(host)} #${code}`
 }
 
 /** Yoola wants the number bare: "+256704487563" → "256704487563". */
@@ -160,8 +188,8 @@ export function interpretSend(status, rawBody) {
 }
 
 /** The exact request Yoola's send endpoint expects. */
-export function buildYoolaRequest({ e164, code, config }) {
-  const payload = { api_key: config.apiKey, phone: yoolaPhone(e164), message: buildSmsText(code) }
+export function buildYoolaRequest({ e164, code, config, host }) {
+  const payload = { api_key: config.apiKey, phone: yoolaPhone(e164), message: buildSmsText(code, host) }
   if (config.senderId) payload.sender_id = config.senderId
   return {
     url: config.apiUrl,
@@ -176,8 +204,8 @@ export function buildYoolaRequest({ e164, code, config }) {
  * `Idempotency-Key` is the provider's own guard against a retried POST charging twice. It is
  * generated here, and only here, because this is the only place a send is attempted.
  */
-export function buildEsmsRequest({ e164, code, config, idempotencyKey = randomUUID() }) {
-  const payload = { to: esmsPhone(e164), text: buildSmsText(code) }
+export function buildEsmsRequest({ e164, code, config, idempotencyKey = randomUUID(), host }) {
+  const payload = { to: esmsPhone(e164), text: buildSmsText(code, host) }
   if (config.senderId) payload.sender_id = config.senderId
   return {
     url: config.apiUrl,
@@ -219,6 +247,7 @@ export async function sendSms({
   fetchImpl = fetch,
   timeoutMs = SMS_TIMEOUT_MS,
   idempotencyKey,
+  host = webOtpHost(),
 }) {
   const provider = providerForDial(dial)
   const chosen = config[provider]
@@ -233,8 +262,8 @@ export async function sendSms({
   }
 
   const request = provider === 'yoola'
-    ? buildYoolaRequest({ e164, code, config: chosen })
-    : buildEsmsRequest({ e164, code, config: chosen, idempotencyKey })
+    ? buildYoolaRequest({ e164, code, config: chosen, host })
+    : buildEsmsRequest({ e164, code, config: chosen, idempotencyKey, host })
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)

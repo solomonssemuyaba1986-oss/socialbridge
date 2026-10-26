@@ -15,6 +15,7 @@ import { auth } from './firebase'
 import { COUNTRY_CODES, type CountryCode } from './countryCodes'
 import { formatFull, lengthHint, validatePhone } from './phone'
 import { sendOtp, verifyOtp } from './otpClient'
+import { useSmsOtpListener } from './useSmsOtp'
 import { trackEvent } from './analytics'
 
 const green = '#adff2f'
@@ -39,12 +40,18 @@ export default function PhoneVerifyForm({ idPrefix, method, onVerified, ctaLabel
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
+  const smsOtp = useSmsOtpListener(filled => {
+    setCode(filled)
+    setError('')
+  })
+
   const fullNumber = () => {
     const check = validatePhone(country.dialCode, number, country.name)
     return check.ok ? formatFull(country.dialCode, check.digits) : ''
   }
 
   const resetCode = () => {
+    smsOtp.stop()
     setSent(false)
     setCode('')
   }
@@ -65,21 +72,28 @@ export default function PhoneVerifyForm({ idPrefix, method, onVerified, ctaLabel
     }
     setBusy(true)
     setError('')
+    setCode('')
+    // Start waiting from the same tap that asks for the code, before the network call. A text can
+    // arrive while the provider is still answering; listening afterwards would miss it.
+    smsOtp.listen()
+    let accepted = false
     try {
       const result = await sendOtp(formatFull(country.dialCode, check.digits))
       if (!result.ok) {
         setError(result.error)
         return
       }
+      accepted = true
       setSent(true)
-      setCode('')
       trackEvent('phone_verification_sent', { country: country.name, method })
     } finally {
+      if (!accepted) smsOtp.stop()
       setBusy(false)
     }
   }
 
   const confirmCode = async () => {
+    smsOtp.stop()
     if (!/^\d{6}$/.test(code)) {
       setError('Enter the 6-digit code from your text message.')
       return
@@ -200,14 +214,21 @@ export default function PhoneVerifyForm({ idPrefix, method, onVerified, ctaLabel
             onChange={event => { setCode(event.target.value.replace(/\D/g, '').slice(0, 6)); setError('') }}
             inputMode="numeric"
             autoComplete="one-time-code"
+            maxLength={6}
             placeholder="000000"
             aria-label="6-digit code"
             style={{
-              width: '100%', boxSizing: 'border-box', padding: '14px', marginBottom: 10,
+              width: '100%', boxSizing: 'border-box', padding: '14px', marginBottom: 6,
               border: '1px solid #333', borderRadius: 10, background: '#111', color: '#fff',
               fontSize: 24, letterSpacing: 8, textAlign: 'center',
             }}
           />
+          <p aria-live="polite" style={{
+            margin: '0 0 10px', color: smsOtp.status === 'filled' ? green : '#777',
+            fontSize: 11, lineHeight: 1.5,
+          }}>
+            {smsOtp.hint}
+          </p>
           {error && <p role="alert" style={{ margin: '0 0 10px', color: '#ff6b6b', fontSize: 12, lineHeight: 1.5 }}>{error}</p>}
           <button type="button" onClick={() => void confirmCode()} disabled={busy || disabled || code.length !== 6}
             style={{

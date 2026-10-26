@@ -5,6 +5,7 @@ import { auth, googleProvider } from './firebase'
 import { COUNTRY_CODES, type CountryCode } from './countryCodes'
 import { formatFull, validatePhone } from './phone'
 import { sendOtp, verifyOtp } from './otpClient'
+import { useSmsOtpListener } from './useSmsOtp'
 import { trackEvent } from './analytics'
 import { rememberUser } from './userMemory'
 import ContinueAs from './ContinueAs'
@@ -30,6 +31,16 @@ function AuthModal({ open, title, subtitle, onSuccess, onClose }: Props) {
   const [phoneOtpLoading, setPhoneOtpLoading] = useState(false)
   const [phoneOtpError, setPhoneOtpError] = useState('')
 
+  const smsOtp = useSmsOtpListener(filled => {
+    setPhoneOtp(filled)
+    setPhoneOtpError('')
+  })
+
+  const close = () => {
+    smsOtp.stop()
+    onClose()
+  }
+
   if (!open) return null
 
   const handleSocialSignIn = async (provider: AuthProvider, name: string) => {
@@ -51,6 +62,7 @@ function AuthModal({ open, title, subtitle, onSuccess, onClose }: Props) {
   }
 
   const resetPhoneCode = () => {
+    smsOtp.stop()
     setPhoneOtpSent(false)
     setPhoneOtp('')
     setPhoneOtpError('')
@@ -71,21 +83,27 @@ function AuthModal({ open, title, subtitle, onSuccess, onClose }: Props) {
     }
     setPhoneOtpLoading(true)
     setPhoneOtpError('')
+    setPhoneOtp('')
+    // Listen from the tap itself: the text may land before the provider's response does.
+    smsOtp.listen()
+    let accepted = false
     try {
       const sent = await sendOtp(formatFull(selectedCountry.dialCode, check.digits))
       if (!sent.ok) {
         setPhoneOtpError(sent.error)
         return
       }
+      accepted = true
       setPhoneOtpSent(true)
-      setPhoneOtp('')
       trackEvent('phone_verification_sent', { country: selectedCountry.name, method: 'phone-signin' })
     } finally {
+      if (!accepted) smsOtp.stop()
       setPhoneOtpLoading(false)
     }
   }
 
   const handleVerifyPhoneOtp = async () => {
+    smsOtp.stop()
     if (!/^\d{6}$/.test(phoneOtp)) {
       setPhoneOtpError('Enter the 6-digit code')
       return
@@ -116,12 +134,12 @@ function AuthModal({ open, title, subtitle, onSuccess, onClose }: Props) {
     }
   }
   return (
-    <div className="rt-modal-overlay" onClick={onClose}
+    <div className="rt-modal-overlay" onClick={close}
       style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
       <div onClick={e => e.stopPropagation()}
         style={{ background: '#1a1a1a', borderRadius: 16, padding: '20px', maxWidth: 400, width: '100%', maxHeight: '90vh', overflowY: 'auto', textAlign: 'center', border: '1px solid #222' }}>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#666', fontSize: 18, cursor: 'pointer' }}>✕</button>
+          <button onClick={close} style={{ background: 'transparent', border: 'none', color: '#666', fontSize: 18, cursor: 'pointer' }}>✕</button>
         </div>
 
         <div style={{ width: 48, height: 48, borderRadius: '50%', background: green, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: 22, fontWeight: 800, color: '#000' }}>R</div>
@@ -190,7 +208,11 @@ function AuthModal({ open, title, subtitle, onSuccess, onClose }: Props) {
               A 6-digit code was sent to <strong style={{ color: '#fff' }}>{selectedCountry.dialCode}{phoneNumber}</strong>
             </p>
             <input value={phoneOtp} onChange={e => setPhoneOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000"
-              style={{ width: '100%', padding: '12px', borderRadius: 8, border: '1px solid #333', marginBottom: 10, fontSize: 20, textAlign: 'center', letterSpacing: 8, boxSizing: 'border-box', background: '#111', color: '#fff' }} />
+              inputMode="numeric" autoComplete="one-time-code" maxLength={6} aria-label="6-digit code"
+              style={{ width: '100%', padding: '12px', borderRadius: 8, border: '1px solid #333', marginBottom: 6, fontSize: 20, textAlign: 'center', letterSpacing: 8, boxSizing: 'border-box', background: '#111', color: '#fff' }} />
+            <p aria-live="polite" style={{ color: smsOtp.status === 'filled' ? green : '#777', fontSize: 12, lineHeight: 1.5, margin: '0 0 10px' }}>
+              {smsOtp.hint}
+            </p>
             {phoneOtpError && <p role="alert" style={{ color: '#ff6b6b', fontSize: 12, margin: '0 0 8px' }}>{phoneOtpError}</p>}
             <button onClick={handleVerifyPhoneOtp} disabled={phoneOtpLoading || phoneOtp.length < 6}
               style={{ width: '100%', padding: '12px', background: (phoneOtpLoading || phoneOtp.length < 6) ? '#333' : green, color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, cursor: (phoneOtpLoading || phoneOtp.length < 6) ? 'not-allowed' : 'pointer', fontSize: 15 }}>

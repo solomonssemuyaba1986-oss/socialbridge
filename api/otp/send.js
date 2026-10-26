@@ -16,7 +16,7 @@ import { applyCors, fail, field, ok, readJsonBody } from '../_lib/http.js'
 import { validateIntl } from '../_lib/phone.js'
 import { CODE_TTL_MS, SEND_MESSAGES, generateCode } from '../_lib/otp.js'
 import { otpConfig, releaseGlobal, releaseStamp, reserveAndStamp, reserveGlobal } from '../_lib/otpStore.js'
-import { sendSms, smsConfig, smsForDial } from '../_lib/sms.js'
+import { sendSms, smsConfig, smsForDial, webOtpHost } from '../_lib/sms.js'
 
 /** What a person sees when we simply are not switched on. Deliberately uninformative. */
 const NOT_READY = 'Phone verification is not switched on yet. Please try again a little later.'
@@ -64,7 +64,7 @@ export default async function handler(req, res) {
     })
   }
 
-  const sent = await sendSms({ e164: check.e164, dial: check.dial, code, config: sms })
+  const sent = await sendSms({ e164: check.e164, dial: check.dial, code, config: sms, host: webOtpHost() })
   if (!sent.ok) {
     // Hand the booking back: a provider outage must not spend the person's allowance.
     await releaseStamp({ e164: check.e164, now: Date.now(), pepper: otp.pepper })

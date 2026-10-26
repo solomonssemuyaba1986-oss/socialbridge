@@ -8,6 +8,7 @@ import { COUNTRY_CODES, type CountryCode } from './countryCodes'
 import { formatFull, lengthHint, lengthRange, validatePhone } from './phone'
 import { isPhoneProven, TRUST_COLLECTION } from './trust'
 import { sendOtp, verifyOtp } from './otpClient'
+import { useSmsOtpListener } from './useSmsOtp'
 import { trackEvent } from './analytics'
 import StoreLogoPicker from './StoreLogoPicker'
 import AgeGenderAsk from './AgeGenderAsk'
@@ -205,6 +206,11 @@ function SetupStore() {
   /** True once a code has been asked for — decides where an error belongs on screen. */
   const [codeAttempted, setCodeAttempted] = useState(false)
 
+  const smsOtp = useSmsOtpListener(filled => {
+    setSmsCode(filled)
+    setSignInError('')
+  })
+
   /**
    * Has *this* number been proved for this account?
    *
@@ -229,6 +235,7 @@ function SetupStore() {
    * invalidate it — a code sent to the old number can never prove the new one.
    */
   const resetCodeStep = () => {
+    smsOtp.stop()
     setCodeSent(false)
     setSmsCode('')
     setCodeAttempted(false)
@@ -619,6 +626,7 @@ function SetupStore() {
       if (!u) return
       setSignedInUid(u.uid)
       setSignInError('')
+      smsOtp.stop()
       setCodeSent(false)
       setSmsCode('')
       // Pull in whatever the account already knows, so nothing gets retyped.
@@ -676,6 +684,7 @@ function SetupStore() {
    * never fired twice for a single verification.
    */
   const markPhoneVerified = (method: 'phone-signup' | 'social-link', number: string) => {
+    smsOtp.stop()
     setProvenPhone(number)
     setCodeSent(false)
     setSmsCode('')
@@ -708,9 +717,14 @@ function SetupStore() {
     setSigningIn('Phone')
     setSignInError('')
     setCodeAttempted(true)
+    setSmsCode('')
+    // Listen from the tap itself: the text may land before the provider's response does.
+    smsOtp.listen()
+    let accepted = false
     try {
       const sent = await sendOtp(getFullWhatsapp())
       if (sent.ok) {
+        accepted = true
         setCodeSent(true)
         trackEvent('phone_verification_sent', { country: selectedCountry.name, method })
       } else {
@@ -720,11 +734,13 @@ function SetupStore() {
         setSignInError(sent.error)
       }
     } finally {
+      if (!accepted) smsOtp.stop()
       setSigningIn('')
     }
   }
 
   const confirmPhoneCode = async () => {
+    smsOtp.stop()
     setSigningIn('Phone')
     setSignInError('')
     try {

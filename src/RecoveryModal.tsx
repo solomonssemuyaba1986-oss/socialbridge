@@ -7,6 +7,7 @@ import { functions, auth, db, googleProvider } from './firebase'
 import { COUNTRY_CODES, type CountryCode } from './countryCodes'
 import { resolveLanding } from './role'
 import { sendOtp, verifyOtp } from './otpClient'
+import { useSmsOtpListener } from './useSmsOtp'
 
 const green = '#adff2f'
 
@@ -33,12 +34,18 @@ export default function RecoveryModal({ open, onClose }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  const smsOtp = useSmsOtpListener(filled => {
+    setPhoneCode(filled)
+    setError('')
+  })
+
   const getFullNewPhone = () => `+${selectedCountry.dialCode.replace(/[^+\d]/g, '')}${newPhone}`
 
   const sendRecoveryCode = httpsCallable(functions, 'sendRecoveryCode')
   const verifyRecoveryCode = httpsCallable(functions, 'verifyRecoveryCode')
 
   const close = () => {
+    smsOtp.stop()
     setStep('choose')
     setEmail(''); setEmailCode(''); setNewPhone(''); setPhoneCode('')
     setStoreId(''); setStoreName(''); setError('')
@@ -80,13 +87,13 @@ export default function RecoveryModal({ open, onClose }: Props) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setError('Enter the recovery email on your store'); return }
     if (!/^\+[1-9]\d{7,14}$/.test(getFullNewPhone())) { setError('Enter a valid phone number with country code (e.g. +256771234567)'); return }
     setLoading(true); setError('')
+    let accepted = false
     try {
       // Find the seller store attached to this recovery email
       const q = query(collection(db, 'sellers'), where('recoveryEmail', '==', email.toLowerCase().trim()))
       const snap = await getDocs(q)
       if (snap.empty) {
         setError('No store found with that recovery email. Buyers can recover via Email or Google instead.')
-        setLoading(false)
         return
       }
       setStoreId(snap.docs[0].id)
@@ -94,20 +101,27 @@ export default function RecoveryModal({ open, onClose }: Props) {
 
       // Send OTP to the new phone — through the one shared client (`src/otpClient.ts`), so every
       // screen that verifies a number posts the same two requests in the same shape.
+      setPhoneCode('')
+      // Listen from this tap, before the network call: the text can arrive while the provider is
+      // still answering. Only Chrome Android supports it; every other browser keeps the input.
+      smsOtp.listen()
       const sent = await sendOtp(getFullNewPhone())
       if (!sent.ok) {
         setError(sent.error)
-      } else {
-        setStep('phone-otp')
+        return
       }
+      accepted = true
+      setStep('phone-otp')
     } catch {
       setError('Network error. Check your connection.')
     } finally {
+      if (!accepted) smsOtp.stop()
       setLoading(false)
     }
   }
 
   const handlePhoneVerifyOtp = async () => {
+    smsOtp.stop()
     if (!/^\d{6}$/.test(phoneCode)) { setError('Enter the 6-digit code'); return }
     setLoading(true); setError('')
     try {
@@ -282,13 +296,17 @@ export default function RecoveryModal({ open, onClose }: Props) {
               A 6-digit code was sent to <strong style={{ color: '#fff' }}>{getFullNewPhone()}</strong>. Enter it below.
             </p>
             <input value={phoneCode} onChange={e => setPhoneCode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000"
-              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '12px', boxSizing: 'border-box', fontSize: '20px', background: '#111', color: '#fff', textAlign: 'center', letterSpacing: '8px' }} />
+              inputMode="numeric" autoComplete="one-time-code" maxLength={6} aria-label="6-digit code"
+              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #333', marginBottom: '6px', boxSizing: 'border-box', fontSize: '20px', background: '#111', color: '#fff', textAlign: 'center', letterSpacing: '8px' }} />
+            <p aria-live="polite" style={{ color: smsOtp.status === 'filled' ? green : '#777', fontSize: '12px', lineHeight: 1.5, margin: '0 0 12px' }}>
+              {smsOtp.hint}
+            </p>
             {error && <p style={{ color: '#ff4444', fontSize: '12px', margin: '0 0 12px' }}>{error}</p>}
             <button onClick={handlePhoneVerifyOtp} disabled={loading || phoneCode.length !== 6}
               style={{ width: '100%', padding: '14px', background: (loading || phoneCode.length !== 6) ? '#333' : green, color: '#000', border: 'none', borderRadius: '8px', fontWeight: '800', cursor: (loading || phoneCode.length !== 6) ? 'not-allowed' : 'pointer', fontSize: '15px', marginBottom: '8px' }}>
               {loading ? 'Verifying...' : 'Verify & Update'}
             </button>
-            <button onClick={() => { setError(''); setStep('phone') }} style={{ width: '100%', padding: '10px', background: 'transparent', color: '#888', border: 'none', cursor: 'pointer', fontSize: '13px' }}>
+            <button onClick={() => { smsOtp.stop(); setError(''); setStep('phone') }} style={{ width: '100%', padding: '10px', background: 'transparent', color: '#888', border: 'none', cursor: 'pointer', fontSize: '13px' }}>
               ← Use a different number
             </button>
           </>
