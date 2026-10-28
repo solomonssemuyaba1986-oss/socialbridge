@@ -2,6 +2,19 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // A buyer's own orders, wherever they were placed.
+    //
+    // A buyer's orders live under a *shop*, so "my orders" is a collection-group question. The
+    // rules had no collection-group answer at all until now, so a phone had no way to ask. This is
+    // the answer, and it is deliberately the narrowest one possible: still signed in, and only
+    // documents whose `buyerUid` is the caller's own uid. Firestore only lets a query through when
+    // it can prove that filter, so collectionGroup("orders").where("buyerUid", "==", uid) is
+    // allowed while the collection itself stays closed to everyone else. Nothing here loosens a
+    // path rule: the shop and the buyer keep exactly the reads they already had.
+    match /{path=**}/orders/{orderId} {
+      allow read: if request.auth != null && resource.data.buyerUid == request.auth.uid;
+    }
+
     match /sellers/{sellerId} {
       allow read: if true;
 
@@ -15,6 +28,14 @@ service cloud.firestore {
       // untouched — a frozen snapshot of a real Firebase phone-auth result — so shops that earned
       // the badge before this change keep it.
       //
+      // `verifiedSeller` is the same bargain again, and it is the strongest claim of the three: a
+      // blue tick that says rachett has checked this shop against a real identity. Until now the
+      // browser could write it, so any seller could tick themselves blue with no check behind it.
+      // It is refused outright now, on create and on update, exactly like `phoneVerified` above:
+      // only the server may grant it (firebase-admin or the Firebase console, both of which bypass
+      // these rules). Nothing else about the shop changes -- a seller still owns their name, bio,
+      // logo and where they are.
+      //
       // `ratingAvg` / `ratingCount` / `ratingUpdatedAt` are the same kind of fact: what a shop's
       // own buyers said about it, averaged over every comment it has received. They are written by
       // `recomputeSellerRating` (Cloud Functions) only, because a shop that could write them could
@@ -27,11 +48,11 @@ service cloud.firestore {
       // lives in `payoutAccounts/{uid}` below, closed to everyone but its owner and the server.
       allow create: if request.auth.uid == sellerId
         && !request.resource.data.keys()
-             .hasAny(['phoneVerified', 'ratingAvg', 'ratingCount', 'ratingUpdatedAt',
+             .hasAny(['phoneVerified', 'verifiedSeller', 'ratingAvg', 'ratingCount', 'ratingUpdatedAt',
                       'paymentMethods', 'paymentMethodsUpdatedAt']);
       allow update: if request.auth.uid == sellerId
         && !request.resource.data.diff(resource.data).affectedKeys()
-             .hasAny(['phoneVerified', 'ratingAvg', 'ratingCount', 'ratingUpdatedAt',
+             .hasAny(['phoneVerified', 'verifiedSeller', 'ratingAvg', 'ratingCount', 'ratingUpdatedAt',
                       'paymentMethods', 'paymentMethodsUpdatedAt']);
       allow delete: if request.auth.uid == sellerId;
 
