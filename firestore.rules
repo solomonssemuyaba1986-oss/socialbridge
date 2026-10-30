@@ -253,6 +253,102 @@ service cloud.firestore {
       }
     }
 
+    // ── 🎬 Shoppertainment — the video channel ──────────────────────────────────
+    //
+    // A post is a short vertical video, or a carousel of up to ten photos and videos, that a shop
+    // published about something it sells. It lives at the top level rather than under its shop so
+    // the channel can be one query — `published == true`, newest first, paged — instead of a walk
+    // over every shop. The shop keeps every read it already had; nothing under `sellers/` moves.
+    //
+    // The shop's own facts are **copied onto the post** (`sellerName`, `sellerVerified`,
+    // `productName`, `productPrice` …) so a slide draws without a read per card. The copy is a
+    // label, never authority: the ✓ and the ★ are still whatever `sellers/{sellerId}` and
+    // `trust/{uid}` say, exactly as the store page reads them.
+    //
+    // Nothing here is taken on the browser's word, so the shape is pinned at create: who authored
+    // it, that it is published, that it starts at zero ♥ and 💬, at most ten media items, and a
+    // caption that fits. `createdAt` must be a real timestamp, because the feed orders on it.
+    //
+    // Drafts are **not** here. The Studio keeps an unfinished post in the seller's own phone until
+    // Publish writes it, so there is no half-finished document for anyone to read or guess.
+    match /shoppertainment/{postId} {
+      function isAuthor() {
+        return request.auth != null && request.auth.uid == resource.data.sellerId;
+      }
+
+      // Public, like `products` and `reviews`: the channel is the shop window. A post is removed by
+      // deleting it — by its author, or by the server for a takedown — not by a flag a reader could
+      // be shown a stale copy of.
+      allow read: if true;
+
+      allow create: if request.auth != null
+        && request.resource.data.sellerId == request.auth.uid
+        && request.resource.data.published == true
+        && request.resource.data.media is list
+        && request.resource.data.media.size() > 0
+        && request.resource.data.media.size() <= 10
+        && request.resource.data.caption is string
+        && request.resource.data.caption.size() <= 300
+        && request.resource.data.likeCount == 0
+        && request.resource.data.commentCount == 0
+        && request.resource.data.createdAt is timestamp;
+
+      // The author's own pen: words, cover, the product it tags, the media list — but never the
+      // tallies, never the author, never the moment it was published.
+      allow update: if isAuthor()
+        && request.resource.data.sellerId == resource.data.sellerId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && !request.resource.data.diff(resource.data).affectedKeys()
+             .hasAny(['likeCount', 'commentCount', 'sellerId', 'createdAt'])
+      // ♥ The public like tally: any signed-in person, one at a time, never the author themselves.
+      || (
+        request.auth != null
+        && request.auth.uid != resource.data.sellerId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount'])
+        && (
+          request.resource.data.likeCount == resource.data.get('likeCount', 0) + 1
+          || request.resource.data.likeCount == resource.data.get('likeCount', 0) - 1
+        )
+      )
+      // 🗣️ The comment tally, moved only in the same write as the comment itself — `existsAfter` is
+      // the proof, so the number under a video can never drift away from what people said.
+      || (
+        request.auth != null
+        && request.auth.uid != resource.data.sellerId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount'])
+        && existsAfter(/databases/$(database)/documents/shoppertainment/$(postId)/comments/$(request.auth.uid))
+        && request.resource.data.commentCount - resource.data.get('commentCount', 0) >= 0
+        && request.resource.data.commentCount - resource.data.get('commentCount', 0) <= 1
+      );
+
+      allow delete: if isAuthor();
+
+      // ♥ One vote per account: the document ID *is* the voter's uid, so a second ♥ can only be an
+      // un-♥ (a delete) — never a duplicate vote. Same bargain as the product likes above.
+      match /likes/{voterId} {
+        allow read: if true;
+        allow create: if request.auth != null
+          && request.auth.uid == voterId
+          && voterId != get(/databases/$(database)/documents/shoppertainment/$(postId)).data.sellerId;
+        allow update: if false;
+        allow delete: if request.auth != null && request.auth.uid == voterId;
+      }
+
+      // 🗣️ A comment: public to read, written by its own author only, and never editable by the shop
+      // it is about. One document per commenter — the uid *is* the ID — is what makes the count
+      // above provable.
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if request.auth != null
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 300;
+        allow update, delete: if request.auth != null
+          && resource.data.uid == request.auth.uid;
+      }
+    }
+
     match /events/{eventId} {
       allow create: if true;
       allow read: if false;
