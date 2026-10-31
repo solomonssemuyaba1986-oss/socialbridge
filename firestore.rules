@@ -454,6 +454,11 @@ service cloud.firestore {
     // matched are never stored here, only how often this account has looked.
     match /contactLookups/{userId} { allow read, write: if false; }
 
+    // Per-caller counters for "does this number already have an account?" (`api/otp/lookup`).
+    // Closed for the same reason, and the document key is an HMAC of the caller's address with
+    // the OTP pepper -- so this collection names neither a person nor a phone number.
+    match /lookupChecks/{callerKey} { allow read, write: if false; }
+
     match /users/{userId} {
       allow read, write: if request.auth.uid == userId;
 

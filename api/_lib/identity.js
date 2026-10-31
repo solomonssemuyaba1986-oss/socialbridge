@@ -121,3 +121,39 @@ export async function claimNumber({ e164, uid: signedInUid = '', now = Date.now(
 export function customTokenFor(uid) {
   return adminAuth().createCustomToken(uid)
 }
+
+/**
+ * Does this number already belong to a rachett account?
+ *
+ * The same question `claimNumber` asks one line into the verify branch — pulled out so the lookup
+ * endpoint can ask it *without* creating anything, and so both places answer it the same way.
+ * Firebase Auth is the authority: one number, one account, enforced by the platform rather than by
+ * our bookkeeping. The ledger in `phones/` is a second guard for races, not a directory to read.
+ */
+export async function numberIsLinked(e164) {
+  const user = await adminAuth().getUserByPhoneNumber(e164).catch((err) => {
+    if (codeOf(err) === 'auth/user-not-found') return null
+    throw err
+  })
+  return Boolean(user)
+}
+
+/**
+ * A number that is not anybody's account but *is* on a shop — as its WhatsApp contact.
+ *
+ * Worth the two reads because the alternative is calling a real seller "not on rachett". Numbers
+ * are written by the setup form as `+256700000000` (`formatFull`), so the E.164 form is tried
+ * first; the bare digits are checked too, because drafts and older documents predate that habit.
+ * No index is added for this: it is one document per lookup on a small collection, and a
+ * composite index would be a deploy step for a question asked once per sign-in.
+ */
+export async function shopUsesNumber(e164) {
+  const digits = String(e164 || '').replace(/\D/g, '')
+  for (const candidate of [e164, digits]) {
+    if (!candidate) continue
+    const snap = await adminDb().collection('sellers').where('whatsapp', '==', candidate).limit(1).get()
+    if (!snap.empty) return true
+  }
+  return false
+}
+
