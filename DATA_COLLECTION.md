@@ -46,7 +46,7 @@
 | **Device (localStorage/sessionStorage)** | Drafts, bag, buyer area, remembered user, guest verification |
 | **Third parties** | Cloudinary, Yoola, eSMS Africa, Resend, Formspree*, Nominatim/OSM, Google |
 
-\* Formspree only receives anything if `VITE_FORMSPREE_ID` is set.
+\* Formspree only receives anything if `VITE_FORMSPREE_ID` is set. The Android app posts to the same form (`FORMSPREE_ID`, default `moeawone`) with the same field names — see the `feedback` rows below.
 
 ---
 
@@ -243,7 +243,8 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 | `users/{uid}/ratingAsks/{orderId}` | `{ surface, at }` — "we have asked this buyer for a ⭐ on this order". Owner-only, keyed by the order document id, and **deliberately not the ♥ answer above**: one question must never silence the other. Written once, when the quiet My Orders fallback offers the stars, so it is offered exactly once and the map can tell whether a buyer has already rated (`users/{uid}/comments/{productId}`, written in the same batch as the comment itself) | `useProductReviews.ts` (`markRatingAsked` / `wasRatingAsked`) |
 | `sellers/{uid}/visits/*` | per-visit channel | `StorePage.tsx:497` |
 | `productViews/{productId}` | `{ count, updatedAt }` — how many times a product has been opened. Public to read, `request.auth != null` to move, **create only at `count == 1`, update only at `count == resource.data.count + 1`**, `delete` denied | `productViews.ts` (`countProductView`, called from `ProductSheet.tsx` beside `product_sheet_opened`) |
-| `feedback/{id}` | `role` (seller/buyer/user), `category`, `message`, `name`, `contact`, `page` (full URL), `source` (`page` = the full form, `prompt` = the after-use card), `submittedAt`, `userEmail`, `uid`, `createdAt` | `feedback.ts` (used by `FeedbackPage.tsx` + `FeedbackNudge.tsx`) |
+| `feedback/{id}` | `role` (seller/buyer/user), `category`, `message`, `name`, `contact`, `page` (full URL on the web; the literal `android` from the phone), `source` (`page` = the full form, `prompt` = the after-use card, `android` = the app's corner sheet or help page), `submittedAt`, `userEmail`, `uid`, `createdAt` | `feedback.ts` (used by `FeedbackPage.tsx` + `FeedbackNudge.tsx`). **The Android app writes the identical shape** from `lib/services/feedback_service.dart` (`FirestoreFeedbackService.send()`), with `page`/`source` = `android` and `category` = `Help Request` when the words came from the app's help page rather than the corner sheet |
+| `feedback/{id}` — **Android sign-out shape** | `kind` (`signout`), `category` (one of the five reasons the sheet offers, or `''`), `message` (what they typed, ≤ 500, or `''`), `uid`, `role: 'user'`, `source: 'android'`, `createdAt`. Written **only while signed in** (the rules require `request.auth != null`) and never read back by the app. Nothing else is read off the phone: no number, no email, no name, no page. Deliberately the same field names as the web shape, so `npm run feedback:report` counts both kinds together | `sign_out_sheet.dart` → `FirestoreFeedbackService.keep()` (`lib/services/feedback_service.dart`) |
 | `recoveries/{id}` | `email`, `codeHash` (SHA-256), `expiresAt`, `verified`, `attempts`, `createdAt` — client access denied | `functions/index.js:27-107`, `firestore.rules:89-91` |
 
 ---
@@ -291,7 +292,7 @@ Every document: `{ event, userId: string (uid | 'guest'), sourcePlatform, data: 
 | **Nominatim / OpenStreetMap** | Seller's typed area text **and** GPS coordinates; buyer area lookup | ✅ `place.ts:30` |
 | **Resend** | Seller's `recoveryEmail` + 6-digit code | ✅ `functions/index.js` |
 | **Google** | OAuth identity (name, email, photo) — the only social sign-in; phone sign-in uses our own OTP server, not a third-party identity provider | ✅ |
-| **Formspree** | Feedback text, name, contact, page URL, user email | ⚠️ only if `VITE_FORMSPREE_ID` is set |
+| **Formspree** | Feedback text, name, contact, page URL (or the word `android`), user email | ⚠️ only if `VITE_FORMSPREE_ID` is set. **The Android app posts to the same form** (`--dart-define=FORMSPREE_ID`, default `moeawone`), field for field — so an answer typed on the phone lands in the same inbox as one typed in the browser, and a sign-out's sentence arrives there too with `category: 'Sign Out'` |
 | **Flutterwave** | *Nothing* — `paymentService.ts` is **dead code** (no file imports it). **Decision (15 Sep 2026): leave it untouched until payments have been tested.** | ❌ |
 | **FCM / push** | *Nothing* — no messaging SDK anywhere; `notifications.ts` is UI copy only | ❌ |
 

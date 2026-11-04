@@ -46,13 +46,22 @@ service cloud.firestore {
       // may only be on when `/api/payout/methods` has proved its number with an SMS code. The
       // browser cannot write this field at all, and it never carries the number itself — that
       // lives in `payoutAccounts/{uid}` below, closed to everyone but its owner and the server.
+      //
+      // ⭐ The rating keys have since been split in two: `ratingWeightSum` is the total weight the
+      // average was computed from (three verified stars weigh 3.0, a chat-only star 0.3), and
+      // `ratingMathVersion` says which arithmetic produced the number -- `2` is the weighted,
+      // decayed, smoothed one in `lib/utils/seller_rating.dart`, and an older document without the
+      // stamp carries a plain comment average the phone is told to ignore. Both are refused here
+      // for exactly the reason above: the shop must not be able to write its own reputation.
       allow create: if request.auth.uid == sellerId
         && !request.resource.data.keys()
              .hasAny(['phoneVerified', 'verifiedSeller', 'ratingAvg', 'ratingCount', 'ratingUpdatedAt',
+                      'ratingWeightSum', 'ratingMathVersion',
                       'paymentMethods', 'paymentMethodsUpdatedAt']);
       allow update: if request.auth.uid == sellerId
         && !request.resource.data.diff(resource.data).affectedKeys()
              .hasAny(['phoneVerified', 'verifiedSeller', 'ratingAvg', 'ratingCount', 'ratingUpdatedAt',
+                      'ratingWeightSum', 'ratingMathVersion',
                       'paymentMethods', 'paymentMethodsUpdatedAt']);
       allow delete: if request.auth.uid == sellerId;
 
@@ -142,6 +151,97 @@ service cloud.firestore {
           // it, not to delete it — which is the only way a comment stays worth reading.
           allow delete: if request.auth != null && request.auth.uid == buyerUid;
         }
+
+        // ── ⭐ What buyers rated the shop ────────────────────────────────────────────────────
+        // A star is about the **seller**, not about one listing. A shop is one reputation: the same
+        // number is drawn on every product card, in the product sheet and on the shop page, and no
+        // per-product average exists anywhere any more. Comments (`reviews` above) stay per-product
+        // and no longer feed this number.
+        //
+        // One rating per buyer per order, and one per buyer for a chat with no order behind it: the
+        // document ID *is* that key (`order_<orderId>` / `chat_<buyerUid>`), so a second rating can
+        // only ever replace the first -- it can never stack on top of it.
+        //
+        // The weight a star carries is not stored here: it is `source` (plus whether a chat rating
+        // names an order) read through `lib/utils/seller_rating.dart`. What is checked *here* is the
+        // proof behind each source, where it cannot be faked:
+        //
+        //   order           the buyer's own order, delivered -- the seller marked it `fulfilled`,
+        //                   or the buyer tapped "I received it" (see `orders` below)
+        //   chat + order    the same proof, three days after the buyer said it arrived, plus a
+        //                   thread between these two people -- the fallback for a buyer never asked
+        //   chat, no order  a thread the **seller answered** (`conversations/{id}/proofs/
+        //                   sellerReplied`, which only the seller may create), and one of the
+        //                   buyer's daily allowance -- the counter below has to move in the same
+        //                   batch, so a star with no tick is refused along with it
+        //
+        // `createdAt` is a `serverTimestamp`, which the rules see as the moment of the write: a
+        // rating cannot be dated to look fresher than it is, and since weight only ever decays with
+        // age, dating one backwards can only hurt the person who wrote it.
+        match /ratings/{ratingId} {
+          function ratedOrder() {
+            return get(/databases/$(database)/documents/sellers/$(sellerId)/orders/$(request.resource.data.orderId)).data;
+          }
+          // Delivered: the seller's own `fulfilled`, or the buyer's own attestation. Either is
+          // enough -- a shop that never presses "delivered" must not be able to stop its buyers
+          // from rating it.
+          function delivered() {
+            return ratedOrder().buyerUid == request.auth.uid
+              && (ratedOrder().status == 'fulfilled' || ratedOrder().get('receivedAt', 0) > 0);
+          }
+          // A chat rating that names an order waits **three days** after the buyer said the thing
+          // arrived (259200000 ms). The order's own stars are the first ask; this path is the
+          // fallback for a buyer who was never asked, so it may not be the quick way out. The wait
+          // is measured from the buyer's own attestation because that is the only delivery time an
+          // order carries -- which makes it a patience test rather than a proof, and the rating's
+          // own date is still the server's.
+          function deliveredThreeDaysAgo() {
+            return ratedOrder().get('receivedAt', 0) > 0
+              && timestamp.value(ratedOrder().receivedAt + 259200000) <= request.time;
+          }
+          function thread() {
+            return get(/databases/$(database)/documents/conversations/$(request.resource.data.threadId)).data;
+          }
+          // The daily allowance, moved in the same batch as the rating. No counter yet means this
+          // is the first one today.
+          function quotaMoved() {
+            return !exists(/databases/$(database)/documents/users/$(request.auth.uid)/ratingQuota/main)
+              ? getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/ratingQuota/main).data.count == 1
+              : getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/ratingQuota/main).data.count
+                  == get(/databases/$(database)/documents/users/$(request.auth.uid)/ratingQuota/main).data.count + 1;
+          }
+
+          // Public to read: the stars are the shop's, and a page has to draw them for a visitor who
+          // is not signed in.
+          allow read: if true;
+          allow create, update: if request.auth != null
+            && request.auth.uid != sellerId
+            && request.resource.data.buyerUid == request.auth.uid
+            && request.resource.data.stars is int
+            && request.resource.data.stars >= 1
+            && request.resource.data.stars <= 5
+            && request.resource.data.createdAt == request.time
+            && request.resource.data.source in ['order', 'chat']
+            && (
+              (
+                request.resource.data.source == 'order'
+                && ratingId == 'order_' + request.resource.data.orderId
+                && delivered()
+              )
+              || (
+                request.resource.data.source == 'chat'
+                && ratingId == 'chat_' + request.auth.uid
+                && thread().buyerId == request.auth.uid
+                && thread().sellerId == sellerId
+                && exists(/databases/$(database)/documents/conversations/$(request.resource.data.threadId)/proofs/sellerReplied)
+                && (!('orderId' in request.resource.data) || deliveredThreeDaysAgo())
+                && ('orderId' in request.resource.data || quotaMoved())
+              )
+            );
+          // A buyer may take their own star back. The seller can never touch one -- not to edit it,
+          // not to delete it -- which is the only way the number stays worth reading.
+          allow delete: if request.auth != null && request.auth.uid == resource.data.buyerUid;
+        }
       }
 
       // The 💎 Reliable Seller numbers — completion rate and average first-reply time. They are
@@ -221,6 +321,20 @@ service cloud.firestore {
             resource.data.get('returnRequestedAt', 0) == 0
             || request.resource.data.returnRequestedAt == resource.data.get('returnRequestedAt', 0)
           );
+        // 📦 "I received it" -- the buyer's own word that the thing arrived, and the proof an order
+        // rating stands on (`sellers/{id}/ratings` above). Two fields, write-once, on their own
+        // order, and deliberately *not* `status`: the shop's completion rate and the 48-hour return
+        // window stay the seller's own business, and an order still being paid for is not something
+        // anybody has received. The value is the buyer's clock, which is fine -- it is an
+        // attestation, not a measurement; the rating's own date is the server's.
+        allow update: if request.auth != null
+          && resource.data.buyerUid == request.auth.uid
+          && resource.data.get('checkoutState', '') != 'paying'
+          && !('receivedAt' in resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['receivedAt', 'receivedBy'])
+          && request.resource.data.receivedAt is int
+          && request.resource.data.receivedAt > 0
+          && request.resource.data.receivedBy == 'buyer';
         allow delete: if request.auth.uid == sellerId;
       }
 
@@ -382,6 +496,91 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ── 📺 Lives ──────────────────────────────────────────────────────────────
+    // The live room, as the *phone* writes it (`LiveWrites` in rachett). Until this block existed the
+    // collection had no rule at all, so every write was refused and a seller could tap "Go live" for
+    // ever without a room appearing. The shape below is the shape the app writes, field for field:
+    // a field added there without being added here is a live nobody can start.
+    //
+    // Three separate hands are allowed, and they are deliberately not the same permission:
+    // the seller opens the room and may only move what the room is looking at; anyone, guest
+    // included, may add one heart and nothing else; nobody may delete a live, because a room that
+    // can be erased is a room where a seller can erase what a buyer saw.
+    //
+    // One rules file, both clients: the phone ships no copy of its own, so a deploy from this
+    // folder is what the web *and* rachett get. Nothing to keep in step but this.
+    match /lives/{liveId} {
+      function signedIn() { return request.auth != null; }
+      function touches(fields) {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+      }
+
+      // Anyone may watch, signed in or not. A live is a shop window.
+      allow read: if true;
+
+      // A seller opens a live in their own name. The counters start at zero because only the
+      // increments below may move them — a seller cannot open a room that already claims 400 viewers.
+      allow create: if signedIn()
+        && request.resource.data.sellerId == request.auth.uid
+        && request.resource.data.status == 'live'
+        && request.resource.data.viewerCount == 0
+        && request.resource.data.likeCount == 0
+        && request.resource.data.title is string
+        && request.resource.data.title.size() <= 120
+        && request.resource.data.pinnedProductId is string
+        && request.resource.data.products is list
+        && request.resource.data.products.size() <= 40
+        && request.resource.data.keys().hasOnly([
+             'sellerId', 'sellerName', 'sellerSlug', 'title', 'pinnedProductId',
+             'products', 'status', 'viewerCount', 'likeCount', 'startedAt',
+             'lastSeen'
+           ]);
+
+      // The seller's own hand: what the room is looking at, whether it is still on, and the viewer
+      // count its heartbeat counted. `diff().affectedKeys()` is why this is safe — an update that
+      // also nudges `likeCount` on the way is refused, not averaged. The name it is under may not be
+      // changed afterwards: a room that could be renamed is a room somebody could put another shop's
+      // name on.
+      allow update: if signedIn()
+        && resource.data.sellerId == request.auth.uid
+        && request.resource.data.sellerId == resource.data.sellerId
+        && touches(['pinnedProductId', 'status', 'endedAt', 'viewerCount', 'lastSeen'])
+        && request.resource.data.status in ['live', 'ended'];
+
+      // One more heart, from anyone including a guest, changing nothing else. A heart is a counter,
+      // not a claim: no name, no uid, no history — which is exactly why it can be given away this
+      // cheaply.
+      allow update: if touches(['likeCount'])
+        && request.resource.data.likeCount == resource.data.likeCount + 1;
+
+      allow delete: if false;
+
+      // The chat. Append-only, and only ever in your own name.
+      match /messages/{messageId} {
+        allow read: if true;
+        allow create: if signedIn()
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 300
+          && request.resource.data.kind in ['chat', 'order']
+          && request.resource.data.keys().hasOnly([
+               'uid', 'name', 'text', 'kind', 'productId', 'productName',
+               'color', 'priceText', 'createdAt'
+             ]);
+        // What was said stays said. A transcript that could be edited after the fact is not a transcript.
+        allow update, delete: if false;
+      }
+
+      // Who is in the room, one document per account. Never read from the client — the seller's phone
+      // *counts* these, it does not list them, and nobody learns who else is watching from a query.
+      match /viewers/{uid} {
+        allow read: if false;
+        allow create, update: if signedIn() && request.auth.uid == uid;
+        allow delete: if signedIn() && request.auth.uid == uid;
+      }
+    }
+
     match /feedback/{feedbackId} {
       allow create: if request.auth != null;
       allow read, update, delete: if false;
@@ -487,6 +686,52 @@ service cloud.firestore {
         allow read, write: if request.auth.uid == userId;
       }
 
+      // ⭐ "How many chat-only ratings I have left today."
+      //
+      // The allowance is `SellerRatingRules.chatRatingsPerDay` = 3 in `lib/utils/seller_rating.dart`
+      // and the number is repeated here on purpose: the rules are the side that has to hold, and
+      // `_rating_rules_check.cjs` reads both to make sure they still agree.
+      //
+      // A rating that comes from an order needs no allowance -- the delivery is its proof. This
+      // counter exists for the weakest source only, where "we chatted" is all anybody has proved,
+      // so a buyer may leave three of those a day and no more. The rating write above has to move
+      // this counter in the same batch, so a star with no tick fails with it.
+      //
+      // `day` is the UTC midnight the bucket belongs to, and three things hold because of it:
+      //
+      //   * the bucket must be *today's* (`day <= request.time < day + 1d`), so a stale counter
+      //     cannot quietly accumulate beside a fresh one;
+      //   * a new bucket may only ever move `day` forward, and it starts at one -- so within one
+      //     day there is exactly one reset available, and after it the buyer is pinned to ticking
+      //     1, 2, 3;
+      //   * deleting the counter is refused, because that would be a free reset.
+      match /ratingQuota/{docId} {
+        allow read: if request.auth.uid == userId;
+        allow create: if request.auth.uid == userId
+          && docId == 'main'
+          && request.resource.data.day is timestamp
+          && request.resource.data.count == 1
+          && request.resource.data.day <= request.time
+          && request.time < request.resource.data.day + duration.value(1, 'd');
+        allow update: if request.auth.uid == userId
+          && docId == 'main'
+          && request.resource.data.day is timestamp
+          && request.resource.data.day <= request.time
+          && request.time < request.resource.data.day + duration.value(1, 'd')
+          && (
+            (
+              request.resource.data.day == resource.data.day
+              && request.resource.data.count == resource.data.count + 1
+              && request.resource.data.count <= 3
+            )
+            || (
+              request.resource.data.day > resource.data.day
+              && request.resource.data.count == 1
+            )
+          );
+        allow delete: if false;
+      }
+
       // "Did you love it?" answers we have already asked about — so we never nag twice.
       match /loveAnswers/{orderId} {
         allow read, write: if request.auth.uid == userId;
@@ -538,6 +783,27 @@ service cloud.firestore {
         allow update: if inThread()
           && resource.data.senderId != request.auth.uid;
         allow delete: if false;
+      }
+
+      // ⭐ The one fact a chat rating is authorised by: the seller answered this thread.
+      //
+      // It lives in its own write-once document rather than as a field on the thread, because a
+      // thread is writable by *both* of its people (`allow update` above is deliberately loose --
+      // read receipts, last message, unread counts) and the buyer must not be able to stamp it on
+      // the seller's behalf. Only the seller of this thread may create it, nobody may change it,
+      // and nobody may remove it. The rating rule reads its *existence*, not its value.
+      match /proofs/{proofId} {
+        function thread() {
+          return get(/databases/$(database)/documents/conversations/$(conversationId)).data;
+        }
+        allow read: if request.auth != null
+          && (request.auth.uid == thread().sellerId || request.auth.uid == thread().buyerId);
+        allow create: if request.auth != null
+          && request.auth.uid == thread().sellerId
+          && proofId == 'sellerReplied'
+          && request.resource.data.at is int
+          && request.resource.data.at > 0;
+        allow update, delete: if false;
       }
     }
 

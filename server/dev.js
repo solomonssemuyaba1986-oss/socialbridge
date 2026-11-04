@@ -16,6 +16,7 @@ import http from 'node:http'
 import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import sendOtp from '../api/otp/send.js'
+import lookupOtp from '../api/otp/lookup.js'
 import verifyOtp from '../api/otp/verify.js'
 import payoutMethods from '../api/payout/methods.js'
 import matchContacts from '../api/contacts/match.js'
@@ -24,6 +25,7 @@ const PORT = Number(process.env.PORT) || 3001
 
 const ROUTES = {
   '/api/otp/send': sendOtp,
+  '/api/otp/lookup': lookupOtp,
   '/api/otp/verify': verifyOtp,
   '/api/payout/methods': payoutMethods,
   '/api/contacts/match': matchContacts,
