@@ -269,11 +269,18 @@ service cloud.firestore {
         // The seller's own half: moving an order along, deciding a return, and asking for a rating.
         // They are separate on purpose — a delivered order is closed to everything except those, so
         // nothing can walk back out of "fulfilled" by accident.
+        // The phone's two words are additive, not a replacement: `fulfilled` is still the only word
+        // that means "delivered" and the web's history keys its "Confirmed" tick off it. What the
+        // phone adds is the step before the money (`accepted` - the shop has it in hand, so the buyer
+        // may pay) and the honest end of an order the shop cannot take (`cancelled`, with the reason
+        // in `cancelReason`, capped below because the buyer is shown it).
         allow update: if request.auth.uid == sellerId
           && (!('checkoutState' in resource.data) || resource.data.checkoutState != 'paying')
           && (
-            (resource.data.status in ['pending', 'paid', 'awaiting_payment', 'needs_details']
-             && request.resource.data.status in ['fulfilled', 'out_of_stock', 'needs_details'])
+            (resource.data.status in ['pending', 'accepted', 'paid', 'awaiting_payment', 'needs_details']
+             && request.resource.data.status in ['accepted', 'fulfilled', 'out_of_stock', 'cancelled', 'needs_details']
+             && (!('cancelReason' in request.resource.data)
+                 || request.resource.data.cancelReason.size() <= 140))
             || (
               resource.data.status == 'fulfilled'
               && request.resource.data.diff(resource.data).affectedKeys()
