@@ -53,6 +53,14 @@ service cloud.firestore {
       // decayed, smoothed one in `lib/utils/seller_rating.dart`, and an older document without the
       // stamp carries a plain comment average the phone is told to ignore. Both are refused here
       // for exactly the reason above: the shop must not be able to write its own reputation.
+      //
+      // 🧵 Deliberately *not* refused: `story`, `storyAt`, `storyAtMs` (the shop's 24-hour story)
+      // and `products/{id}.stock` (what is left on the shelf, taken down when an order leaves the
+      // shop). Those are the seller's own facts about their own shop, and the owner-write branch
+      // below is exactly what they need — a rule cannot tell an honest story from a dishonest one,
+      // so it refuses the fields that speak for rachett (badges, ratings, payout rails) and leaves
+      // the ones that speak for the shop. `orderCount` in the products match is the buyer-side
+      // counter, and it is capped to +1 per update for the same reason.
       allow create: if request.auth.uid == sellerId
         && !request.resource.data.keys()
              .hasAny(['phoneVerified', 'verifiedSeller', 'ratingAvg', 'ratingCount', 'ratingUpdatedAt',
@@ -637,6 +645,14 @@ service cloud.firestore {
     // code texted to that number came back correct. The seller may read their own record so the
     // Payouts page can show what it saved; nobody else — not another seller, not a buyer, not a
     // visitor — can. `firebase-admin` bypasses rules, which is the separation being drawn.
+    //
+    // 🤝 One document, up to two numbers per rail. A seller often has a shop till and a personal
+    // wallet on the same network, so `numbers` maps a derived id (`mtn-256771234567`) to the
+    // number with the moment a code proved it, and `active` says which of them is live. Both live
+    // in this same document on purpose: no new path means no new rule to get wrong, and the
+    // server-write guarantee above covers them by construction. The legacy top-level `mtn` and
+    // `airtel` entries stay, mirroring the live number, because the pawaPay rail and every
+    // document written before `numbers` existed read those.
     match /payoutAccounts/{userId} {
       allow read: if request.auth != null && request.auth.uid == userId;
       allow write: if false;

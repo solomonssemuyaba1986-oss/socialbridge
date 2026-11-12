@@ -87,3 +87,169 @@ export function publicRailPatch(now) {
     verifiedAt: now,
   }
 }
+
+/**
+ * How many numbers one rail may hold.
+ *
+ * A seller often has a shop till and a personal wallet on the same network — two, but not
+ * twenty. The cap lives here so the endpoint, the phone and `_payout_check.cjs` all read the
+ * same number instead of each remembering their own.
+ */
+export const MAX_NUMBERS_PER_METHOD = 2
+
+const E164 = /^\+[1-9]\d{7,14}$/
+
+/**
+ * The stable id of one proved number, e.g. `mtn-256771234567`.
+ *
+ * Derived from the rail and the number rather than minted at random, so proving the same number
+ * twice updates one entry instead of filling the seller's two slots with the same phone. Two
+ * devices verifying at once therefore converge on the same document.
+ */
+export function payoutNumberId(method, number) {
+  if (!isPayoutMethod(method)) return ''
+  const e164 = typeof number === 'string' ? number.trim() : ''
+  if (!E164.test(e164)) return ''
+  return `${method}-${e164.slice(1)}`
+}
+
+/**
+ * The numbers this account has proved, keyed by id — tolerating a document an older server wrote.
+ *
+ * Anything malformed is dropped rather than passed on: a half-written entry is not a proof, and
+ * the next server write replaces the map with this cleaned copy.
+ *
+ * A legacy top-level `mtn`/`airtel` entry is folded in as a number of its own. Documents written
+ * before `numbers` existed must not lose their proof the first time a second rail is verified —
+ * the seller's existing wallet is still theirs, and it still counts against the cap.
+ */
+export function storedNumbers(account) {
+  const out = {}
+  const raw = account && typeof account === 'object' ? account.numbers : null
+  if (raw && typeof raw === 'object') {
+    for (const [id, entry] of Object.entries(raw)) {
+      if (!entry || typeof entry !== 'object') continue
+      if (!isPayoutMethod(entry.method)) continue
+      const number = typeof entry.number === 'string' ? entry.number.trim() : ''
+      const at = Number(entry.verifiedAt)
+      if (!E164.test(number)) continue
+      if (!Number.isFinite(at) || at <= 0) continue
+      out[id] = { method: entry.method, number, verifiedAt: at }
+    }
+  }
+  for (const method of PAYOUT_METHODS) {
+    const legacy = verifiedNumberFor(account, method)
+    if (!legacy) continue
+    const id = payoutNumberId(method, legacy)
+    if (!id || out[id]) continue
+    out[id] = { method, number: legacy, verifiedAt: Number(account[method].verifiedAt) }
+  }
+  return out
+}
+
+/** The numbers proved for one rail, oldest proof first. */
+export function numbersForMethod(account, method) {
+  if (!isPayoutMethod(method)) return []
+  return Object.entries(storedNumbers(account))
+    .filter(([, entry]) => entry.method === method)
+    .sort((a, b) => a[1].verifiedAt - b[1].verifiedAt)
+    .map(([id, entry]) => ({ id, ...entry }))
+}
+
+/**
+ * The id of the number that is live for a rail, or ''.
+ *
+ * `active` wins when it still points at a proved number. An account written before `active`
+ * existed falls back to the legacy top-level `mtn`/`airtel` entry, then to the oldest proof — so
+ * a seller who verified one number years ago keeps paying out to that same one.
+ */
+export function activeNumberId(account, method) {
+  if (!isPayoutMethod(method)) return ''
+  const numbers = storedNumbers(account)
+  const claimed = account && typeof account === 'object' && account.active
+    ? account.active[method]
+    : null
+  if (typeof claimed === 'string' && numbers[claimed] && numbers[claimed].method === method) {
+    return claimed
+  }
+  const legacy = verifiedNumberFor(account, method)
+  if (legacy) {
+    const legacyId = payoutNumberId(method, legacy)
+    if (numbers[legacyId]) return legacyId
+  }
+  const proved = numbersForMethod(account, method)
+  return proved.length ? proved[0].id : ''
+}
+
+/** The `active` map with every id that no longer points at a proved number removed. */
+export function activeMap(account) {
+  const numbers = storedNumbers(account)
+  const out = {}
+  for (const method of PAYOUT_METHODS) {
+    const id = activeNumberId(account, method)
+    if (id && numbers[id]) out[method] = id
+  }
+  return out
+}
+
+/**
+ * The private account document as it should be written: the proved numbers, which one is live
+ * per rail, and the legacy top-level entry mirroring that live number.
+ *
+ * The mirror is what lets `src/PaymentSetup.tsx`, pawaPay and everything written before this
+ * field existed read the document unchanged: `account.mtn` always names the number that is
+ * actually live, even once a seller has two.
+ */
+export function accountPatch(account) {
+  const numbers = storedNumbers(account)
+  const active = activeMap(account)
+  const patch = { numbers, active }
+  for (const method of PAYOUT_METHODS) {
+    const entry = numbers[active[method]]
+    if (entry) patch[method] = verifiedEntry(entry.number, entry.verifiedAt)
+  }
+  return patch
+}
+
+/** Can one more number be proved for this rail? A number already proved is not a new one. */
+export function canAddNumber(account, method, number) {
+  if (!isPayoutMethod(method)) return false
+  const id = payoutNumberId(method, number)
+  if (!id) return false
+  if (storedNumbers(account)[id]) return true
+  return numbersForMethod(account, method).length < MAX_NUMBERS_PER_METHOD
+}
+
+/** The refusal a seller reads when both slots on a rail are already taken. */
+export function tooManyNumbersMessage(method) {
+  const name = isPayoutMethod(method) ? PAYOUT_METHOD_NAMES[method] : 'payout'
+  return `You already have ${MAX_NUMBERS_PER_METHOD} ${name} numbers verified. rachett keeps `
+    + `${MAX_NUMBERS_PER_METHOD}, so this one was not added.`
+}
+
+/**
+ * The private account document after a code proved `number` for `method`, or null when the rail
+ * is already holding its two.
+ *
+ * A number proved for the first time becomes the live one only when the rail had none — a seller
+ * adding a second wallet must not silently move tomorrow's money off the wallet that works.
+ */
+export function applyVerifiedNumber(account, { method, number, now }) {
+  const id = payoutNumberId(method, number)
+  if (!id) return null
+  if (!canAddNumber(account, method, number)) return null
+  const numbers = storedNumbers(account)
+  numbers[id] = { method, number, verifiedAt: now }
+  const active = activeMap(account)
+  if (!active[method]) active[method] = id
+  return accountPatch({ ...(account || {}), numbers, active })
+}
+
+/** The private account document with another proved number made live, or null if it is not one. */
+export function applyActivation(account, { method, numberId }) {
+  if (!isPayoutMethod(method)) return null
+  const numbers = storedNumbers(account)
+  if (typeof numberId !== 'string' || !numbers[numberId]) return null
+  if (numbers[numberId].method !== method) return null
+  return accountPatch({ ...(account || {}), active: { ...activeMap(account), [method]: numberId } })
+}

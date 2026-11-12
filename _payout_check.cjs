@@ -110,6 +110,98 @@ const rules = read('firestore.rules')
     assert.ok(/Authorization: `Bearer \$\{idToken\}`/.test(client))
   })
 
+  check('a rail keeps two numbers, and the old field follows the live one', () => {
+    const a = '+256771234567'
+    const b = '+256781234567'
+    const first = payout.applyVerifiedNumber(null, { method: 'mtn', number: a, now: 1000 })
+    assert.deepStrictEqual(Object.keys(first.numbers), ['mtn-256771234567'])
+    assert.strictEqual(first.active.mtn, 'mtn-256771234567')
+    assert.strictEqual(first.mtn.number, a, 'the one-number era field must mirror the live number')
+
+    const second = payout.applyVerifiedNumber(first, { method: 'mtn', number: b, now: 2000 })
+    assert.strictEqual(Object.keys(second.numbers).length, 2)
+    assert.strictEqual(second.active.mtn, 'mtn-256771234567', 'a second wallet must not steal the till')
+    assert.strictEqual(second.mtn.number, a)
+
+    const switched = payout.applyActivation(second, {
+      method: 'mtn',
+      numberId: 'mtn-256781234567',
+    })
+    assert.strictEqual(switched.active.mtn, 'mtn-256781234567')
+    assert.strictEqual(switched.mtn.number, b, 'the mirror must name the number that is live')
+    assert.strictEqual(payout.verifiedNumberFor(switched, 'mtn'), b)
+    assert.strictEqual(Object.keys(switched.numbers).length, 2, 'switching proves nothing new')
+  })
+
+  check('proving the same number twice does not spend both slots', () => {
+    const a = '+256771234567'
+    const once = payout.applyVerifiedNumber(null, { method: 'mtn', number: a, now: 1000 })
+    const twice = payout.applyVerifiedNumber(once, { method: 'mtn', number: a, now: 2000 })
+    assert.strictEqual(Object.keys(twice.numbers).length, 1)
+    assert.strictEqual(twice.numbers['mtn-256771234567'].verifiedAt, 2000, 'the newest proof wins')
+  })
+
+  check('a third number is refused in a sentence, and writes nothing', () => {
+    const a = '+256771234567'
+    const b = '+256781234567'
+    const c = '+256701234567'
+    const two = payout.applyVerifiedNumber(
+      payout.applyVerifiedNumber(null, { method: 'mtn', number: a, now: 1000 }),
+      { method: 'mtn', number: b, now: 2000 },
+    )
+    assert.strictEqual(payout.canAddNumber(two, 'mtn', c), false)
+    assert.strictEqual(payout.applyVerifiedNumber(two, { method: 'mtn', number: c, now: 3000 }), null)
+    const words = payout.tooManyNumbersMessage('mtn')
+    assert.ok(words.includes('MTN MoMo'), words)
+    assert.ok(words.includes(String(payout.MAX_NUMBERS_PER_METHOD)), words)
+    assert.strictEqual(payout.MAX_NUMBERS_PER_METHOD, 2)
+    // A different rail has its own two slots.
+    assert.strictEqual(payout.canAddNumber(two, 'airtel', c), true)
+  })
+
+  check('an old one-number document keeps its proof and counts against the cap', () => {
+    const legacy = { mtn: { number: '+256771234567', verifiedAt: 5 } }
+    const numbers = payout.storedNumbers(legacy)
+    assert.deepStrictEqual(Object.keys(numbers), ['mtn-256771234567'])
+    assert.strictEqual(payout.activeNumberId(legacy, 'mtn'), 'mtn-256771234567')
+    assert.strictEqual(payout.accountPatch(legacy).mtn.number, '+256771234567')
+    const next = payout.applyVerifiedNumber(legacy, {
+      method: 'mtn',
+      number: '+256781234567',
+      now: 9,
+    })
+    assert.strictEqual(Object.keys(next.numbers).length, 2, 'the old number is not lost')
+    assert.strictEqual(payout.canAddNumber(next, 'mtn', '+256701234567'), false)
+  })
+
+  check('activation can only choose a number this account already proved', () => {
+    const held = payout.applyVerifiedNumber(null, {
+      method: 'mtn',
+      number: '+256771234567',
+      now: 1000,
+    })
+    assert.strictEqual(payout.applyActivation(held, { method: 'mtn', numberId: 'nope' }), null)
+    assert.strictEqual(
+      payout.applyActivation(held, { method: 'airtel', numberId: 'mtn-256771234567' }),
+      null,
+      'a number cannot be moved onto another rail',
+    )
+  })
+
+  check('the endpoint asks about the cap before it spends the code', () => {
+    assert.ok(/applyVerifiedNumber\(/.test(api), 'the verified number must be written by the ledger')
+    assert.ok(/applyActivation\(/.test(api), 'switching the live number is a server decision')
+    assert.ok(/action === 'activate'/.test(api), 'the activate action must be routed')
+    const cap = api.indexOf('canAddNumber(')
+    const spend = api.indexOf('consume({')
+    assert.ok(cap > 0 && spend > 0 && cap < spend, 'a full rail must not cost an SMS')
+  })
+
+  check('the client names the activate action', () => {
+    assert.ok(/\{ action: 'activate', method, numberId \}/.test(client))
+    assert.ok(/export function readPayoutLedger\(/.test(client), 'the ledger has one reader')
+  })
+
   check('the rules make the browser a reader, never a writer', () => {
     assert.ok(/match \/payoutAccounts\/\{userId\} \{\s*allow read: if request\.auth != null && request\.auth\.uid == userId;\s*allow write: if false;/.test(rules))
     assert.ok(/hasAny\(\['phoneVerified'[\s\S]*?'paymentMethods', 'paymentMethodsUpdatedAt'\]\)/.test(rules))

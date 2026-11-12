@@ -1,7 +1,7 @@
 /**
  * POST /api/payout/methods — the only writer of a seller's verified payout numbers.
  *
- * Two actions, both requiring the seller's own Firebase ID token:
+ * Three actions, all requiring the seller's own Firebase ID token:
  *
  *   { action: 'verify', method, phone, code }
  *       Checks the code that `/api/otp/send` texted to that number, then saves it to
@@ -11,6 +11,14 @@
  *   { action: 'save', mtn, airtel }
  *       Saves which verified rails are switched on. A rail with no proved number cannot be
  *       turned on: the refusal names it, and nothing reaches Firestore.
+ *
+ *   { action: 'activate', method, numberId }
+ *       Chooses which of a rail's two proved numbers is live. Switching is not a new proof, so
+ *       the public document keeps saying only that the rail is on.
+ *
+ * A rail holds up to `MAX_NUMBERS_PER_METHOD` numbers (a shop till and a personal wallet on the
+ * same network is ordinary). The ids come from `payoutNumberId`, so proving the same number twice
+ * updates one entry rather than spending both slots on one phone.
  *
  * Why a separate endpoint instead of `/api/otp/verify`: that endpoint's job is to attach a
  * number to a *sign-in account* and mint a token. A payout number is not necessarily the
@@ -28,18 +36,25 @@ import { uidFromIdToken } from '../_lib/identity.js'
 import { VERIFY_MESSAGES, isCodeFormat, readCode } from '../_lib/otp.js'
 import { consume, otpConfig } from '../_lib/otpStore.js'
 import {
+  MAX_NUMBERS_PER_METHOD,
+  applyActivation,
+  applyVerifiedNumber,
+  canAddNumber,
   flagsFrom,
   isPayoutMethod,
   methodsMissingProof,
   missingProofMessage,
+  numbersForMethod,
+  payoutNumberId,
   publicRailPatch,
-  verifiedEntry,
+  tooManyNumbersMessage,
 } from '../_lib/payout.js'
 import { validateIntl } from '../_lib/phone.js'
 
 const NOT_READY = 'Payout verification is not switched on yet. Please try again a little later.'
 const NOT_SELLER = 'Finish setting up your shop before adding a payout number.'
 const SIGN_IN_AGAIN = 'Sign in again to verify a payout number.'
+const NOT_YOUR_NUMBER = 'That number is not one of your verified payout numbers.'
 
 const PAYOUTS = 'payoutAccounts'
 
@@ -111,6 +126,20 @@ async function verifyAndSave(res, sellerRef, uid, body) {
   const raw = field(body, 'code')
   if (!isCodeFormat(raw)) return fail(res, 400, 'Enter the 6-digit code from your text message.')
 
+  const accountRef = adminDb().collection(PAYOUTS).doc(uid)
+
+  // Asked before the code is spent: a rail that already holds its two numbers should say so in a
+  // sentence, not in a text message the seller waited for. The transaction below asks again,
+  // because two phones (or two taps) can arrive at the same moment.
+  const before = await accountRef.get()
+  if (!canAddNumber(before.exists ? before.data() : null, method, check.e164)) {
+    return fail(res, 409, tooManyNumbersMessage(method), {
+      reason: 'full',
+      method,
+      max: MAX_NUMBERS_PER_METHOD,
+    })
+  }
+
   const otp = otpConfig()
   if (!otp.configured) {
     console.error('[payout/verify] refused: OTP_PEPPER is not configured')
@@ -132,26 +161,91 @@ async function verifyAndSave(res, sellerRef, uid, body) {
   }
 
   const now = Date.now()
-  const accountRef = adminDb().collection(PAYOUTS).doc(uid)
+
   const outcome = await adminDb().runTransaction(async (tx) => {
     const sellerSnap = await tx.get(sellerRef)
     if (!sellerSnap.exists) return { reason: 'not-seller' }
 
+    const accountSnap = await tx.get(accountRef)
+    const patch = applyVerifiedNumber(
+      accountSnap.exists ? accountSnap.data() : null,
+      { method, number: check.e164, now },
+    )
+    if (!patch) return { reason: 'full' }
+
     const existing = sellerSnap.data()?.paymentMethods
     const next = nextRailState(existing, { [method]: publicRailPatch(now) })
     tx.set(accountRef, {
-      [method]: verifiedEntry(check.e164, now),
+      ...patch,
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true })
     tx.set(sellerRef, {
       paymentMethods: next,
       paymentMethodsUpdatedAt: FieldValue.serverTimestamp(),
     }, { merge: true })
-    return { ok: true }
+    return { ok: true, patch }
   })
 
   if (outcome.reason === 'not-seller') return fail(res, 403, NOT_SELLER)
-  return ok(res, { method, phone: check.e164, verifiedAt: now })
+  if (outcome.reason === 'full') {
+    return fail(res, 409, tooManyNumbersMessage(method), {
+      reason: 'full',
+      method,
+      max: MAX_NUMBERS_PER_METHOD,
+    })
+  }
+  // The id and the list go back so a screen can show the new number without re-reading the
+  // ledger -- the ledger itself stays owner-read.
+  return ok(res, {
+    method,
+    phone: check.e164,
+    verifiedAt: now,
+    numberId: payoutNumberId(method, check.e164),
+    active: outcome.patch.active,
+    count: numbersForMethod(outcome.patch, method).length,
+  })
+}
+
+/**
+ * Which of a rail's proved numbers is live.
+ *
+ * Nothing here proves a number, so nothing here may turn a rail on: `enabled` is left exactly as
+ * the seller set it in `saveFlags`. Switching the live number does change where money goes next,
+ * which is why it is a server write with the id of a number the ledger already holds.
+ */
+async function activateNumber(res, sellerRef, uid, body) {
+  const method = field(body, 'method')
+  if (!isPayoutMethod(method)) {
+    return fail(res, 400, 'Choose MTN MoMo or Airtel Money before choosing a number.')
+  }
+  const numberId = field(body, 'numberId')
+  const accountRef = adminDb().collection(PAYOUTS).doc(uid)
+
+  const outcome = await adminDb().runTransaction(async (tx) => {
+    const sellerSnap = await tx.get(sellerRef)
+    if (!sellerSnap.exists) return { reason: 'not-seller' }
+
+    const accountSnap = await tx.get(accountRef)
+    const patch = applyActivation(
+      accountSnap.exists ? accountSnap.data() : null,
+      { method, numberId },
+    )
+    if (!patch) return { reason: 'unknown' }
+
+    tx.set(accountRef, {
+      ...patch,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true })
+    return { ok: true, patch }
+  })
+
+  if (outcome.reason === 'not-seller') return fail(res, 403, NOT_SELLER)
+  if (outcome.reason === 'unknown') return fail(res, 404, NOT_YOUR_NUMBER)
+  return ok(res, {
+    method,
+    activeId: outcome.patch.active[method],
+    phone: outcome.patch[method] ? outcome.patch[method].number : '',
+  })
 }
 
 export default async function handler(req, res) {
@@ -179,6 +273,7 @@ export default async function handler(req, res) {
     const action = field(body, 'action')
     if (action === 'verify') return await verifyAndSave(res, sellerRef, uid, body)
     if (action === 'save') return await saveFlags(res, sellerRef, uid, body)
+    if (action === 'activate') return await activateNumber(res, sellerRef, uid, body)
     return fail(res, 400, 'Choose whether to verify a number or save your payout settings.')
   } catch (err) {
     // Never log the body: it can hold a phone number and a live code.
