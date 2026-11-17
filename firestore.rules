@@ -285,8 +285,10 @@ service cloud.firestore {
         allow update: if request.auth.uid == sellerId
           && (!('checkoutState' in resource.data) || resource.data.checkoutState != 'paying')
           && (
-            (resource.data.status in ['pending', 'accepted', 'paid', 'awaiting_payment', 'needs_details']
-             && request.resource.data.status in ['accepted', 'fulfilled', 'out_of_stock', 'cancelled', 'needs_details']
+            (resource.data.status in ['pending', 'accepted', 'paid', 'awaiting_payment', 'needs_details',
+                                      'confirmed', 'dispatched']
+             && request.resource.data.status in ['accepted', 'fulfilled', 'out_of_stock', 'cancelled',
+                                                 'needs_details', 'dispatched']
              && (!('cancelReason' in request.resource.data)
                  || request.resource.data.cancelReason.size() <= 140))
             || (
@@ -350,6 +352,58 @@ service cloud.firestore {
           && request.resource.data.receivedAt is int
           && request.resource.data.receivedAt > 0
           && request.resource.data.receivedBy == 'buyer';
+        // 📦 The buyer's own words on their own order, when there is no account to
+        // write to them at.
+        //
+        // A guest learns about their order from the order itself, so the two moves
+        // they own have to live here rather than in the chat: **yes** (inside the
+        // five-hour window) and **no** (any time before the thing is delivered).
+        // Both are additive to the seller's branch above, and neither can touch a
+        // price, a name or a line -- they are a status word, a clock, and, for the
+        // cancellation, the fact that it was the buyer who did it.
+        //
+        // The third clause is the handover. The buyer's phone holds a three-digit
+        // code in `users/{uid}/handovers/{orderId}`, which the shop cannot read; the
+        // tick here is the buyer saying the code at the door was right. `receivedAt`
+        // and `receivedBy` are written alongside it in the same move, so the review
+        // this closes keeps the date the rules already trust.
+        allow update: if request.auth != null
+          && resource.data.buyerUid == request.auth.uid
+          && resource.data.get('checkoutState', '') != 'paying'
+          && (
+            (
+              // "Yes, bring it."
+              resource.data.get('status', '') in ['pending', 'placed', 'new']
+              && request.resource.data.status == 'confirmed'
+              && request.resource.data.diff(resource.data).affectedKeys()
+                   .hasOnly(['status', 'guestConfirmedAt'])
+              && request.resource.data.guestConfirmedAt is number
+              && request.resource.data.guestConfirmedAt > 0
+            )
+            || (
+              // "No, do not."
+              resource.data.get('status', '') in ['pending', 'placed', 'new', 'accepted',
+                                                  'confirmed', 'awaiting_payment', 'dispatched']
+              && request.resource.data.status == 'cancelled'
+              && request.resource.data.diff(resource.data).affectedKeys()
+                   .hasOnly(['status', 'cancelledAt', 'cancelledBy', 'cancelReason',
+                             'guestCancelledAt'])
+              && request.resource.data.cancelledBy == 'guest'
+              && request.resource.data.guestCancelledAt is number
+              && (!('cancelReason' in request.resource.data)
+                  || request.resource.data.cancelReason.size() <= 140)
+            )
+            || (
+              // "That was my code."
+              resource.data.get('status', '') == 'dispatched'
+              && request.resource.data.status == 'dispatched'
+              && request.resource.data.diff(resource.data).affectedKeys()
+                   .hasOnly(['handoverVerifiedAt', 'receivedAt', 'receivedBy'])
+              && request.resource.data.handoverVerifiedAt is number
+              && request.resource.data.handoverVerifiedAt > 0
+              && request.resource.data.receivedBy == 'buyer'
+            )
+          );
         allow delete: if request.auth.uid == sellerId;
       }
 
@@ -686,6 +740,29 @@ service cloud.firestore {
 
       match /bag/{productId} {
         allow read, write: if request.auth.uid == userId;
+      }
+
+      // 🔑 The three digits shown at the door, one document per order.
+      //
+      // Minted by the buyer's own phone and readable only by that buyer. Nothing
+      // else in the system may read it -- not the shop, not the delivery, not the
+      // web dashboard -- because the whole proof is that the side which benefits
+      // from saying "delivered" cannot look the code up. The order itself never
+      // carries it; it only ever carries the buyer's tick that the code was right
+      // (`handoverVerifiedAt`, written under `sellers/{id}/orders` above).
+      //
+      // Three digits, pinned here as well as in `lib/utils/guest_order.dart`: a
+      // document that could hold any string is not a code. Write-once for `code`
+      // (an update may not change it), so a buyer cannot re-roll until the driver
+      // guesses -- the driver is told one number, and it stays that number.
+      match /handovers/{orderId} {
+        allow read: if request.auth.uid == userId;
+        allow delete: if false;
+        allow create: if request.auth.uid == userId
+          && request.resource.data.code is string
+          && request.resource.data.code.matches('^[0-9]{3}$');
+        allow update: if request.auth.uid == userId
+          && request.resource.data.code == resource.data.code;
       }
 
       // ♥ My own votes (productId → where), so every page can draw its hearts from a
